@@ -5,8 +5,8 @@
       "schedule": "0 8 * * *"
     },
     {
-      "path": "/api/analytics/weekly",
-      "schedule": "0 12 * * 1"
+      "path": "/api/analytics/daily",
+      "schedule": "0 12 * * 1-5"
     }
   ]
 }

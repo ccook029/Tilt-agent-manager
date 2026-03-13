@@ -213,11 +213,49 @@ function formatTable(header: string[], rows: string[][]): string {
 
 // ---- Date helpers (exported for use by route handlers) --------------------
 
+/**
+ * Get the reporting period and its comparison period for the daily report.
+ *
+ * Schedule: Mon–Fri at 8 AM ET (12:00 UTC).
+ *  - Tuesday–Friday: report covers the previous day, compared to the same
+ *    weekday one week earlier.
+ *  - Monday: report covers Saturday + Sunday (the weekend), compared to
+ *    the prior Saturday + Sunday.
+ */
+export function getDailyReportRanges(now: Date): {
+  current: GA4DateRange;
+  prior: GA4DateRange;
+  label: string;
+} {
+  const day = now.getDay(); // 0=Sun … 6=Sat
+
+  if (day === 1) {
+    // Monday → report on Sat + Sun
+    const sunday = addDays(now, -1);
+    const saturday = addDays(now, -2);
+    const priorSunday = addDays(sunday, -7);
+    const priorSaturday = addDays(saturday, -7);
+    return {
+      current: { startDate: toYMD(saturday), endDate: toYMD(sunday) },
+      prior: { startDate: toYMD(priorSaturday), endDate: toYMD(priorSunday) },
+      label: "Weekend",
+    };
+  }
+
+  // Tue–Fri → report on yesterday vs same day last week
+  const yesterday = addDays(now, -1);
+  const priorDay = addDays(yesterday, -7);
+  return {
+    current: { startDate: toYMD(yesterday), endDate: toYMD(yesterday) },
+    prior: { startDate: toYMD(priorDay), endDate: toYMD(priorDay) },
+    label: yesterday.toLocaleDateString("en-US", { weekday: "long" }),
+  };
+}
+
 /** Get Monday–Sunday date range for the week containing the given date. */
 export function getWeekRange(referenceDate: Date): GA4DateRange {
   const d = new Date(referenceDate);
   const day = d.getDay();
-  // Monday = 1, so offset to get to Monday
   const diffToMonday = day === 0 ? -6 : 1 - day;
   const monday = new Date(d);
   monday.setDate(d.getDate() + diffToMonday);
@@ -230,11 +268,10 @@ export function getWeekRange(referenceDate: Date): GA4DateRange {
   };
 }
 
-/** Get the prior week's date range. */
-export function getPriorWeekRange(referenceDate: Date): GA4DateRange {
-  const d = new Date(referenceDate);
-  d.setDate(d.getDate() - 7);
-  return getWeekRange(d);
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
 }
 
 function toYMD(d: Date): string {

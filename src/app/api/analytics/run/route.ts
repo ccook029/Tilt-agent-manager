@@ -3,7 +3,7 @@
 //
 // Body (all optional):
 //   {
-//     "report_type": "weekly" | "monthly",  // defaults to "weekly"
+//     "report_type": "daily" | "weekly",   // defaults to "daily"
 //     "context": "any extra notes to pass to the agent"
 //   }
 // ---------------------------------------------------------------------------
@@ -14,25 +14,24 @@ export const maxDuration = 300;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { report_type = "weekly", context } = body as {
-      report_type?: "weekly" | "monthly";
+    const { report_type = "daily", context } = body as {
+      report_type?: "daily" | "weekly";
       context?: string;
     };
 
-    if (report_type === "monthly") {
-      // Monthly reports can be added later — for now, return a helpful error
+    if (report_type === "weekly") {
       return NextResponse.json(
         {
           error:
-            "Monthly reports are not yet implemented. Use report_type: 'weekly'.",
+            "Weekly summary reports are not yet implemented. The daily report already covers each day Mon–Fri (Monday includes the weekend).",
         },
         { status: 400 }
       );
     }
 
-    // Delegate to the weekly route's POST handler internally
+    // Delegate to the daily route
     const baseUrl = request.nextUrl.origin;
-    const response = await fetch(`${baseUrl}/api/analytics/weekly`, {
+    const response = await fetch(`${baseUrl}/api/analytics/daily`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ context }),

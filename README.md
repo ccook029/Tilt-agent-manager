@@ -12,14 +12,19 @@ Agents are defined as config files in `src/agents/`. The orchestrator reads the 
 
 ## Website Analytics Agent
 
-Runs every Monday at 12:00 UTC (8 AM ET). Pulls the prior week's GA4 data, sends it to Claude for analysis, and emails an actionable report.
+Runs **daily Mon–Fri at 8 AM ET** (12:00 UTC). Pulls GA4 data, sends it to Claude for analysis, and emails an actionable report.
+
+| Day | Report covers | Compared against |
+|---|---|---|
+| Monday | Saturday + Sunday (weekend) | Prior Saturday + Sunday |
+| Tuesday–Friday | Previous day | Same weekday, one week ago |
 
 ### Endpoints
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/api/analytics/weekly` | GET | Vercel Cron trigger (requires `CRON_SECRET`) |
-| `/api/analytics/weekly` | POST | Direct trigger (no auth required) |
+| `/api/analytics/daily` | GET | Vercel Cron trigger (requires `CRON_SECRET`) |
+| `/api/analytics/daily` | POST | Direct trigger (no auth required) |
 | `/api/analytics/run` | POST | Manual trigger with options |
 
 ### Manual trigger
@@ -27,7 +32,7 @@ Runs every Monday at 12:00 UTC (8 AM ET). Pulls the prior week's GA4 data, sends
 ```bash
 curl -X POST https://your-app.vercel.app/api/analytics/run \
   -H "Content-Type: application/json" \
-  -d '{"report_type": "weekly", "context": "We ran a promo this week"}'
+  -d '{"report_type": "daily", "context": "We ran a promo yesterday"}'
 ```
 
 ## Setup
@@ -137,7 +142,7 @@ src/
 │   ├── dashboard/page.tsx                    # Admin dashboard
 │   └── api/
 │       ├── analytics/
-│       │   ├── weekly/route.ts               # Weekly report (cron + manual)
+│       │   ├── daily/route.ts                # Daily report (cron + manual)
 │       │   └── run/route.ts                  # Manual trigger with options
 │       ├── cron/run-agents/route.ts          # General orchestrator cron
 │       └── agents/

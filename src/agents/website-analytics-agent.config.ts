@@ -1,8 +1,11 @@
 // ---------------------------------------------------------------------------
 // Website Analytics Agent — Configuration
 //
-// This agent pulls GA4 data weekly, sends it to Claude for analysis,
-// and emails the report to the Tilt Sports team.
+// This agent pulls GA4 data daily (Mon–Fri), sends it to Claude for
+// analysis, and emails the report to the Tilt Sports team.
+//
+// Monday reports cover Saturday + Sunday (the weekend).
+// Tuesday–Friday reports cover the previous day.
 // ---------------------------------------------------------------------------
 
 export interface AnalyticsAgentConfig {
@@ -19,7 +22,7 @@ export interface AnalyticsAgentConfig {
   email: {
     to: string[];
     from: string;
-    subjectTemplate: string; // supports {{period_end}}
+    subjectTemplate: string; // supports {{period_end}}, {{period_label}}
   };
 
   ga4: {
@@ -33,46 +36,50 @@ export interface AnalyticsAgentConfig {
 const config: AnalyticsAgentConfig = {
   id: "website-analytics",
   name: "Website Analytics Agent",
-  schedule: "0 12 * * 1", // Every Monday at 12:00 UTC (8 AM ET)
+  schedule: "0 12 * * 1-5", // Mon–Fri at 12:00 UTC (8 AM ET)
   model: "claude-sonnet-4-20250514",
   maxTokens: 4096,
   temperature: 0.4,
 
   systemPrompt: `You are a senior digital analytics consultant for Tilt Sports Inc., a company that sells air hockey tables, accessories, and runs competitive events.
 
-Your job is to analyze weekly Google Analytics data and produce an actionable report. You understand:
+Your job is to analyze Google Analytics data and produce a concise, actionable daily report. You understand:
 - E-commerce metrics and conversion funnels
 - Traffic acquisition channels and attribution
 - User engagement patterns
 - Seasonal trends in sporting goods
+- Day-of-week and weekend vs weekday behavioral differences
 
 Guidelines:
 - Start with a 3-5 bullet executive summary of the most important changes.
 - Use tables (plain text, aligned) for data comparisons.
-- Calculate week-over-week percentage changes and flag anything that moved more than 15%.
+- Calculate percentage changes vs the comparison period and flag anything that moved more than 15%.
 - If any metric declined more than 20%, mark it with 🚨 and explain likely causes.
+- On Monday reports (weekend data), note any weekend-specific patterns and compare to the prior weekend.
 - End with 2-3 specific, prioritized action items.
 - Be direct. No filler. Write for a founder who reads this in 2 minutes.`,
 
-  userPrompt: `Here is the Google Analytics data for Tilt Sports (tiltsports.com) for the week ending {{period_end}}.
+  userPrompt: `Here is the Google Analytics data for Tilt Sports (tiltsports.com).
 
-**This Week ({{current_period_start}} – {{current_period_end}}):**
+**Report: {{period_label}}**
+
+**Current Period ({{current_period_start}} – {{current_period_end}}):**
 {{ga_data_current}}
 
-**Prior Week ({{prior_period_start}} – {{prior_period_end}}):**
+**Comparison Period ({{prior_period_start}} – {{prior_period_end}}):**
 {{ga_data_prior}}
 
 {{#if context}}
 Additional context from the team: {{context}}
 {{/if}}
 
-Please analyze this data and produce the weekly analytics report.`,
+Please analyze this data and produce the {{period_label}} analytics report.`,
 
   email: {
     to: ["admin@tiltsports.com"],
     from: "Tilt Agents <agents@tiltsports.com>",
     subjectTemplate:
-      "Weekly Analytics Report — Week Ending {{period_end}}",
+      "{{period_label}} Analytics — {{period_end}}",
   },
 
   ga4: {
