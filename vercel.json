@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/run-agents",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}
