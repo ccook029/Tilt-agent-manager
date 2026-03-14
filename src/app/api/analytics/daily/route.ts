@@ -13,13 +13,14 @@ import {
   sendAnalyticsReport,
   sendErrorNotification,
 } from "@/lib/email";
+import { saveRunLogs } from "@/lib/store";
 import agentConfig from "@/agents/website-analytics-agent.config";
 
 export const maxDuration = 300;
 
 async function runDailyReport(context?: string) {
-  const now = new Date();
-  const { current, prior, label } = getDailyReportRanges(now);
+  const startedAt = new Date();
+  const { current, prior, label } = getDailyReportRanges(startedAt);
 
   // Pull GA4 data for both periods concurrently
   const [gaDataCurrent, gaDataPrior] = await Promise.all([
@@ -69,6 +70,24 @@ async function runDailyReport(context?: string) {
     subject: emailSubject,
     reportText: response.text,
   });
+
+  const finishedAt = new Date();
+
+  // Persist to store so the dashboard can display it
+  await saveRunLogs([
+    {
+      id: `analytics-${startedAt.toISOString()}`,
+      agentId: agentConfig.id,
+      agentName: `${agentConfig.name} (${label})`,
+      startedAt: startedAt.toISOString(),
+      finishedAt: finishedAt.toISOString(),
+      durationMs: finishedAt.getTime() - startedAt.getTime(),
+      status: "success",
+      output: response.text,
+      model: agentConfig.model,
+      tokensUsed: response.inputTokens + response.outputTokens,
+    },
+  ]);
 
   return {
     report: response.text,
