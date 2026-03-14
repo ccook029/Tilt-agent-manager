@@ -119,6 +119,19 @@ const personas: AgentPersona[] = [
     runEndpoint: "/api/inventory/run",
     taskTypes: ["stock-alert", "po-recommendation", "sku-audit", "shipment-tracker", "inventory-reconciliation"],
   },
+  {
+    agentId: "competitor-social",
+    name: "Sloane Signal",
+    title: "Director of Social Intelligence",
+    department: "Marketing Intelligence",
+    bio: "Sloane monitors every post, reel, and TikTok from Bauer, CCM, True, and Warrior. Every Monday she delivers a competitive social media intelligence report — what's working, what's trending, and exactly what Tilt should do about it. Data-driven, zero fluff.",
+    status: "active",
+    schedule: "Mondays at 6:00 AM ET",
+    avatarInitials: "SS",
+    avatarColor: "bg-pink-600",
+    avatarAccent: "ring-pink-400",
+    runEndpoint: "/api/competitor-social/run",
+  },
 ];
 
 export function getAllPersonas(): AgentPersona[] {
