@@ -19,6 +19,10 @@
     {
       "path": "/api/materials-rd/research",
       "schedule": "0 12 * * 5"
+    },
+    {
+      "path": "/api/inventory/weekly",
+      "schedule": "0 11 * * 1"
     }
   ]
 }

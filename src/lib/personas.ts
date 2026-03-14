@@ -105,6 +105,20 @@ const personas: AgentPersona[] = [
     runEndpoint: "/api/materials-rd/run",
     taskTypes: ["material-spec", "patent-brief", "literature-review", "competitor-ip-scan", "factory-rnd-memo"],
   },
+  {
+    agentId: "inventory",
+    name: "Stockton Ledger",
+    title: "Director of Inventory Operations",
+    department: "Operations",
+    bio: "Stockton watches every SKU like a hawk. He monitors Zoho Inventory daily, flags low-stock items before they become problems, recommends purchase orders based on sales velocity, and delivers weekly inventory health reports. Nothing ships without Stockton knowing about it first.",
+    status: "active",
+    schedule: "Weekdays at 7:00 AM ET + Weekly Report Mondays",
+    avatarInitials: "SL",
+    avatarColor: "bg-cyan-600",
+    avatarAccent: "ring-cyan-400",
+    runEndpoint: "/api/inventory/run",
+    taskTypes: ["stock-alert", "po-recommendation", "sku-audit", "shipment-tracker", "inventory-reconciliation"],
+  },
 ];
 
 export function getAllPersonas(): AgentPersona[] {
