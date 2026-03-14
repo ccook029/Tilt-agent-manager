@@ -1,14 +1,17 @@
 // ---------------------------------------------------------------------------
-// competitors.ts — Web scraping pipeline for competitor intelligence
+// competitors.ts — Competitor intelligence data pipeline
 //
-// Scrapes competitor websites for product/pricing data, and searches
-// for news on launches, sponsorships, and patents.
+// Uses two sources to gather intel on hockey equipment competitors:
+//   1. Brave Search API — web search for products, pricing, sponsorships, patents
+//   2. Google News RSS  — recent news coverage and press releases
+//
+// No web scraping needed — these APIs are reliable and don't get blocked.
 // ---------------------------------------------------------------------------
 
 export interface CompetitorProfile {
   name: string;
   url: string;
-  categories: string[]; // e.g. "sticks", "gloves", "helmets", "skates"
+  categories: string[];
 }
 
 export const COMPETITORS: CompetitorProfile[] = [
@@ -21,212 +24,335 @@ export const COMPETITORS: CompetitorProfile[] = [
   { name: "Vaughn Hockey", url: "https://www.vaughnhockey.com", categories: ["goalie"] },
 ];
 
-export interface ScrapedPage {
+// ---- Types ---------------------------------------------------------------
+
+export interface SearchResult {
   competitor: string;
-  url: string;
+  category: string;     // "products", "sponsorship", "patent", "news", "pricing"
   title: string;
-  content: string;
-  scrapedAt: string;
-  status: "ok" | "error";
-  error?: string;
+  snippet: string;
+  url: string;
+  source: string;       // "brave" or "google-news"
+  publishedDate?: string;
 }
 
 export interface CompetitorScanResult {
   competitor: string;
-  pages: ScrapedPage[];
-  newsResults: NewsResult[];
+  results: SearchResult[];
 }
 
-export interface NewsResult {
-  competitor: string;
-  headline: string;
-  source: string;
-  snippet: string;
+// ---- Brave Search API ----------------------------------------------------
+
+interface BraveWebResult {
+  title: string;
+  description: string;
   url: string;
+  page_age?: string;
+}
+
+interface BraveSearchResponse {
+  web?: { results: BraveWebResult[] };
+  news?: { results: { title: string; description: string; url: string; age: string }[] };
 }
 
 /**
- * Scrape a single URL and return its text content.
- * Uses a simple fetch with timeout — no headless browser needed.
+ * Search Brave for a specific query. Returns up to `count` results.
+ * Requires BRAVE_SEARCH_API_KEY env var.
  */
-async function scrapePage(
-  competitor: string,
-  url: string
-): Promise<ScrapedPage> {
-  const scrapedAt = new Date().toISOString();
+async function braveSearch(
+  query: string,
+  count: number = 5
+): Promise<BraveWebResult[]> {
+  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+  if (!apiKey) {
+    console.warn("[competitors] BRAVE_SEARCH_API_KEY not set — skipping Brave search");
+    return [];
+  }
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
+    const params = new URLSearchParams({
+      q: query,
+      count: count.toString(),
+      freshness: "pw", // past week
+      text_decorations: "false",
+    });
+
+    const res = await fetch(
+      `https://api.search.brave.com/res/v1/web/search?${params}`,
+      {
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+          "Accept-Encoding": "gzip",
+          "X-Subscription-Token": apiKey,
+        },
+      }
+    );
+
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      console.error(`[competitors] Brave search failed: HTTP ${res.status}`);
+      return [];
+    }
+
+    const data: BraveSearchResponse = await res.json();
+    return data.web?.results ?? [];
+  } catch (err) {
+    console.error("[competitors] Brave search error:", err);
+    return [];
+  }
+}
+
+/**
+ * Search Brave News for a specific query.
+ */
+async function braveNewsSearch(
+  query: string,
+  count: number = 5
+): Promise<SearchResult[]> {
+  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+  if (!apiKey) return [];
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const params = new URLSearchParams({
+      q: query,
+      count: count.toString(),
+      freshness: "pw",
+    });
+
+    const res = await fetch(
+      `https://api.search.brave.com/res/v1/news/search?${params}`,
+      {
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+          "Accept-Encoding": "gzip",
+          "X-Subscription-Token": apiKey,
+        },
+      }
+    );
+
+    clearTimeout(timeout);
+
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const results: SearchResult[] = (data.results ?? []).map(
+      (r: { title: string; description: string; url: string; age?: string }) => ({
+        competitor: "",
+        category: "news",
+        title: r.title,
+        snippet: r.description,
+        url: r.url,
+        source: "brave-news",
+        publishedDate: r.age,
+      })
+    );
+
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+// ---- Google News RSS -----------------------------------------------------
+
+interface RSSItem {
+  title: string;
+  link: string;
+  description: string;
+  pubDate: string;
+  source: string;
+}
+
+/**
+ * Fetch Google News RSS for a query. No API key needed.
+ * Returns parsed news items.
+ */
+async function googleNewsRSS(query: string): Promise<RSSItem[]> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const encodedQuery = encodeURIComponent(query);
+    const url = `https://news.google.com/rss/search?q=${encodedQuery}&hl=en-US&gl=US&ceid=US:en`;
+
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; TiltIntelBot/1.0; +https://tiltsports.com)",
-        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (compatible; TiltIntelBot/1.0)",
       },
     });
 
     clearTimeout(timeout);
 
     if (!res.ok) {
-      return {
-        competitor,
-        url,
-        title: "",
-        content: "",
-        scrapedAt,
-        status: "error",
-        error: `HTTP ${res.status}`,
-      };
+      console.error(`[competitors] Google News RSS failed: HTTP ${res.status}`);
+      return [];
     }
 
-    const html = await res.text();
-
-    // Extract title
-    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    const title = titleMatch ? titleMatch[1].trim() : "";
-
-    // Strip HTML to get text content (basic approach)
-    const content = htmlToText(html);
-
-    // Limit content size to avoid huge prompts
-    const trimmedContent = content.slice(0, 8000);
-
-    return {
-      competitor,
-      url,
-      title,
-      content: trimmedContent,
-      scrapedAt,
-      status: "ok",
-    };
+    const xml = await res.text();
+    return parseRSSItems(xml);
   } catch (err) {
-    return {
-      competitor,
-      url,
-      title: "",
-      content: "",
-      scrapedAt,
-      status: "error",
-      error: err instanceof Error ? err.message : String(err),
-    };
+    console.error("[competitors] Google News RSS error:", err);
+    return [];
   }
 }
 
 /**
- * Basic HTML to text conversion — strips tags, decodes common entities,
- * collapses whitespace.
+ * Basic XML parser for RSS <item> elements.
+ * No external dependency needed — just regex extraction.
  */
-function htmlToText(html: string): string {
-  return html
-    // Remove script/style blocks
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<nav[\s\S]*?<\/nav>/gi, "")
-    .replace(/<footer[\s\S]*?<\/footer>/gi, "")
-    // Replace common block elements with newlines
-    .replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    // Strip remaining tags
-    .replace(/<[^>]+>/g, " ")
-    // Decode entities
+function parseRSSItems(xml: string): RSSItem[] {
+  const items: RSSItem[] = [];
+  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+  let match;
+
+  while ((match = itemRegex.exec(xml)) !== null) {
+    const itemXml = match[1];
+    const title = extractTag(itemXml, "title");
+    const link = extractTag(itemXml, "link");
+    const description = extractTag(itemXml, "description");
+    const pubDate = extractTag(itemXml, "pubDate");
+    const source = extractTag(itemXml, "source");
+
+    if (title && link) {
+      items.push({
+        title: decodeEntities(title),
+        link,
+        description: decodeEntities(description),
+        pubDate,
+        source: decodeEntities(source),
+      });
+    }
+  }
+
+  return items.slice(0, 10); // cap at 10 per query
+}
+
+function extractTag(xml: string, tag: string): string {
+  const regex = new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]></${tag}>|<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i");
+  const match = xml.match(regex);
+  return match ? (match[1] ?? match[2] ?? "").trim() : "";
+}
+
+function decodeEntities(str: string): string {
+  return str
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    // Collapse whitespace
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n\s*\n/g, "\n")
-    .trim();
+    .replace(/<[^>]+>/g, ""); // strip any HTML tags in descriptions
+}
+
+// ---- Main scan pipeline --------------------------------------------------
+
+/** Search queries per competitor, organized by intel category. */
+function buildSearchQueries(competitor: CompetitorProfile): { query: string; category: string }[] {
+  const year = new Date().getFullYear();
+  const name = competitor.name;
+
+  return [
+    // Product launches
+    { query: `"${name}" hockey new product launch ${year}`, category: "products" },
+    { query: `"${name}" hockey new stick OR skate OR helmet ${year}`, category: "products" },
+    // Pricing
+    { query: `"${name}" hockey price OR pricing OR MSRP ${year}`, category: "pricing" },
+    // Sponsorships
+    { query: `"${name}" hockey sponsorship OR sponsor OR partnership`, category: "sponsorship" },
+    { query: `"${name}" hockey OJHL OR PJHL OR OHL OR NHL deal`, category: "sponsorship" },
+    // Patents
+    { query: `"${name}" hockey patent OR patent application`, category: "patent" },
+  ];
 }
 
 /**
- * Scrape key pages for a single competitor.
- * Focuses on new products, collections, and news pages.
+ * Gather intel for a single competitor using Brave Search + Google News RSS.
  */
-async function scrapeCompetitor(
+async function gatherCompetitorIntel(
   competitor: CompetitorProfile
-): Promise<ScrapedPage[]> {
-  // Common paths where hockey companies list products and news
-  const paths = [
-    "/",
-    "/new",
-    "/collections",
-    "/products",
-    "/news",
-    "/blog",
+): Promise<CompetitorScanResult> {
+  const queries = buildSearchQueries(competitor);
+  const allResults: SearchResult[] = [];
+
+  // Run Brave web searches and Google News RSS in parallel
+  const bravePromises = queries.map(async ({ query, category }) => {
+    const webResults = await braveSearch(query, 5);
+    return webResults.map((r) => ({
+      competitor: competitor.name,
+      category,
+      title: r.title,
+      snippet: r.description,
+      url: r.url,
+      source: "brave" as const,
+      publishedDate: r.page_age,
+    }));
+  });
+
+  const newsPromises = [
+    // Google News RSS — broad competitor search + specific topics
+    googleNewsRSS(`${competitor.name} hockey`),
+    googleNewsRSS(`${competitor.name} hockey sponsorship`),
+    googleNewsRSS(`${competitor.name} hockey patent`),
   ];
 
-  const urls = paths.map((p) => `${competitor.url}${p}`);
-
-  const results = await Promise.allSettled(
-    urls.map((url) => scrapePage(competitor.name, url))
-  );
-
-  return results
-    .filter(
-      (r): r is PromiseFulfilledResult<ScrapedPage> =>
-        r.status === "fulfilled"
-    )
-    .map((r) => r.value);
-}
-
-/**
- * Search for recent competitor news using Google search.
- * Falls back gracefully if search fails.
- */
-async function searchCompetitorNews(
-  competitorName: string
-): Promise<NewsResult[]> {
-  const queries = [
-    `"${competitorName}" hockey new product launch ${new Date().getFullYear()}`,
-    `"${competitorName}" hockey sponsorship deal`,
-    `"${competitorName}" hockey patent`,
+  const braveNewsPromises = [
+    braveNewsSearch(`${competitor.name} hockey equipment ${new Date().getFullYear()}`),
   ];
 
-  const results: NewsResult[] = [];
+  const [braveResults, newsResults, braveNews] = await Promise.all([
+    Promise.all(bravePromises),
+    Promise.all(newsPromises),
+    Promise.all(braveNewsPromises),
+  ]);
 
-  for (const query of queries) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
+  // Flatten Brave web results
+  for (const batch of braveResults) {
+    allResults.push(...batch);
+  }
 
-      // Use a public search API (DuckDuckGo instant answers)
-      const encodedQuery = encodeURIComponent(query);
-      const res = await fetch(
-        `https://api.duckduckgo.com/?q=${encodedQuery}&format=json&no_html=1`,
-        { signal: controller.signal }
-      );
-
-      clearTimeout(timeout);
-
-      if (res.ok) {
-        const data = await res.json();
-
-        // Extract related topics as news results
-        const topics = data.RelatedTopics ?? [];
-        for (const topic of topics.slice(0, 3)) {
-          if (topic.Text && topic.FirstURL) {
-            results.push({
-              competitor: competitorName,
-              headline: topic.Text.slice(0, 200),
-              source: "DuckDuckGo",
-              snippet: topic.Text,
-              url: topic.FirstURL,
-            });
-          }
-        }
-      }
-    } catch {
-      // Search failed for this query — continue with others
+  // Convert Google News RSS items to SearchResults
+  for (const items of newsResults) {
+    for (const item of items) {
+      allResults.push({
+        competitor: competitor.name,
+        category: "news",
+        title: item.title,
+        snippet: item.description,
+        url: item.link,
+        source: "google-news",
+        publishedDate: item.pubDate,
+      });
     }
   }
 
-  return results;
+  // Add Brave News results
+  for (const batch of braveNews) {
+    for (const result of batch) {
+      allResults.push({ ...result, competitor: competitor.name });
+    }
+  }
+
+  // Deduplicate by URL
+  const seen = new Set<string>();
+  const deduped = allResults.filter((r) => {
+    if (seen.has(r.url)) return false;
+    seen.add(r.url);
+    return true;
+  });
+
+  return {
+    competitor: competitor.name,
+    results: deduped,
+  };
 }
 
 /**
@@ -240,21 +366,10 @@ export async function runCompetitorScan(): Promise<{
 }> {
   const scanDate = new Date().toISOString();
 
-  // Scrape all competitors concurrently
-  const scanPromises = COMPETITORS.map(async (comp) => {
-    const [pages, newsResults] = await Promise.all([
-      scrapeCompetitor(comp),
-      searchCompetitorNews(comp.name),
-    ]);
-
-    return {
-      competitor: comp.name,
-      pages,
-      newsResults,
-    };
-  });
-
-  const scans = await Promise.all(scanPromises);
+  // Gather intel for all competitors concurrently
+  const scans = await Promise.all(
+    COMPETITORS.map((comp) => gatherCompetitorIntel(comp))
+  );
 
   // Build a text summary for the AI prompt
   const summary = formatScanForPrompt(scans);
@@ -270,30 +385,41 @@ function formatScanForPrompt(scans: CompetitorScanResult[]): string {
 
   for (const scan of scans) {
     const lines: string[] = [`## ${scan.competitor}`];
+    const totalResults = scan.results.length;
 
-    // Scraped pages
-    const okPages = scan.pages.filter((p) => p.status === "ok");
-    const failedPages = scan.pages.filter((p) => p.status === "error");
-
-    if (okPages.length > 0) {
-      lines.push(`\nScraped ${okPages.length} pages (${failedPages.length} failed):`);
-      for (const page of okPages) {
-        if (page.content.length > 50) {
-          lines.push(`\n### ${page.title || page.url}`);
-          lines.push(page.content.slice(0, 4000));
-        }
-      }
-    } else {
-      lines.push("\nNo pages could be scraped (site may block bots).");
+    if (totalResults === 0) {
+      lines.push("\nNo recent intel found for this competitor.");
+      sections.push(lines.join("\n"));
+      continue;
     }
 
-    // News results
-    if (scan.newsResults.length > 0) {
-      lines.push(`\n### Recent News & Mentions`);
-      for (const news of scan.newsResults) {
-        lines.push(`- ${news.headline}`);
-        lines.push(`  Source: ${news.url}`);
+    lines.push(`\nFound ${totalResults} results across search and news sources.\n`);
+
+    // Group by category
+    const categories = new Map<string, SearchResult[]>();
+    for (const r of scan.results) {
+      const existing = categories.get(r.category) ?? [];
+      existing.push(r);
+      categories.set(r.category, existing);
+    }
+
+    const categoryLabels: Record<string, string> = {
+      products: "Product Launches & New SKUs",
+      pricing: "Pricing Intel",
+      sponsorship: "Sponsorships & Partnerships",
+      patent: "Patent Activity",
+      news: "Recent News & Press",
+    };
+
+    for (const [category, results] of categories) {
+      lines.push(`### ${categoryLabels[category] ?? category}`);
+      for (const r of results.slice(0, 8)) {
+        lines.push(`- **${r.title}**`);
+        if (r.snippet) lines.push(`  ${r.snippet.slice(0, 300)}`);
+        lines.push(`  Source: ${r.source} | ${r.url}`);
+        if (r.publishedDate) lines.push(`  Published: ${r.publishedDate}`);
       }
+      lines.push("");
     }
 
     sections.push(lines.join("\n"));
