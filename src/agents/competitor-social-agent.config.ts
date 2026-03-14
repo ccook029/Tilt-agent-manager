@@ -40,6 +40,7 @@ export interface CompetitorSocialHandle {
 // Competitor handles — easy to update
 // -------------------------------------------------------
 const COMPETITOR_HANDLES: CompetitorSocialHandle[] = [
+  // Major brands
   {
     brand: "Bauer Hockey",
     instagram: "bauerhockey",
@@ -59,6 +60,17 @@ const COMPETITOR_HANDLES: CompetitorSocialHandle[] = [
     brand: "Warrior Hockey",
     instagram: "warriorhockey",
     tiktok: "@warriorhockey",
+  },
+  // Smaller / emerging brands
+  {
+    brand: "Swift Hockey",
+    instagram: "swifthockey",
+    tiktok: "@swifthockey",
+  },
+  {
+    brand: "CHS Hockey",
+    instagram: "chshockey",
+    tiktok: "@chshockey",
   },
 ];
 
@@ -81,8 +93,13 @@ Analyze this data and produce a weekly intelligence report covering:
 
 Be direct and specific. No fluff.
 
+COMPETITOR TIERS:
+- Major brands: Bauer, CCM, True, Warrior — benchmark for volume and production quality
+- Emerging brands: Swift Hockey, CHS Hockey, and others — watch closely as direct competitors in Tilt's weight class. Their wins and mistakes are more relevant to Tilt's strategy than the majors.
+
 ADDITIONAL GUIDELINES:
 - Rank competitors by overall social performance this week
+- Separate analysis for major vs. emerging brands where patterns differ
 - Call out standout posts with specific engagement numbers
 - Identify content gaps Tilt could exploit
 - Note any influencer partnerships or athlete endorsements spotted
