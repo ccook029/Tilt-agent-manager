@@ -1,11 +1,11 @@
 // ---------------------------------------------------------------------------
 // competitors.ts — Competitor intelligence data pipeline
 //
-// Uses two sources to gather intel on hockey equipment competitors:
-//   1. Brave Search API — web search for products, pricing, sponsorships, patents
-//   2. Google News RSS  — recent news coverage and press releases
+// Uses two data sources:
+//   1. Serper.dev — Google Search, Google Shopping, Google News via API
+//   2. Google News RSS — additional free news coverage (no API key needed)
 //
-// No web scraping needed — these APIs are reliable and don't get blocked.
+// No web scraping — reliable API-based data collection.
 // ---------------------------------------------------------------------------
 
 export interface CompetitorProfile {
@@ -32,7 +32,8 @@ export interface SearchResult {
   title: string;
   snippet: string;
   url: string;
-  source: string;       // "brave" or "google-news"
+  source: string;       // "serper", "serper-shopping", "serper-news", "google-news-rss"
+  price?: string;       // from Google Shopping results
   publishedDate?: string;
 }
 
@@ -41,31 +42,42 @@ export interface CompetitorScanResult {
   results: SearchResult[];
 }
 
-// ---- Brave Search API ----------------------------------------------------
+// ---- Serper.dev API ------------------------------------------------------
 
-interface BraveWebResult {
+interface SerperWebResult {
   title: string;
-  description: string;
-  url: string;
-  page_age?: string;
+  snippet: string;
+  link: string;
+  date?: string;
 }
 
-interface BraveSearchResponse {
-  web?: { results: BraveWebResult[] };
-  news?: { results: { title: string; description: string; url: string; age: string }[] };
+interface SerperShoppingResult {
+  title: string;
+  price: string;
+  link: string;
+  source: string;
+  delivery?: string;
+}
+
+interface SerperNewsResult {
+  title: string;
+  snippet: string;
+  link: string;
+  date: string;
+  source: string;
 }
 
 /**
- * Search Brave for a specific query. Returns up to `count` results.
- * Requires BRAVE_SEARCH_API_KEY env var.
+ * Google Search via Serper.dev — web results.
+ * Requires SERPER_API_KEY env var.
  */
-async function braveSearch(
+async function serperWebSearch(
   query: string,
-  count: number = 5
-): Promise<BraveWebResult[]> {
-  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+  num: number = 5
+): Promise<SerperWebResult[]> {
+  const apiKey = process.env.SERPER_API_KEY;
   if (!apiKey) {
-    console.warn("[competitors] BRAVE_SEARCH_API_KEY not set — skipping Brave search");
+    console.warn("[competitors] SERPER_API_KEY not set — skipping Serper web search");
     return [];
   }
 
@@ -73,42 +85,101 @@ async function braveSearch(
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const params = new URLSearchParams({
-      q: query,
-      count: count.toString(),
-      freshness: "pw", // past week
-      text_decorations: "false",
+    const res = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "X-API-KEY": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ q: query, num, tbs: "qdr:w" }), // past week
     });
 
-    const res = await fetch(
-      `https://api.search.brave.com/res/v1/web/search?${params}`,
-      {
-        signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-          "Accept-Encoding": "gzip",
-          "X-Subscription-Token": apiKey,
-        },
-      }
-    );
-
     clearTimeout(timeout);
-
     if (!res.ok) {
-      console.error(`[competitors] Brave search failed: HTTP ${res.status}`);
+      console.error(`[competitors] Serper web search failed: HTTP ${res.status}`);
       return [];
     }
 
-    const data: BraveSearchResponse = await res.json();
-    return data.web?.results ?? [];
+    const data = await res.json();
+    return data.organic ?? [];
   } catch (err) {
-    console.error("[competitors] Brave search error:", err);
+    console.error("[competitors] Serper web search error:", err);
     return [];
   }
 }
 
+/**
+ * Google Shopping via Serper.dev — pricing data.
+ */
+async function serperShoppingSearch(
+  query: string,
+  num: number = 10
+): Promise<SerperShoppingResult[]> {
+  const apiKey = process.env.SERPER_API_KEY;
+  if (!apiKey) return [];
 
-// ---- Google News RSS -----------------------------------------------------
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch("https://google.serper.dev/shopping", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "X-API-KEY": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ q: query, num }),
+    });
+
+    clearTimeout(timeout);
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    return data.shopping ?? [];
+  } catch (err) {
+    console.error("[competitors] Serper shopping search error:", err);
+    return [];
+  }
+}
+
+/**
+ * Google News via Serper.dev — recent news articles.
+ */
+async function serperNewsSearch(
+  query: string,
+  num: number = 5
+): Promise<SerperNewsResult[]> {
+  const apiKey = process.env.SERPER_API_KEY;
+  if (!apiKey) return [];
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch("https://google.serper.dev/news", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "X-API-KEY": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ q: query, num, tbs: "qdr:w" }),
+    });
+
+    clearTimeout(timeout);
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    return data.news ?? [];
+  } catch (err) {
+    console.error("[competitors] Serper news search error:", err);
+    return [];
+  }
+}
+
+// ---- Google News RSS (free, no API key) ----------------------------------
 
 interface RSSItem {
   title: string;
@@ -118,10 +189,6 @@ interface RSSItem {
   source: string;
 }
 
-/**
- * Fetch Google News RSS for a query. No API key needed.
- * Returns parsed news items.
- */
 async function googleNewsRSS(query: string): Promise<RSSItem[]> {
   try {
     const controller = new AbortController();
@@ -132,17 +199,11 @@ async function googleNewsRSS(query: string): Promise<RSSItem[]> {
 
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; TiltIntelBot/1.0)",
-      },
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; TiltIntelBot/1.0)" },
     });
 
     clearTimeout(timeout);
-
-    if (!res.ok) {
-      console.error(`[competitors] Google News RSS failed: HTTP ${res.status}`);
-      return [];
-    }
+    if (!res.ok) return [];
 
     const xml = await res.text();
     return parseRSSItems(xml);
@@ -152,10 +213,6 @@ async function googleNewsRSS(query: string): Promise<RSSItem[]> {
   }
 }
 
-/**
- * Basic XML parser for RSS <item> elements.
- * No external dependency needed — just regex extraction.
- */
 function parseRSSItems(xml: string): RSSItem[] {
   const items: RSSItem[] = [];
   const itemRegex = /<item>([\s\S]*?)<\/item>/g;
@@ -180,13 +237,13 @@ function parseRSSItems(xml: string): RSSItem[] {
     }
   }
 
-  return items.slice(0, 10); // cap at 10 per query
+  return items.slice(0, 10);
 }
 
 function extractTag(xml: string, tag: string): string {
   const regex = new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]></${tag}>|<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i");
-  const match = xml.match(regex);
-  return match ? (match[1] ?? match[2] ?? "").trim() : "";
+  const m = xml.match(regex);
+  return m ? (m[1] ?? m[2] ?? "").trim() : "";
 }
 
 function decodeEntities(str: string): string {
@@ -196,72 +253,116 @@ function decodeEntities(str: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/<[^>]+>/g, ""); // strip any HTML tags in descriptions
+    .replace(/<[^>]+>/g, "");
 }
 
 // ---- Main scan pipeline --------------------------------------------------
 
-/** Search queries per competitor, organized by intel category. */
-function buildSearchQueries(competitor: CompetitorProfile): { query: string; category: string }[] {
+/**
+ * Build all search queries for a competitor, organized by intel category.
+ */
+function buildQueries(comp: CompetitorProfile): { query: string; category: string; type: "web" | "shopping" | "news" }[] {
   const year = new Date().getFullYear();
-  const name = competitor.name;
+  const name = comp.name;
 
   return [
-    // Product launches
-    { query: `"${name}" hockey new product launch ${year}`, category: "products" },
-    { query: `"${name}" hockey new stick OR skate OR helmet ${year}`, category: "products" },
-    // Pricing
-    { query: `"${name}" hockey price OR pricing OR MSRP ${year}`, category: "pricing" },
-    // Sponsorships
-    { query: `"${name}" hockey sponsorship OR sponsor OR partnership`, category: "sponsorship" },
-    { query: `"${name}" hockey OJHL OR PJHL OR OHL OR NHL deal`, category: "sponsorship" },
-    // Patents
-    { query: `"${name}" hockey patent OR patent application`, category: "patent" },
+    // Web searches — products, sponsorships, patents
+    { query: `"${name}" hockey new product launch ${year}`, category: "products", type: "web" },
+    { query: `"${name}" hockey new stick OR skate OR helmet ${year}`, category: "products", type: "web" },
+    { query: `"${name}" hockey sponsorship OR sponsor OR partnership`, category: "sponsorship", type: "web" },
+    { query: `"${name}" hockey OJHL OR PJHL OR OHL OR NHL deal`, category: "sponsorship", type: "web" },
+    { query: `"${name}" hockey patent OR "patent application"`, category: "patent", type: "web" },
+
+    // Shopping searches — pricing data
+    { query: `${name} hockey stick`, category: "pricing", type: "shopping" },
+    { query: `${name} hockey skates`, category: "pricing", type: "shopping" },
+    { query: `${name} hockey gloves`, category: "pricing", type: "shopping" },
+    { query: `${name} hockey helmet`, category: "pricing", type: "shopping" },
+
+    // News searches via Serper
+    { query: `"${name}" hockey`, category: "news", type: "news" },
   ];
 }
 
 /**
- * Gather intel for a single competitor using Brave Search + Google News RSS.
+ * Gather intel for a single competitor using Serper.dev + Google News RSS.
  */
 async function gatherCompetitorIntel(
   competitor: CompetitorProfile
 ): Promise<CompetitorScanResult> {
-  const queries = buildSearchQueries(competitor);
+  const queries = buildQueries(competitor);
   const allResults: SearchResult[] = [];
 
-  // Run Brave web searches and Google News RSS in parallel
-  const bravePromises = queries.map(async ({ query, category }) => {
-    const webResults = await braveSearch(query, 5);
-    return webResults.map((r) => ({
-      competitor: competitor.name,
-      category,
-      title: r.title,
-      snippet: r.description,
-      url: r.url,
-      source: "brave" as const,
-      publishedDate: r.page_age,
-    }));
-  });
+  // Split queries by type
+  const webQueries = queries.filter((q) => q.type === "web");
+  const shoppingQueries = queries.filter((q) => q.type === "shopping");
+  const newsQueries = queries.filter((q) => q.type === "news");
 
-  const newsPromises = [
-    // Google News RSS — broad competitor search + specific topics
-    googleNewsRSS(`${competitor.name} hockey`),
-    googleNewsRSS(`${competitor.name} hockey sponsorship`),
-    googleNewsRSS(`${competitor.name} hockey patent`),
-  ];
-
-  const [braveResults, newsResults] = await Promise.all([
-    Promise.all(bravePromises),
-    Promise.all(newsPromises),
+  // Run all searches concurrently
+  const [webResults, shoppingResults, serperNews, rssResults] = await Promise.all([
+    // Serper web search
+    Promise.all(
+      webQueries.map(async ({ query, category }) => {
+        const results = await serperWebSearch(query, 5);
+        return results.map((r) => ({
+          competitor: competitor.name,
+          category,
+          title: r.title,
+          snippet: r.snippet,
+          url: r.link,
+          source: "serper",
+          publishedDate: r.date,
+        }));
+      })
+    ),
+    // Serper shopping search
+    Promise.all(
+      shoppingQueries.map(async ({ query, category }) => {
+        const results = await serperShoppingSearch(query, 10);
+        return results.map((r) => ({
+          competitor: competitor.name,
+          category,
+          title: r.title,
+          snippet: `${r.price} — ${r.source}`,
+          url: r.link,
+          source: "serper-shopping",
+          price: r.price,
+        }));
+      })
+    ),
+    // Serper news search
+    Promise.all(
+      newsQueries.map(async ({ query, category }) => {
+        const results = await serperNewsSearch(query, 5);
+        return results.map((r) => ({
+          competitor: competitor.name,
+          category,
+          title: r.title,
+          snippet: r.snippet,
+          url: r.link,
+          source: "serper-news",
+          publishedDate: r.date,
+        }));
+      })
+    ),
+    // Google News RSS (free backup)
+    Promise.all([
+      googleNewsRSS(`${competitor.name} hockey`),
+      googleNewsRSS(`${competitor.name} hockey sponsorship OR patent`),
+    ]),
   ]);
 
-  // Flatten Brave web results
-  for (const batch of braveResults) {
-    allResults.push(...batch);
-  }
+  // Flatten Serper web results
+  for (const batch of webResults) allResults.push(...batch);
 
-  // Convert Google News RSS items to SearchResults
-  for (const items of newsResults) {
+  // Flatten Serper shopping results
+  for (const batch of shoppingResults) allResults.push(...batch);
+
+  // Flatten Serper news results
+  for (const batch of serperNews) allResults.push(...batch);
+
+  // Convert Google News RSS to SearchResults
+  for (const items of rssResults) {
     for (const item of items) {
       allResults.push({
         competitor: competitor.name,
@@ -269,7 +370,7 @@ async function gatherCompetitorIntel(
         title: item.title,
         snippet: item.description,
         url: item.link,
-        source: "google-news",
+        source: "google-news-rss",
         publishedDate: item.pubDate,
       });
     }
@@ -291,7 +392,6 @@ async function gatherCompetitorIntel(
 
 /**
  * Run a full competitor scan across all tracked competitors.
- * Returns structured data ready to be formatted into a prompt.
  */
 export async function runCompetitorScan(): Promise<{
   scans: CompetitorScanResult[];
@@ -300,19 +400,16 @@ export async function runCompetitorScan(): Promise<{
 }> {
   const scanDate = new Date().toISOString();
 
-  // Gather intel for all competitors concurrently
   const scans = await Promise.all(
     COMPETITORS.map((comp) => gatherCompetitorIntel(comp))
   );
 
-  // Build a text summary for the AI prompt
   const summary = formatScanForPrompt(scans);
-
   return { scans, scanDate, summary };
 }
 
 /**
- * Format scan results into a text block suitable for the AI prompt.
+ * Format scan results into a text block for the AI prompt.
  */
 function formatScanForPrompt(scans: CompetitorScanResult[]): string {
   const sections: string[] = [];
@@ -339,7 +436,7 @@ function formatScanForPrompt(scans: CompetitorScanResult[]): string {
 
     const categoryLabels: Record<string, string> = {
       products: "Product Launches & New SKUs",
-      pricing: "Pricing Intel",
+      pricing: "Pricing Intel (Google Shopping)",
       sponsorship: "Sponsorships & Partnerships",
       patent: "Patent Activity",
       news: "Recent News & Press",
@@ -347,13 +444,25 @@ function formatScanForPrompt(scans: CompetitorScanResult[]): string {
 
     for (const [category, results] of categories) {
       lines.push(`### ${categoryLabels[category] ?? category}`);
-      for (const r of results.slice(0, 8)) {
-        lines.push(`- **${r.title}**`);
-        if (r.snippet) lines.push(`  ${r.snippet.slice(0, 300)}`);
-        lines.push(`  Source: ${r.source} | ${r.url}`);
-        if (r.publishedDate) lines.push(`  Published: ${r.publishedDate}`);
+
+      if (category === "pricing") {
+        // Format pricing as a table for easy comparison
+        lines.push("");
+        lines.push("| Product | Price | Source |");
+        lines.push("|---------|-------|--------|");
+        for (const r of results.slice(0, 15)) {
+          lines.push(`| ${r.title} | ${r.price ?? "N/A"} | ${r.url} |`);
+        }
+        lines.push("");
+      } else {
+        for (const r of results.slice(0, 8)) {
+          lines.push(`- **${r.title}**`);
+          if (r.snippet) lines.push(`  ${r.snippet.slice(0, 300)}`);
+          lines.push(`  Source: ${r.source} | ${r.url}`);
+          if (r.publishedDate) lines.push(`  Published: ${r.publishedDate}`);
+        }
+        lines.push("");
       }
-      lines.push("");
     }
 
     sections.push(lines.join("\n"));
