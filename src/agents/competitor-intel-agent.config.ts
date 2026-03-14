@@ -63,7 +63,7 @@ CONTEXT ABOUT TILT HOCKEY:
 
 Be direct and actionable. Write for a founder who reads this in 5 minutes.`,
 
-  userPrompt: `Here is the competitor scan data collected on {{scan_date}}.
+  userPrompt: `Here is the competitor intelligence data collected on {{scan_date}} from Google News and web search APIs (not web scraping).
 
 {{competitor_data}}
 
@@ -71,7 +71,7 @@ Be direct and actionable. Write for a founder who reads this in 5 minutes.`,
 Additional context from the team: {{context}}
 {{/if}}
 
-Based on this data, produce the weekly competitor intelligence report. Focus on what changed since last week and what Tilt Hockey should do about it.`,
+Based on this data, produce the weekly competitor intelligence report. Focus on what changed since last week and what Tilt Hockey should do about it. Do NOT mention scraping, data collection methods, or technical failures — just analyze the intel provided.`,
 
   email: {
     to: ["admin@tiltsports.com"],

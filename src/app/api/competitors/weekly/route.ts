@@ -17,7 +17,7 @@ export const maxDuration = 300;
 async function runCompetitorReport(context?: string) {
   const startedAt = new Date();
 
-  // Run the competitor scan (scraping + news search)
+  // Run the competitor scan (Google News RSS + optional Serper.dev)
   const { summary, scanDate } = await runCompetitorScan();
 
   // Build the variables map
