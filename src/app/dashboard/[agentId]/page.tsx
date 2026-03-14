@@ -6,6 +6,7 @@ import Link from "next/link";
 import { getPersonaByAgentId } from "@/lib/personas";
 import MayaChat from "@/components/maya-chat";
 import ReportFiles from "@/components/report-files";
+import ReportRenderer from "@/components/report-renderer";
 
 interface RunLog {
   id: string;
@@ -281,10 +282,12 @@ export default function AgentDetailPage() {
                     </div>
                   </button>
                   {expanded === log.id && (
-                    <div className="px-4 py-3 border-t border-gray-800/60 bg-[#0d0d0d]">
-                      <pre className="text-sm text-gray-300 whitespace-pre-wrap max-h-[600px] overflow-y-auto leading-relaxed">
-                        {log.output}
-                      </pre>
+                    <div className="px-6 py-5 border-t border-gray-800/60 bg-[#0d0d0d] max-h-[700px] overflow-y-auto chat-scroll">
+                      <ReportRenderer
+                        text={log.output}
+                        agentName={log.agentName}
+                        date={log.startedAt}
+                      />
                     </div>
                   )}
                 </div>

@@ -2,6 +2,7 @@
 // pdf.tsx — Tilt-branded PDF report generator using @react-pdf/renderer
 //
 // Parses Claude's text output and renders it as a polished, branded PDF.
+// Uses the actual Tilt logo and properly formats bullets/priorities.
 // ---------------------------------------------------------------------------
 import React from "react";
 import {
@@ -9,10 +10,12 @@ import {
   Page,
   Text,
   View,
+  Image,
   StyleSheet,
   renderToBuffer,
   Font,
 } from "@react-pdf/renderer";
+import path from "path";
 
 // ---- Tilt Brand Colors ---------------------------------------------------
 const BRAND = {
@@ -21,12 +24,16 @@ const BRAND = {
   midGray: "#4A4A4A",
   lightGray: "#E5E5E5",
   white: "#FFFFFF",
-  accent: "#2563EB",    // blue for highlights
-  high: "#DC2626",      // red for high priority
-  medium: "#D97706",    // amber for medium priority
-  low: "#16A34A",       // green for low priority
-  urgent: "#DC2626",    // red for urgent flags
+  red: "#E4002B",
+  accent: "#E4002B",     // Tilt red for highlights
+  high: "#DC2626",       // red for high priority
+  medium: "#D97706",     // amber for medium priority
+  low: "#16A34A",        // green for low priority
+  urgent: "#DC2626",     // red for urgent flags
 };
+
+// ---- Resolve logo path at build time ------------------------------------
+const LOGO_PATH = path.join(process.cwd(), "public", "images", "tilt-logo.png");
 
 // ---- Register a clean sans-serif font ------------------------------------
 Font.register({
@@ -59,11 +66,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 3,
     borderBottomColor: BRAND.black,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: BRAND.black,
-    letterSpacing: 4,
+  logo: {
+    width: 100,
+    height: 28,
+    objectFit: "contain",
+  },
+  headerRight: {
+    textAlign: "right",
   },
   headerSubtitle: {
     fontSize: 9,
@@ -92,7 +101,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingBottom: 4,
     borderBottomWidth: 2,
-    borderBottomColor: BRAND.accent,
+    borderBottomColor: BRAND.red,
   },
   h3: {
     fontSize: 11,
@@ -108,16 +117,17 @@ const styles = StyleSheet.create({
     color: BRAND.darkGray,
     lineHeight: 1.6,
   },
-  // Bullet items
+  // Bullet items — outer row
   bulletRow: {
     flexDirection: "row",
     marginBottom: 4,
     paddingLeft: 8,
   },
   bulletDot: {
-    width: 12,
+    width: 16,
     fontSize: 10,
     color: BRAND.midGray,
+    flexShrink: 0,
   },
   bulletText: {
     flex: 1,
@@ -125,26 +135,34 @@ const styles = StyleSheet.create({
     color: BRAND.darkGray,
     lineHeight: 1.5,
   },
-  // Priority badges
-  priorityHigh: {
-    color: BRAND.high,
-    fontWeight: "bold",
+  // Numbered items
+  numberLabel: {
+    width: 20,
+    fontSize: 10,
+    color: BRAND.midGray,
+    flexShrink: 0,
   },
-  priorityMedium: {
-    color: BRAND.medium,
-    fontWeight: "bold",
+  // Priority tags — rendered as their own View, not nested <Text>
+  priorityTag: {
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 2,
+    marginRight: 6,
+    alignSelf: "flex-start",
+    flexShrink: 0,
   },
-  priorityLow: {
-    color: BRAND.low,
+  priorityTagText: {
+    fontSize: 7,
     fontWeight: "bold",
+    color: BRAND.white,
   },
   // Highlight box (for executive summary or urgent items)
   highlightBox: {
-    backgroundColor: "#F0F7FF",
+    backgroundColor: "#FFF5F5",
     borderLeftWidth: 4,
-    borderLeftColor: BRAND.accent,
+    borderLeftColor: BRAND.red,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: 8,
     marginTop: 4,
   },
   urgentBox: {
@@ -152,7 +170,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: BRAND.urgent,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: 8,
     marginTop: 4,
   },
   // Table styles
@@ -213,10 +231,11 @@ const styles = StyleSheet.create({
 // ---- Parse report text into structured blocks ----------------------------
 
 interface Block {
-  type: "h2" | "h3" | "paragraph" | "bullet" | "table" | "urgent" | "highlight";
+  type: "h2" | "h3" | "paragraph" | "bullet" | "numbered" | "table" | "urgent" | "highlight";
   content: string;
   rows?: string[][];   // for tables
   priority?: "high" | "medium" | "low";
+  number?: number;     // for numbered lists
 }
 
 function parseReportToBlocks(text: string): Block[] {
@@ -291,7 +310,30 @@ function parseReportToBlocks(text: string): Block[] {
     if (trimmed.includes("🚨")) {
       blocks.push({
         type: "urgent",
-        content: trimmed.replace(/🚨/g, "[ALERT]").replace(/^[-*]\s*/, ""),
+        content: trimmed.replace(/🚨/g, "").replace(/^[-*]\s*/, "").trim(),
+      });
+      continue;
+    }
+
+    // Numbered lists (1. 2. 3. etc.)
+    const numberedMatch = trimmed.match(/^(\d+)[.)]\s+(.*)/);
+    if (numberedMatch) {
+      const bulletContent = numberedMatch[2];
+      let priority: "high" | "medium" | "low" | undefined;
+      if (/🔴|\bHigh\b/i.test(bulletContent)) priority = "high";
+      else if (/🟡|\bMedium\b/i.test(bulletContent)) priority = "medium";
+      else if (/🟢|\bLow\b/i.test(bulletContent)) priority = "low";
+
+      const cleanContent = bulletContent
+        .replace(/🔴|🟡|🟢/g, "")
+        .replace(/\*\*/g, "")
+        .trim();
+
+      blocks.push({
+        type: "numbered",
+        content: cleanContent,
+        number: parseInt(numberedMatch[1]),
+        priority,
       });
       continue;
     }
@@ -301,9 +343,9 @@ function parseReportToBlocks(text: string): Block[] {
       const bulletContent = trimmed.replace(/^[-*]\s*/, "");
       let priority: "high" | "medium" | "low" | undefined;
 
-      if (/🔴|High/i.test(bulletContent)) priority = "high";
-      else if (/🟡|Medium/i.test(bulletContent)) priority = "medium";
-      else if (/🟢|Low/i.test(bulletContent)) priority = "low";
+      if (/🔴|\bHigh\b/i.test(bulletContent)) priority = "high";
+      else if (/🟡|\bMedium\b/i.test(bulletContent)) priority = "medium";
+      else if (/🟢|\bLow\b/i.test(bulletContent)) priority = "low";
 
       const cleanContent = bulletContent
         .replace(/🔴|🟡|🟢/g, "")
@@ -333,6 +375,20 @@ function parseReportToBlocks(text: string): Block[] {
   return blocks;
 }
 
+// ---- Priority Tag as a View (not nested Text) ----------------------------
+
+function PriorityTag({ priority }: { priority?: "high" | "medium" | "low" }) {
+  if (!priority) return null;
+  const bg =
+    priority === "high" ? BRAND.high : priority === "medium" ? BRAND.medium : BRAND.low;
+  const label = priority === "high" ? "HIGH" : priority === "medium" ? "MED" : "LOW";
+  return (
+    <View style={[styles.priorityTag, { backgroundColor: bg }]}>
+      <Text style={styles.priorityTagText}>{label}</Text>
+    </View>
+  );
+}
+
 // ---- PDF Document Component ----------------------------------------------
 
 interface ReportPDFProps {
@@ -343,28 +399,16 @@ interface ReportPDFProps {
   reportText: string;
 }
 
-function PriorityBadge({ priority }: { priority?: "high" | "medium" | "low" }) {
-  if (!priority) return null;
-  const style =
-    priority === "high"
-      ? styles.priorityHigh
-      : priority === "medium"
-        ? styles.priorityMedium
-        : styles.priorityLow;
-  const label = priority === "high" ? "HIGH" : priority === "medium" ? "MED" : "LOW";
-  return <Text style={style}>[{label}] </Text>;
-}
-
 function ReportPDF({ title, subtitle, reportDate, agentName, reportText }: ReportPDFProps) {
   const blocks = parseReportToBlocks(reportText);
 
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>TILT</Text>
-          <View>
+      <Page size="A4" style={styles.page} wrap>
+        {/* Header with actual Tilt logo */}
+        <View style={styles.header} fixed>
+          <Image src={LOGO_PATH} style={styles.logo} />
+          <View style={styles.headerRight}>
             <Text style={styles.headerSubtitle}>{title}</Text>
             <Text style={styles.headerSubtitle}>{subtitle}</Text>
           </View>
@@ -381,44 +425,65 @@ function ReportPDF({ title, subtitle, reportDate, agentName, reportText }: Repor
         {blocks.map((block, idx) => {
           switch (block.type) {
             case "h2":
-              return <Text key={idx} style={styles.h2}>{block.content}</Text>;
+              return (
+                <Text key={idx} style={styles.h2} wrap={false}>
+                  {block.content}
+                </Text>
+              );
 
             case "h3":
-              return <Text key={idx} style={styles.h3}>{block.content}</Text>;
+              return (
+                <Text key={idx} style={styles.h3} wrap={false}>
+                  {block.content}
+                </Text>
+              );
 
             case "paragraph":
-              return <Text key={idx} style={styles.paragraph}>{block.content}</Text>;
+              return (
+                <Text key={idx} style={styles.paragraph}>
+                  {block.content}
+                </Text>
+              );
 
             case "highlight":
               return (
-                <View key={idx} style={styles.highlightBox}>
+                <View key={idx} style={styles.highlightBox} wrap={false}>
                   <View style={styles.bulletRow}>
-                    <Text style={styles.bulletDot}>●</Text>
-                    <Text style={styles.bulletText}>
-                      <PriorityBadge priority={block.priority} />
-                      {block.content}
-                    </Text>
+                    {block.priority && <PriorityTag priority={block.priority} />}
+                    <Text style={styles.bulletText}>{block.content}</Text>
                   </View>
                 </View>
               );
 
             case "urgent":
               return (
-                <View key={idx} style={styles.urgentBox}>
-                  <Text style={[styles.paragraph, { color: BRAND.urgent, fontWeight: "bold" }]}>
-                    ⚠ {block.content}
+                <View key={idx} style={styles.urgentBox} wrap={false}>
+                  <Text
+                    style={[
+                      styles.paragraph,
+                      { color: BRAND.urgent, fontWeight: "bold", marginBottom: 0 },
+                    ]}
+                  >
+                    ALERT: {block.content}
                   </Text>
                 </View>
               );
 
             case "bullet":
               return (
-                <View key={idx} style={styles.bulletRow}>
-                  <Text style={styles.bulletDot}>•</Text>
-                  <Text style={styles.bulletText}>
-                    <PriorityBadge priority={block.priority} />
-                    {block.content}
-                  </Text>
+                <View key={idx} style={styles.bulletRow} wrap={false}>
+                  <Text style={styles.bulletDot}>{"\u2022"}</Text>
+                  {block.priority && <PriorityTag priority={block.priority} />}
+                  <Text style={styles.bulletText}>{block.content}</Text>
+                </View>
+              );
+
+            case "numbered":
+              return (
+                <View key={idx} style={styles.bulletRow} wrap={false}>
+                  <Text style={styles.numberLabel}>{block.number}.</Text>
+                  {block.priority && <PriorityTag priority={block.priority} />}
+                  <Text style={styles.bulletText}>{block.content}</Text>
                 </View>
               );
 
@@ -426,7 +491,7 @@ function ReportPDF({ title, subtitle, reportDate, agentName, reportText }: Repor
               if (!block.rows || block.rows.length === 0) return null;
               const [header, ...dataRows] = block.rows;
               return (
-                <View key={idx} style={styles.table}>
+                <View key={idx} style={styles.table} wrap={false}>
                   <View style={styles.tableHeader}>
                     {header.map((cell, ci) => (
                       <Text key={ci} style={styles.tableHeaderCell}>
