@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getAllPersonas } from "@/lib/personas";
+import { getAllPersonas, getLeadership } from "@/lib/personas";
 import {
   IceRinkPattern,
   StickSilhouette,
@@ -9,6 +9,7 @@ import {
 
 export default function Home() {
   const team = getAllPersonas();
+  const founders = getLeadership();
 
   return (
     <div className="space-y-12 relative">
@@ -32,11 +33,49 @@ export default function Home() {
         </p>
       </div>
 
+      {/* Leadership — Co-Founders */}
+      <div>
+        <div className="flex items-center gap-2 mb-5">
+          <CrossedSticksIcon className="w-5 h-5 text-[#e4002b]" />
+          <h2 className="font-semibold text-gray-300 uppercase tracking-wider text-sm">
+            Leadership
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-2">
+          {founders.map((founder) => (
+            <div
+              key={founder.name}
+              className="rounded-xl border border-[#e4002b]/20 p-6 bg-[#111]/60 relative overflow-hidden"
+            >
+              {/* Subtle red gradient top edge */}
+              <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#e4002b]/60 to-transparent" />
+
+              <div className="flex items-center gap-5">
+                <div
+                  className={`w-16 h-16 rounded-full ${founder.avatarColor} ring-2 ${founder.avatarAccent} flex items-center justify-center text-xl font-bold text-white shadow-lg`}
+                >
+                  {founder.avatarInitials}
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">{founder.name}</h3>
+                  <p className="text-sm text-[#e4002b]">{founder.title}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Connector line from leadership to team */}
+        <div className="flex justify-center py-3">
+          <div className="w-px h-8 bg-gradient-to-b from-[#e4002b]/40 to-gray-800/40" />
+        </div>
+      </div>
+
       {/* Team Grid */}
       <div>
         <div className="flex items-center gap-2 mb-5">
           <HockeyStickIcon className="w-5 h-5 text-[#e4002b]" />
-          <h2 className="text-lg font-semibold text-gray-300 uppercase tracking-wider text-sm">
+          <h2 className="font-semibold text-gray-300 uppercase tracking-wider text-sm">
             The Team
           </h2>
         </div>

@@ -20,6 +20,36 @@ export interface AgentPersona {
   taskTypes?: string[];
 }
 
+// Leadership — Co-Founders (not AI agents, real humans at the top)
+export interface LeaderPersona {
+  name: string;
+  title: string;
+  avatarInitials: string;
+  avatarColor: string;
+  avatarAccent: string;
+}
+
+const leadership: LeaderPersona[] = [
+  {
+    name: "Chris Cook",
+    title: "Co-Founder",
+    avatarInitials: "CC",
+    avatarColor: "bg-[#e4002b]",
+    avatarAccent: "ring-red-400",
+  },
+  {
+    name: "Jeremy Elliott",
+    title: "Co-Founder",
+    avatarInitials: "JE",
+    avatarColor: "bg-[#e4002b]",
+    avatarAccent: "ring-red-400",
+  },
+];
+
+export function getLeadership(): LeaderPersona[] {
+  return leadership;
+}
+
 const personas: AgentPersona[] = [
   {
     agentId: "website-analytics",
