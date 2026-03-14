@@ -91,6 +91,20 @@ const personas: AgentPersona[] = [
     runEndpoint: "/api/product-design/run",
     taskTypes: ["product-spec", "rfq-package", "catalog-update", "rendering-brief", "sell-sheet"],
   },
+  {
+    agentId: "materials-rd",
+    name: "Dr. Rex Polymer",
+    title: "VP of Materials Science R&D",
+    department: "Research & Development",
+    bio: "Rex operates at PhD level in polymer science, advanced composites, and sports equipment engineering. He researches UHMWPE formulations, graphene reinforcement, variable-flex systems, and advanced coatings — then delivers factory-ready material specs and patent-grade documentation. Reports to Jeremy Elliott with findings escalated to Chris Cook.",
+    status: "active",
+    schedule: "Fridays at 8:00 AM ET + On-demand",
+    avatarInitials: "RP",
+    avatarColor: "bg-purple-600",
+    avatarAccent: "ring-purple-400",
+    runEndpoint: "/api/materials-rd/run",
+    taskTypes: ["material-spec", "patent-brief", "literature-review", "competitor-ip-scan", "factory-rnd-memo"],
+  },
 ];
 
 export function getAllPersonas(): AgentPersona[] {
