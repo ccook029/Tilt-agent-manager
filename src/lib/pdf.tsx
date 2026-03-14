@@ -457,7 +457,7 @@ function ReportPDF({ title, subtitle, reportDate, agentName, reportText }: Repor
         {/* Footer */}
         <View style={styles.footer} fixed>
           <Text style={styles.footerText}>
-            Tilt Hockey — Agent Orchestrator
+            Tilt Hockey — Corporate Headquarters
           </Text>
           <Text style={styles.footerText}>
             Generated {new Date().toISOString().slice(0, 10)} | tiltsports.com

@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getPersonaByAgentId } from "@/lib/personas";
+import MayaChat from "@/components/maya-chat";
+import ReportFiles from "@/components/report-files";
 
 interface RunLog {
   id: string;
@@ -22,11 +24,16 @@ export default function AgentDetailPage() {
   const params = useParams();
   const agentId = params.agentId as string;
   const persona = getPersonaByAgentId(agentId);
+  const isMaya = agentId === "product-design";
 
   const [logs, setLogs] = useState<RunLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [innovating, setInnovating] = useState(false);
+  const [activeTab, setActiveTab] = useState<"history" | "files" | "chat">(
+    isMaya ? "chat" : "history"
+  );
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -61,6 +68,18 @@ export default function AgentDetailPage() {
     }
   };
 
+  const triggerInnovation = async () => {
+    setInnovating(true);
+    try {
+      await fetch("/api/product-design/innovate", { method: "POST" });
+      await fetchLogs();
+    } catch {
+      console.error("Failed to trigger innovation");
+    } finally {
+      setInnovating(false);
+    }
+  };
+
   const displayName = persona?.name ?? logs[0]?.agentName ?? agentId;
 
   return (
@@ -70,7 +89,7 @@ export default function AgentDetailPage() {
         <div className="flex items-start gap-5">
           <Link
             href="/dashboard"
-            className="text-gray-400 hover:text-gray-200 transition-colors mt-2"
+            className="text-gray-500 hover:text-[#e4002b] transition-colors mt-2"
           >
             &larr;
           </Link>
@@ -84,7 +103,7 @@ export default function AgentDetailPage() {
           )}
 
           <div>
-            <h2 className="text-2xl font-semibold">{displayName}</h2>
+            <h2 className="text-2xl font-bold tracking-tight">{displayName}</h2>
             {persona && (
               <p className="text-sm text-gray-500 mt-0.5">
                 {persona.title} &middot; {persona.department}
@@ -98,20 +117,31 @@ export default function AgentDetailPage() {
           </div>
         </div>
 
-        {/* Run button — available for all agents, not just analytics */}
-        <button
-          onClick={triggerRun}
-          disabled={running}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors shrink-0"
-        >
-          {running ? "Running..." : "Run Now"}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Maya gets an "Innovate" button */}
+          {isMaya && (
+            <button
+              onClick={triggerInnovation}
+              disabled={innovating}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+            >
+              {innovating ? "Thinking..." : "Generate Concept"}
+            </button>
+          )}
+          <button
+            onClick={triggerRun}
+            disabled={running}
+            className="px-4 py-2 bg-[#e4002b] hover:bg-[#b8001f] disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+          >
+            {running ? "Running..." : "Run Now"}
+          </button>
+        </div>
       </div>
 
-      {/* Persona meta bar */}
+      {/* Meta bar */}
       {persona && (
-        <div className="flex items-center gap-4 text-xs text-gray-500 border-b border-gray-800 pb-4">
-          <span>Schedule: {persona.schedule}</span>
+        <div className="flex items-center gap-4 text-xs text-gray-500 border-b border-gray-800/60 pb-4">
+          <span className="text-gray-600">Schedule: {persona.schedule}</span>
           <span
             className={`flex items-center gap-1.5 ${
               persona.status === "active" ? "text-green-400" : "text-gray-500"
@@ -120,7 +150,7 @@ export default function AgentDetailPage() {
             <span
               className={`w-2 h-2 rounded-full ${
                 persona.status === "active"
-                  ? "bg-green-500 animate-pulse"
+                  ? "bg-green-500 tilt-pulse"
                   : "bg-gray-600"
               }`}
             />
@@ -132,7 +162,7 @@ export default function AgentDetailPage() {
               {persona.taskTypes.map((t) => (
                 <code
                   key={t}
-                  className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-400 mr-1"
+                  className="bg-gray-800/60 px-1.5 py-0.5 rounded text-gray-400 mr-1 text-[10px]"
                 >
                   {t}
                 </code>
@@ -142,72 +172,127 @@ export default function AgentDetailPage() {
         </div>
       )}
 
-      {/* Run history */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">
-          Report History
-        </h3>
-
-        {loading ? (
-          <p className="text-gray-500">Loading...</p>
-        ) : logs.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">
-            <p className="text-lg mb-2">No reports yet</p>
-            <p className="text-sm">
-              {persona
-                ? `${persona.name} hasn't delivered any reports yet.`
-                : "This agent hasn't produced any reports yet."}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {logs.map((log) => (
-              <div
-                key={log.id}
-                className="border border-gray-800 rounded-lg overflow-hidden"
-              >
-                <button
-                  onClick={() =>
-                    setExpanded(expanded === log.id ? null : log.id)
-                  }
-                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-900 transition-colors text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`inline-block w-2 h-2 rounded-full ${
-                        log.status === "success"
-                          ? "bg-green-500"
-                          : "bg-red-500"
-                      }`}
-                    />
-                    <span className="font-medium">{log.agentName}</span>
-                    <span className="text-xs text-gray-500">{log.model}</span>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm text-gray-400">
-                    <span>{(log.durationMs / 1000).toFixed(1)}s</span>
-                    {log.tokensUsed != null && (
-                      <span>{log.tokensUsed.toLocaleString()} tokens</span>
-                    )}
-                    <span>
-                      {new Date(log.startedAt).toLocaleString()}
-                    </span>
-                    <span className="text-gray-600">
-                      {expanded === log.id ? "▲" : "▼"}
-                    </span>
-                  </div>
-                </button>
-                {expanded === log.id && (
-                  <div className="px-4 py-3 border-t border-gray-800 bg-gray-900">
-                    <pre className="text-sm text-gray-300 whitespace-pre-wrap max-h-[600px] overflow-y-auto leading-relaxed">
-                      {log.output}
-                    </pre>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+      {/* Tab navigation */}
+      <div className="flex gap-1 border-b border-gray-800/60">
+        {isMaya && (
+          <button
+            onClick={() => setActiveTab("chat")}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "chat"
+                ? "border-[#e4002b] text-white"
+                : "border-transparent text-gray-500 hover:text-gray-300"
+            }`}
+          >
+            Talk to Maya
+          </button>
         )}
+        <button
+          onClick={() => setActiveTab("history")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "history"
+              ? "border-[#e4002b] text-white"
+              : "border-transparent text-gray-500 hover:text-gray-300"
+          }`}
+        >
+          Report History
+        </button>
+        <button
+          onClick={() => setActiveTab("files")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "files"
+              ? "border-[#e4002b] text-white"
+              : "border-transparent text-gray-500 hover:text-gray-300"
+          }`}
+        >
+          Files
+        </button>
       </div>
+
+      {/* Tab content */}
+      {activeTab === "chat" && isMaya && (
+        <div>
+          <MayaChat />
+        </div>
+      )}
+
+      {activeTab === "files" && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">
+            Downloadable Reports
+          </h3>
+          <ReportFiles agentId={agentId} />
+        </div>
+      )}
+
+      {activeTab === "history" && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">
+            Report History
+          </h3>
+
+          {loading ? (
+            <p className="text-gray-500">Loading...</p>
+          ) : logs.length === 0 ? (
+            <div className="text-center py-16 text-gray-600">
+              <p className="text-lg mb-2">No reports yet</p>
+              <p className="text-sm">
+                {persona
+                  ? `${persona.name} hasn't delivered any reports yet.`
+                  : "This agent hasn't produced any reports yet."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {logs.map((log) => (
+                <div
+                  key={log.id}
+                  className="border border-gray-800/60 rounded-lg overflow-hidden"
+                >
+                  <button
+                    onClick={() =>
+                      setExpanded(expanded === log.id ? null : log.id)
+                    }
+                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#111] transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`inline-block w-2 h-2 rounded-full ${
+                          log.status === "success"
+                            ? "bg-green-500"
+                            : "bg-red-500"
+                        }`}
+                      />
+                      <span className="font-medium">{log.agentName}</span>
+                      <span className="text-xs text-gray-600">{log.model}</span>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-gray-500">
+                      <span>{(log.durationMs / 1000).toFixed(1)}s</span>
+                      {log.tokensUsed != null && (
+                        <span>
+                          {log.tokensUsed.toLocaleString()} tokens
+                        </span>
+                      )}
+                      <span>
+                        {new Date(log.startedAt).toLocaleString()}
+                      </span>
+                      <span className="text-gray-700">
+                        {expanded === log.id ? "▲" : "▼"}
+                      </span>
+                    </div>
+                  </button>
+                  {expanded === log.id && (
+                    <div className="px-4 py-3 border-t border-gray-800/60 bg-[#0d0d0d]">
+                      <pre className="text-sm text-gray-300 whitespace-pre-wrap max-h-[600px] overflow-y-auto leading-relaxed">
+                        {log.output}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -79,11 +79,7 @@ export default function DashboardPage() {
     }
   };
 
-  function getPersona(agentId: string): AgentPersona | undefined {
-    return personas.find((p) => p.agentId === agentId);
-  }
-
-  // Merge: show all personas even if no runs yet, overlay run data when available
+  // Merge: show all personas even if no runs yet
   const mergedCards = personas.map((person) => {
     const agentData = agents.find((a) => a.agentId === person.agentId);
     return { person, agentData };
@@ -96,16 +92,18 @@ export default function DashboardPage() {
         <div className="flex items-center gap-4">
           <Link
             href="/"
-            className="text-gray-400 hover:text-gray-200 transition-colors"
+            className="text-gray-500 hover:text-[#e4002b] transition-colors"
           >
             &larr; HQ
           </Link>
-          <h2 className="text-2xl font-semibold">Operations Dashboard</h2>
+          <h2 className="text-2xl font-bold tracking-tight">
+            Operations <span className="text-[#e4002b]">Dashboard</span>
+          </h2>
         </div>
         <button
           onClick={triggerAll}
           disabled={running}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+          className="px-4 py-2 bg-[#e4002b] hover:bg-[#b8001f] disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
         >
           {running ? "Running..." : "Run All Agents"}
         </button>
@@ -114,14 +112,17 @@ export default function DashboardPage() {
       {loading ? (
         <p className="text-gray-500">Loading...</p>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {mergedCards.map(({ person, agentData }) => (
             <Link
               key={person.agentId}
               href={`/dashboard/${person.agentId}`}
-              className="group block rounded-xl border border-gray-800 hover:border-gray-600 hover:bg-gray-900/30 transition-all overflow-hidden"
+              className="group block rounded-xl border border-gray-800/60 hover:border-[#e4002b]/30 bg-[#111]/40 hover:bg-[#111]/70 transition-all overflow-hidden relative"
             >
-              <div className="p-6">
+              {/* Subtle red left border accent */}
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#e4002b]/0 group-hover:bg-[#e4002b]/60 transition-colors" />
+
+              <div className="p-6 pl-7">
                 <div className="flex items-start gap-5">
                   {/* Avatar */}
                   <div
@@ -133,7 +134,7 @@ export default function DashboardPage() {
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1">
-                      <h3 className="text-lg font-semibold text-white group-hover:text-blue-400 transition-colors">
+                      <h3 className="text-lg font-semibold text-white group-hover:text-[#e4002b] transition-colors">
                         {person.name}
                       </h3>
                       <span
@@ -146,7 +147,7 @@ export default function DashboardPage() {
                         <span
                           className={`w-2 h-2 rounded-full ${
                             person.status === "active"
-                              ? "bg-green-500 animate-pulse"
+                              ? "bg-green-500 tilt-pulse"
                               : "bg-gray-600"
                           }`}
                         />
@@ -162,7 +163,9 @@ export default function DashboardPage() {
 
                     {/* Run Stats */}
                     <div className="mt-4 flex items-center gap-6 text-xs text-gray-500">
-                      <span>Schedule: {person.schedule}</span>
+                      <span className="text-gray-600">
+                        {person.schedule}
+                      </span>
                       {agentData ? (
                         <>
                           <span className="flex items-center gap-1.5">
@@ -173,17 +176,15 @@ export default function DashboardPage() {
                                   : "bg-red-500"
                               }`}
                             />
-                            Last run:{" "}
-                            {new Date(agentData.lastRun).toLocaleString()}
+                            Last: {new Date(agentData.lastRun).toLocaleString()}
                           </span>
                           <span>
                             {agentData.totalRuns} report
-                            {agentData.totalRuns !== 1 ? "s" : ""} delivered
+                            {agentData.totalRuns !== 1 ? "s" : ""}
                           </span>
-                          <span>{agentData.model}</span>
                         </>
                       ) : (
-                        <span className="text-gray-600 italic">
+                        <span className="text-gray-700 italic">
                           No reports yet
                         </span>
                       )}
@@ -191,7 +192,7 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Arrow */}
-                  <div className="text-gray-600 group-hover:text-blue-400 transition-colors text-lg shrink-0 pt-2">
+                  <div className="text-gray-700 group-hover:text-[#e4002b] transition-colors text-lg shrink-0 pt-2">
                     &rarr;
                   </div>
                 </div>

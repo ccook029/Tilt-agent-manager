@@ -5,8 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Tilt Corporate Headquarters",
-  description:
-    "AI-powered corporate headquarters for Tilt Sports Inc.",
+  description: "AI-powered corporate headquarters for Tilt Sports Inc.",
 };
 
 export default function RootLayout({
@@ -16,10 +15,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-gray-950 text-gray-100 min-h-screen">
-        <header className="border-b border-gray-800 px-6 py-4">
+      <body className="bg-[#0a0a0a] text-gray-100 min-h-screen carbon-texture">
+        <header className="border-b border-gray-800/60 px-6 py-4 bg-[#0a0a0a]/90 backdrop-blur-sm sticky top-0 z-50">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-3">
+            <Link href="/" className="flex items-center gap-3 group">
               <Image
                 src="/images/tilt-logo.png"
                 alt="Tilt"
@@ -28,14 +27,25 @@ export default function RootLayout({
                 className="invert brightness-200"
                 priority
               />
-              <span className="text-sm text-gray-400 border-l border-gray-700 pl-3">
-                Corporate Headquarters
+              <span className="text-sm text-gray-500 border-l border-gray-700 pl-3 group-hover:text-[#e4002b] transition-colors">
+                Corporate HQ
               </span>
             </Link>
-            <span className="text-xs text-gray-500">Tilt Sports Inc.</span>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/dashboard"
+                className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Operations
+              </Link>
+              <span className="text-xs text-gray-700">|</span>
+              <span className="text-xs text-gray-600">Tilt Sports Inc.</span>
+            </div>
           </div>
         </header>
-        <main className="max-w-6xl mx-auto px-6 py-8">{children}</main>
+        <main className="max-w-6xl mx-auto px-6 py-8 relative">
+          {children}
+        </main>
       </body>
     </html>
   );
