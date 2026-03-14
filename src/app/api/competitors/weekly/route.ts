@@ -9,6 +9,7 @@ import { runCompetitorScan } from "@/lib/competitors";
 import { callClaude, substituteVariables } from "@/lib/anthropic";
 import { sendAnalyticsReport, sendErrorNotification } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
+import { generateReportPDF } from "@/lib/pdf";
 import agentConfig from "@/agents/competitor-intel-agent.config";
 
 export const maxDuration = 300;
@@ -48,12 +49,25 @@ async function runCompetitorReport(context?: string) {
     variables
   );
 
-  // Send the report
+  // Generate branded PDF
+  const pdfBuffer = await generateReportPDF({
+    title: "Competitor Intelligence Report",
+    subtitle: "Weekly Scan",
+    reportDate: scanDate.slice(0, 10),
+    agentName: agentConfig.name,
+    reportText: response.text,
+  });
+
+  const pdfFilename = `tilt-competitor-intel-${scanDate.slice(0, 10)}.pdf`;
+
+  // Send the report with PDF attachment
   await sendAnalyticsReport({
     to: emailTo,
     from: emailFrom,
     subject: emailSubject,
     reportText: response.text,
+    pdfBuffer,
+    pdfFilename,
   });
 
   const finishedAt = new Date();

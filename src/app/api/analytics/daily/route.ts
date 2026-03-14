@@ -14,6 +14,7 @@ import {
   sendErrorNotification,
 } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
+import { generateReportPDF } from "@/lib/pdf";
 import agentConfig from "@/agents/website-analytics-agent.config";
 
 export const maxDuration = 300;
@@ -63,12 +64,25 @@ async function runDailyReport(context?: string) {
     variables
   );
 
-  // Send the report
+  // Generate branded PDF
+  const pdfBuffer = await generateReportPDF({
+    title: "Website Analytics Report",
+    subtitle: `${label} Report`,
+    reportDate: current.endDate,
+    agentName: agentConfig.name,
+    reportText: response.text,
+  });
+
+  const pdfFilename = `tilt-analytics-${current.endDate}.pdf`;
+
+  // Send the report with PDF attachment
   await sendAnalyticsReport({
     to: emailTo,
     from: emailFrom,
     subject: emailSubject,
     reportText: response.text,
+    pdfBuffer,
+    pdfFilename,
   });
 
   const finishedAt = new Date();

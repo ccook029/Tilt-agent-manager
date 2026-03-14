@@ -70,6 +70,8 @@ export interface AnalyticsEmailOptions {
   from: string;
   subject: string;
   reportText: string;
+  pdfBuffer?: Buffer;
+  pdfFilename?: string;
 }
 
 /**
@@ -101,13 +103,24 @@ export async function sendAnalyticsReport(
 </body>
 </html>`;
 
-  await resend.emails.send({
+  const emailPayload: Parameters<typeof resend.emails.send>[0] = {
     from: opts.from,
     to: opts.to,
     subject,
     text: opts.reportText,
     html,
-  });
+  };
+
+  if (opts.pdfBuffer && opts.pdfFilename) {
+    emailPayload.attachments = [
+      {
+        filename: opts.pdfFilename,
+        content: opts.pdfBuffer,
+      },
+    ];
+  }
+
+  await resend.emails.send(emailPayload);
 }
 
 /**
