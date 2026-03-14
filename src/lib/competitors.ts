@@ -107,60 +107,6 @@ async function braveSearch(
   }
 }
 
-/**
- * Search Brave News for a specific query.
- */
-async function braveNewsSearch(
-  query: string,
-  count: number = 5
-): Promise<SearchResult[]> {
-  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
-  if (!apiKey) return [];
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-
-    const params = new URLSearchParams({
-      q: query,
-      count: count.toString(),
-      freshness: "pw",
-    });
-
-    const res = await fetch(
-      `https://api.search.brave.com/res/v1/news/search?${params}`,
-      {
-        signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-          "Accept-Encoding": "gzip",
-          "X-Subscription-Token": apiKey,
-        },
-      }
-    );
-
-    clearTimeout(timeout);
-
-    if (!res.ok) return [];
-
-    const data = await res.json();
-    const results: SearchResult[] = (data.results ?? []).map(
-      (r: { title: string; description: string; url: string; age?: string }) => ({
-        competitor: "",
-        category: "news",
-        title: r.title,
-        snippet: r.description,
-        url: r.url,
-        source: "brave-news",
-        publishedDate: r.age,
-      })
-    );
-
-    return results;
-  } catch {
-    return [];
-  }
-}
 
 // ---- Google News RSS -----------------------------------------------------
 
@@ -304,14 +250,9 @@ async function gatherCompetitorIntel(
     googleNewsRSS(`${competitor.name} hockey patent`),
   ];
 
-  const braveNewsPromises = [
-    braveNewsSearch(`${competitor.name} hockey equipment ${new Date().getFullYear()}`),
-  ];
-
-  const [braveResults, newsResults, braveNews] = await Promise.all([
+  const [braveResults, newsResults] = await Promise.all([
     Promise.all(bravePromises),
     Promise.all(newsPromises),
-    Promise.all(braveNewsPromises),
   ]);
 
   // Flatten Brave web results
@@ -331,13 +272,6 @@ async function gatherCompetitorIntel(
         source: "google-news",
         publishedDate: item.pubDate,
       });
-    }
-  }
-
-  // Add Brave News results
-  for (const batch of braveNews) {
-    for (const result of batch) {
-      allResults.push({ ...result, competitor: competitor.name });
     }
   }
 
