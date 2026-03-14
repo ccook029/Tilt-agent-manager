@@ -285,88 +285,36 @@ function buildQueries(comp: CompetitorProfile): { query: string; category: strin
 }
 
 /**
- * Gather intel for a single competitor using Serper.dev + Google News RSS.
+ * Gather intel for a single competitor.
+ *
+ * Always uses Google News RSS (free, no key).
+ * If SERPER_API_KEY is set, also runs Serper.dev for deeper intel
+ * (Google Web Search, Shopping prices, News).
  */
 async function gatherCompetitorIntel(
   competitor: CompetitorProfile
 ): Promise<CompetitorScanResult> {
-  const queries = buildQueries(competitor);
   const allResults: SearchResult[] = [];
+  const hasSerper = !!process.env.SERPER_API_KEY;
 
-  // Split queries by type
-  const webQueries = queries.filter((q) => q.type === "web");
-  const shoppingQueries = queries.filter((q) => q.type === "shopping");
-  const newsQueries = queries.filter((q) => q.type === "news");
+  // --- Google News RSS (always runs — free) ---
+  const rssQueries = [
+    `${competitor.name} hockey`,
+    `${competitor.name} hockey new product OR launch`,
+    `${competitor.name} hockey sponsorship OR sponsor`,
+    `${competitor.name} hockey patent`,
+    `${competitor.name} hockey price OR pricing`,
+  ];
 
-  // Run all searches concurrently
-  const [webResults, shoppingResults, serperNews, rssResults] = await Promise.all([
-    // Serper web search
-    Promise.all(
-      webQueries.map(async ({ query, category }) => {
-        const results = await serperWebSearch(query, 5);
-        return results.map((r) => ({
-          competitor: competitor.name,
-          category,
-          title: r.title,
-          snippet: r.snippet,
-          url: r.link,
-          source: "serper",
-          publishedDate: r.date,
-        }));
-      })
-    ),
-    // Serper shopping search
-    Promise.all(
-      shoppingQueries.map(async ({ query, category }) => {
-        const results = await serperShoppingSearch(query, 10);
-        return results.map((r) => ({
-          competitor: competitor.name,
-          category,
-          title: r.title,
-          snippet: `${r.price} — ${r.source}`,
-          url: r.link,
-          source: "serper-shopping",
-          price: r.price,
-        }));
-      })
-    ),
-    // Serper news search
-    Promise.all(
-      newsQueries.map(async ({ query, category }) => {
-        const results = await serperNewsSearch(query, 5);
-        return results.map((r) => ({
-          competitor: competitor.name,
-          category,
-          title: r.title,
-          snippet: r.snippet,
-          url: r.link,
-          source: "serper-news",
-          publishedDate: r.date,
-        }));
-      })
-    ),
-    // Google News RSS (free backup)
-    Promise.all([
-      googleNewsRSS(`${competitor.name} hockey`),
-      googleNewsRSS(`${competitor.name} hockey sponsorship OR patent`),
-    ]),
-  ]);
+  const rssResults = await Promise.all(
+    rssQueries.map((q) => googleNewsRSS(q))
+  );
 
-  // Flatten Serper web results
-  for (const batch of webResults) allResults.push(...batch);
-
-  // Flatten Serper shopping results
-  for (const batch of shoppingResults) allResults.push(...batch);
-
-  // Flatten Serper news results
-  for (const batch of serperNews) allResults.push(...batch);
-
-  // Convert Google News RSS to SearchResults
   for (const items of rssResults) {
     for (const item of items) {
       allResults.push({
         competitor: competitor.name,
-        category: "news",
+        category: categorizeNewsItem(item.title + " " + item.description),
         title: item.title,
         snippet: item.description,
         url: item.link,
@@ -374,6 +322,63 @@ async function gatherCompetitorIntel(
         publishedDate: item.pubDate,
       });
     }
+  }
+
+  // --- Serper.dev (optional — only if API key is set) ---
+  if (hasSerper) {
+    const queries = buildQueries(competitor);
+    const webQueries = queries.filter((q) => q.type === "web");
+    const shoppingQueries = queries.filter((q) => q.type === "shopping");
+    const newsQueries = queries.filter((q) => q.type === "news");
+
+    const [webResults, shoppingResults, serperNews] = await Promise.all([
+      Promise.all(
+        webQueries.map(async ({ query, category }) => {
+          const results = await serperWebSearch(query, 5);
+          return results.map((r) => ({
+            competitor: competitor.name,
+            category,
+            title: r.title,
+            snippet: r.snippet,
+            url: r.link,
+            source: "serper",
+            publishedDate: r.date,
+          }));
+        })
+      ),
+      Promise.all(
+        shoppingQueries.map(async ({ query, category }) => {
+          const results = await serperShoppingSearch(query, 10);
+          return results.map((r) => ({
+            competitor: competitor.name,
+            category,
+            title: r.title,
+            snippet: `${r.price} — ${r.source}`,
+            url: r.link,
+            source: "serper-shopping",
+            price: r.price,
+          }));
+        })
+      ),
+      Promise.all(
+        newsQueries.map(async ({ query, category }) => {
+          const results = await serperNewsSearch(query, 5);
+          return results.map((r) => ({
+            competitor: competitor.name,
+            category,
+            title: r.title,
+            snippet: r.snippet,
+            url: r.link,
+            source: "serper-news",
+            publishedDate: r.date,
+          }));
+        })
+      ),
+    ]);
+
+    for (const batch of webResults) allResults.push(...batch);
+    for (const batch of shoppingResults) allResults.push(...batch);
+    for (const batch of serperNews) allResults.push(...batch);
   }
 
   // Deduplicate by URL
@@ -388,6 +393,18 @@ async function gatherCompetitorIntel(
     competitor: competitor.name,
     results: deduped,
   };
+}
+
+/**
+ * Auto-categorize a news item based on keywords in its title/description.
+ */
+function categorizeNewsItem(text: string): string {
+  const lower = text.toLowerCase();
+  if (/patent|intellectual property|filing|USPTO/i.test(lower)) return "patent";
+  if (/sponsor|partnership|deal|sign|endorse|league/i.test(lower)) return "sponsorship";
+  if (/price|pricing|\$|msrp|sale|discount/i.test(lower)) return "pricing";
+  if (/launch|new|release|announce|unveil|introduce/i.test(lower)) return "products";
+  return "news";
 }
 
 /**
