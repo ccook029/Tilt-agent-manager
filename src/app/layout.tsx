@@ -4,8 +4,9 @@ import Image from "next/image";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tilt Agent Orchestrator",
-  description: "AI agent management dashboard for Tilt Sports Inc.",
+  title: "Tilt Corporate Headquarters",
+  description:
+    "AI-powered corporate headquarters for Tilt Sports Inc.",
 };
 
 export default function RootLayout({
@@ -28,7 +29,7 @@ export default function RootLayout({
                 priority
               />
               <span className="text-sm text-gray-400 border-l border-gray-700 pl-3">
-                Agent Orchestrator
+                Corporate Headquarters
               </span>
             </Link>
             <span className="text-xs text-gray-500">Tilt Sports Inc.</span>
