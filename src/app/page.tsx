@@ -1,11 +1,6 @@
 import Link from "next/link";
+import Image from "next/image";
 import { getAllPersonas, getLeadership } from "@/lib/personas";
-import {
-  IceRinkPattern,
-  StickSilhouette,
-  HockeyStickIcon,
-  CrossedSticksIcon,
-} from "@/components/hockey-icons";
 
 export default function Home() {
   const team = getAllPersonas();
@@ -13,15 +8,37 @@ export default function Home() {
 
   return (
     <div className="space-y-12 relative">
-      {/* Background decorations */}
-      <IceRinkPattern />
-      <StickSilhouette className="right-0 top-0 rotate-12 text-white" />
-      <StickSilhouette className="left-0 top-[400px] -rotate-12 text-white" />
+      {/* Background: stick product photo */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <Image
+          src="/images/tilt-sticks.png"
+          alt=""
+          fill
+          className="object-cover opacity-[0.06]"
+          priority
+        />
+      </div>
+
+      {/* T-Shield watermark */}
+      <div className="fixed bottom-8 right-8 pointer-events-none z-0 opacity-[0.04]">
+        <Image
+          src="/images/tilt-shield.png"
+          alt=""
+          width={300}
+          height={360}
+        />
+      </div>
 
       {/* Hero */}
       <div className="text-center py-12 relative">
-        <div className="flex items-center justify-center gap-3 mb-4">
-          <CrossedSticksIcon className="w-10 h-10 text-[#e4002b]/60" />
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <Image
+            src="/images/tilt-shield.png"
+            alt="Tilt"
+            width={64}
+            height={76}
+            className="invert brightness-200 opacity-60"
+          />
         </div>
         <h1 className="text-4xl font-bold tracking-tight mb-3">
           Corporate <span className="text-[#e4002b]">Headquarters</span>
@@ -36,7 +53,7 @@ export default function Home() {
       {/* Leadership — Co-Founders */}
       <div>
         <div className="flex items-center gap-2 mb-5">
-          <CrossedSticksIcon className="w-5 h-5 text-[#e4002b]" />
+          <Image src="/images/tilt-shield.png" alt="" width={20} height={24} className="invert brightness-200 opacity-70" />
           <h2 className="font-semibold text-gray-300 uppercase tracking-wider text-sm">
             Leadership
           </h2>
@@ -74,7 +91,7 @@ export default function Home() {
       {/* Team Grid */}
       <div>
         <div className="flex items-center gap-2 mb-5">
-          <HockeyStickIcon className="w-5 h-5 text-[#e4002b]" />
+          <Image src="/images/tilt-shield.png" alt="" width={20} height={24} className="invert brightness-200 opacity-70" />
           <h2 className="font-semibold text-gray-300 uppercase tracking-wider text-sm">
             The Team
           </h2>

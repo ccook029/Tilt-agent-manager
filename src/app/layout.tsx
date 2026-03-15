@@ -16,30 +16,30 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-[#0a0a0a] text-gray-100 min-h-screen carbon-texture">
-        <header className="border-b border-gray-800/60 px-6 py-5 bg-[#0a0a0a]/90 backdrop-blur-sm sticky top-0 z-50">
+        <header className="border-b border-gray-800/60 px-6 py-6 bg-[#0a0a0a]/90 backdrop-blur-sm sticky top-0 z-50">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-4 group">
+            <Link href="/" className="flex items-center gap-5 group">
               <Image
                 src="/images/tilt-logo.png"
                 alt="Tilt"
-                width={160}
-                height={48}
+                width={320}
+                height={96}
                 className="invert brightness-200"
                 priority
               />
-              <span className="text-sm text-gray-500 border-l border-gray-700 pl-4 group-hover:text-[#e4002b] transition-colors">
+              <span className="text-base text-gray-500 border-l border-gray-700 pl-5 group-hover:text-[#e4002b] transition-colors">
                 Corporate HQ
               </span>
             </Link>
             <div className="flex items-center gap-4">
               <Link
                 href="/dashboard"
-                className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
               >
                 Operations
               </Link>
               <span className="text-xs text-gray-700">|</span>
-              <span className="text-xs text-gray-600">Tilt Sports Inc.</span>
+              <span className="text-sm text-gray-600">Tilt Sports Inc.</span>
             </div>
           </div>
         </header>
