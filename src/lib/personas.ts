@@ -102,7 +102,7 @@ const personas: AgentPersona[] = [
     avatarInitials: "RP",
     avatarColor: "bg-purple-600",
     avatarAccent: "ring-purple-400",
-    runEndpoint: "/api/materials-rd/run",
+    runEndpoint: "/api/materials-rd/research",
     taskTypes: ["material-spec", "patent-brief", "literature-review", "competitor-ip-scan", "factory-rnd-memo"],
   },
   {
