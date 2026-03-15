@@ -78,15 +78,10 @@ async function scrapeInstagram(
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - daysBack);
 
-  // Run one actor call per handle (the actor expects a single username)
-  const allItems: Record<string, unknown>[] = [];
-  for (const handle of handles) {
-    const items = await runActor(INSTAGRAM_ACTOR, {
-      username: handle,
-      resultsLimit: 50,
-    });
-    allItems.push(...items);
-  }
+  const allItems = await runActor(INSTAGRAM_ACTOR, {
+    username: handles,
+    resultsLimit: 50,
+  });
 
   // Filter to posts within the date window
   const sinceTs = sinceDate.getTime();
