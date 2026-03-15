@@ -1,7 +1,9 @@
 // ---------------------------------------------------------------------------
 // Apify Social Media Scraping — Instagram & TikTok
 //
-// Uses the Apify API to scrape competitor social media accounts.
+// Uses the Apify REST API directly (no npm client) to avoid Vercel bundling
+// issues. Scrapes competitor social media via Apify actors.
+//
 // Actors:
 //   - Instagram: apify/instagram-post-scraper
 //   - TikTok:    clockworks/tiktok-scraper
@@ -9,19 +11,50 @@
 // Env: APIFY_API_KEY
 // ---------------------------------------------------------------------------
 
-import { ApifyClient } from "apify-client";
 import type { CompetitorSocialHandle } from "@/agents/competitor-social-agent.config";
 
-// Apify actor IDs
-const INSTAGRAM_ACTOR = "apify/instagram-post-scraper";
-const TIKTOK_ACTOR = "clockworks/tiktok-scraper";
+const APIFY_BASE = "https://api.apify.com/v2";
 
-function getClient(): ApifyClient {
+// Apify actor IDs
+const INSTAGRAM_ACTOR = "apify~instagram-post-scraper";
+const TIKTOK_ACTOR = "clockworks~tiktok-scraper";
+
+function getToken(): string {
   const token = process.env.APIFY_API_KEY;
   if (!token) {
     throw new Error("APIFY_API_KEY environment variable is not set");
   }
-  return new ApifyClient({ token });
+  return token;
+}
+
+// ---------------------------------------------------------------------------
+// Generic Apify actor runner — start, wait, fetch results
+// ---------------------------------------------------------------------------
+
+async function runActor(
+  actorId: string,
+  input: Record<string, unknown>
+): Promise<Record<string, unknown>[]> {
+  const token = getToken();
+
+  // Start the actor run and wait for it to finish (synchronous run)
+  const runRes = await fetch(
+    `${APIFY_BASE}/acts/${actorId}/run-sync-get-dataset-items?token=${token}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+
+  if (!runRes.ok) {
+    const errText = await runRes.text();
+    throw new Error(
+      `Apify actor ${actorId} failed (${runRes.status}): ${errText.slice(0, 500)}`
+    );
+  }
+
+  return (await runRes.json()) as Record<string, unknown>[];
 }
 
 // ---------------------------------------------------------------------------
@@ -42,26 +75,28 @@ async function scrapeInstagram(
   handles: string[],
   daysBack: number = 7
 ): Promise<InstagramPost[]> {
-  const client = getClient();
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - daysBack);
 
-  const run = await client.actor(INSTAGRAM_ACTOR).call({
+  const items = await runActor(INSTAGRAM_ACTOR, {
     directUrls: handles.map((h) => `https://www.instagram.com/${h}/`),
-    resultsLimit: 50, // per profile
+    resultsLimit: 50,
     onlyPostsNewerThan: sinceDate.toISOString().slice(0, 10),
   });
 
-  const { items } = await client.dataset(run.defaultDatasetId).listItems();
-
-  return (items as Record<string, unknown>[]).map((item) => ({
+  return items.map((item) => ({
     username: String(item.ownerUsername ?? item.username ?? ""),
     caption: String(item.caption ?? ""),
     likesCount: Number(item.likesCount ?? 0),
     commentsCount: Number(item.commentsCount ?? 0),
     type: String(item.type ?? "Unknown"),
     timestamp: String(item.timestamp ?? item.takenAt ?? ""),
-    url: String(item.url ?? item.shortCode ? `https://www.instagram.com/p/${item.shortCode}/` : ""),
+    url: String(
+      item.url ??
+        (item.shortCode
+          ? `https://www.instagram.com/p/${item.shortCode}/`
+          : "")
+    ),
   }));
 }
 
@@ -84,33 +119,38 @@ async function scrapeTikTok(
   handles: string[],
   daysBack: number = 7
 ): Promise<TikTokPost[]> {
-  const client = getClient();
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - daysBack);
   const sinceTimestamp = Math.floor(sinceDate.getTime() / 1000);
 
-  const run = await client.actor(TIKTOK_ACTOR).call({
+  const items = await runActor(TIKTOK_ACTOR, {
     profiles: handles.map((h) => h.replace(/^@/, "")),
     resultsPerPage: 30,
     shouldDownloadVideos: false,
   });
 
-  const { items } = await client.dataset(run.defaultDatasetId).listItems();
-
   // Filter to last N days
-  return (items as Record<string, unknown>[])
+  return items
     .filter((item) => {
       const ts = Number(item.createTime ?? 0);
       return ts >= sinceTimestamp;
     })
     .map((item) => ({
-      username: String(item.authorMeta && typeof item.authorMeta === "object" && "name" in item.authorMeta ? item.authorMeta.name : item.author ?? ""),
+      username: String(
+        item.authorMeta &&
+          typeof item.authorMeta === "object" &&
+          "name" in item.authorMeta
+          ? (item.authorMeta as Record<string, unknown>).name
+          : item.author ?? ""
+      ),
       text: String(item.text ?? ""),
       diggCount: Number(item.diggCount ?? 0),
       commentCount: Number(item.commentCount ?? 0),
       shareCount: Number(item.shareCount ?? 0),
       playCount: Number(item.playCount ?? 0),
-      createTime: new Date(Number(item.createTime ?? 0) * 1000).toISOString(),
+      createTime: new Date(
+        Number(item.createTime ?? 0) * 1000
+      ).toISOString(),
       webVideoUrl: String(item.webVideoUrl ?? ""),
     }));
 }
@@ -141,10 +181,6 @@ export async function scrapeCompetitorSocials(
     scrapeTikTok(ttHandles, daysBack),
   ]);
 
-  // Build a brand lookup from handle to brand name
-  const igBrandMap = new Map(competitors.map((c) => [c.instagram.toLowerCase(), c.brand]));
-  const ttBrandMap = new Map(competitors.map((c) => [c.tiktok.replace(/^@/, "").toLowerCase(), c.brand]));
-
   // Format Instagram data
   let formatted = "## INSTAGRAM DATA (Last 7 Days)\n\n";
   for (const competitor of competitors) {
@@ -162,7 +198,9 @@ export async function scrapeCompetitorSocials(
     formatted += "| Date | Type | Likes | Comments | Caption (first 120 chars) |\n";
     formatted += "|------|------|-------|----------|---------------------------|\n";
     for (const post of posts) {
-      const date = post.timestamp ? new Date(post.timestamp).toISOString().slice(0, 10) : "N/A";
+      const date = post.timestamp
+        ? new Date(post.timestamp).toISOString().slice(0, 10)
+        : "N/A";
       const caption = post.caption.replace(/\n/g, " ").slice(0, 120);
       formatted += `| ${date} | ${post.type} | ${post.likesCount.toLocaleString()} | ${post.commentsCount.toLocaleString()} | ${caption} |\n`;
     }
@@ -187,7 +225,9 @@ export async function scrapeCompetitorSocials(
     formatted += "| Date | Plays | Likes | Comments | Shares | Caption (first 120 chars) |\n";
     formatted += "|------|-------|-------|----------|--------|---------------------------|\n";
     for (const post of posts) {
-      const date = post.createTime ? new Date(post.createTime).toISOString().slice(0, 10) : "N/A";
+      const date = post.createTime
+        ? new Date(post.createTime).toISOString().slice(0, 10)
+        : "N/A";
       const caption = post.text.replace(/\n/g, " ").slice(0, 120);
       formatted += `| ${date} | ${post.playCount.toLocaleString()} | ${post.diggCount.toLocaleString()} | ${post.commentCount.toLocaleString()} | ${post.shareCount.toLocaleString()} | ${caption} |\n`;
     }
