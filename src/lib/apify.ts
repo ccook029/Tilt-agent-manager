@@ -78,26 +78,38 @@ async function scrapeInstagram(
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - daysBack);
 
-  const items = await runActor(INSTAGRAM_ACTOR, {
-    directUrls: handles.map((h) => `https://www.instagram.com/${h}/`),
-    resultsLimit: 50,
-    onlyPostsNewerThan: sinceDate.toISOString().slice(0, 10),
-  });
+  // Run one actor call per handle (the actor expects a single username)
+  const allItems: Record<string, unknown>[] = [];
+  for (const handle of handles) {
+    const items = await runActor(INSTAGRAM_ACTOR, {
+      username: handle,
+      resultsLimit: 50,
+    });
+    allItems.push(...items);
+  }
 
-  return items.map((item) => ({
-    username: String(item.ownerUsername ?? item.username ?? ""),
-    caption: String(item.caption ?? ""),
-    likesCount: Number(item.likesCount ?? 0),
-    commentsCount: Number(item.commentsCount ?? 0),
-    type: String(item.type ?? "Unknown"),
-    timestamp: String(item.timestamp ?? item.takenAt ?? ""),
-    url: String(
-      item.url ??
-        (item.shortCode
-          ? `https://www.instagram.com/p/${item.shortCode}/`
-          : "")
-    ),
-  }));
+  // Filter to posts within the date window
+  const sinceTs = sinceDate.getTime();
+  return allItems
+    .filter((item) => {
+      const ts = item.timestamp ?? item.takenAt;
+      if (!ts) return true;
+      return new Date(String(ts)).getTime() >= sinceTs;
+    })
+    .map((item) => ({
+      username: String(item.ownerUsername ?? item.username ?? ""),
+      caption: String(item.caption ?? ""),
+      likesCount: Number(item.likesCount ?? 0),
+      commentsCount: Number(item.commentsCount ?? 0),
+      type: String(item.type ?? "Unknown"),
+      timestamp: String(item.timestamp ?? item.takenAt ?? ""),
+      url: String(
+        item.url ??
+          (item.shortCode
+            ? `https://www.instagram.com/p/${item.shortCode}/`
+            : "")
+      ),
+    }));
 }
 
 // ---------------------------------------------------------------------------
