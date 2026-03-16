@@ -27,9 +27,9 @@ export type CronSchedule = string;
 export interface AgentConfig {
   id: string;
   name: string;
-  schedule: CronSchedule;
+  schedule?: CronSchedule;
   systemPrompt: string;
-  userPrompt: string | (() => string);
+  userPrompt?: string | (() => string);
   model?: string;
   maxTokens?: number;
   temperature?: number;

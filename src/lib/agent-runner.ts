@@ -26,7 +26,7 @@ export async function runAgent(config: AgentConfig): Promise<AgentRunLog> {
   const userPrompt =
     typeof config.userPrompt === "function"
       ? config.userPrompt()
-      : config.userPrompt;
+      : config.userPrompt ?? "Run your scheduled task now.";
 
   try {
     const client = getClient();

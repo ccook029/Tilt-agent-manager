@@ -12,12 +12,21 @@ import type { AgentConfig } from "./types";
  * We use explicit imports (rather than dynamic fs-based discovery) because
  * Next.js edge/serverless bundles don't support runtime fs scanning.
  */
-const registry: AgentConfig[] = [];
+import websiteAnalytics from "@/agents/website-analytics-agent.config";
+import competitorIntel from "@/agents/competitor-intel-agent.config";
+import competitorSocial from "@/agents/competitor-social-agent.config";
+import materialsRd from "@/agents/materials-rd-agent.config";
+import productDesign from "@/agents/product-design-agent.config";
+import inventory from "@/agents/inventory-agent.config";
 
-// --- Register agents here -------------------------------------------------
-// import exampleAgent from "@/agents/example-agent";
-// registry.push(exampleAgent);
-// --------------------------------------------------------------------------
+const registry: AgentConfig[] = [
+  websiteAnalytics as unknown as AgentConfig,
+  competitorIntel as unknown as AgentConfig,
+  competitorSocial as unknown as AgentConfig,
+  materialsRd as unknown as AgentConfig,
+  productDesign as unknown as AgentConfig,
+  inventory as unknown as AgentConfig,
+];
 
 export function getAllAgents(): AgentConfig[] {
   return registry.filter((a) => a.enabled !== false);
