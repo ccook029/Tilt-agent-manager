@@ -128,8 +128,8 @@ Produce the Weekly Competitor Social Intelligence Report.`,
   competitors: COMPETITOR_HANDLES,
 
   email: {
-    to: ["admin@tiltsports.com"],
-    from: "Tilt Agents <agents@tiltsports.com>",
+    to: ["chris@tilthockey.com"],
+    from: "Tilt Agents <agents@tilthockey.com>",
     subjectTemplate: "Weekly Competitor Social Intel — {{scan_date}}",
   },
 

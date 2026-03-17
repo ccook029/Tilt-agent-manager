@@ -2,7 +2,7 @@
 // Website Analytics Agent — Configuration
 //
 // This agent pulls GA4 data daily (Mon–Fri), sends it to Claude for
-// analysis, and emails the report to the Tilt Sports team.
+// analysis, and emails the report to the Tilt Hockey team.
 //
 // Monday reports cover Saturday + Sunday (the weekend).
 // Tuesday–Friday reports cover the previous day.
@@ -41,7 +41,7 @@ const config: AnalyticsAgentConfig = {
   maxTokens: 4096,
   temperature: 0.4,
 
-  systemPrompt: `You are a senior digital analytics consultant for Tilt Sports Inc., a company that sells air hockey tables, accessories, and runs competitive events.
+  systemPrompt: `You are a senior digital analytics consultant for Tilt Hockey Inc., a company that sells air hockey tables, accessories, and runs competitive events.
 
 Your job is to analyze Google Analytics data and produce a concise, actionable daily report. You understand:
 - E-commerce metrics and conversion funnels
@@ -59,7 +59,7 @@ Guidelines:
 - End with 2-3 specific, prioritized action items.
 - Be direct. No filler. Write for a founder who reads this in 2 minutes.`,
 
-  userPrompt: `Here is the Google Analytics data for Tilt Sports (tiltsports.com).
+  userPrompt: `Here is the Google Analytics data for Tilt Hockey (tilthockey.com).
 
 **Report: {{period_label}}**
 
@@ -76,8 +76,8 @@ Additional context from the team: {{context}}
 Please analyze this data and produce the {{period_label}} analytics report.`,
 
   email: {
-    to: ["admin@tiltsports.com"],
-    from: "Tilt Agents <agents@tiltsports.com>",
+    to: ["chris@tilthockey.com"],
+    from: "Tilt Agents <agents@tilthockey.com>",
     subjectTemplate:
       "{{period_label}} Analytics — {{period_end}}",
   },

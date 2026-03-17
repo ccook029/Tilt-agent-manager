@@ -14,7 +14,7 @@ const agent: AgentConfig = {
   name: "Your Agent Name",
   schedule: "0 8 * * *", // daily at 8 AM UTC
 
-  systemPrompt: `You are a specialist agent for Tilt Sports Inc.
+  systemPrompt: `You are a specialist agent for Tilt Hockey Inc.
 Your role is: [describe role here].
 Be concise and actionable in your output.`,
 

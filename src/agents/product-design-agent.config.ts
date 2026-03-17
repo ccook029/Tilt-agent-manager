@@ -181,8 +181,8 @@ Include:
   },
 
   email: {
-    to: ["admin@tiltsports.com"],
-    from: "Tilt Agents <agents@tiltsports.com>",
+    to: ["chris@tilthockey.com"],
+    from: "Tilt Agents <agents@tilthockey.com>",
     subjectTemplate: "{{task_label}} — {{product_name}}",
   },
 

@@ -525,7 +525,7 @@ function ReportPDF({ title, subtitle, reportDate, agentName, reportText }: Repor
             Tilt Hockey — Corporate Headquarters
           </Text>
           <Text style={styles.footerText}>
-            Generated {new Date().toISOString().slice(0, 10)} | tiltsports.com
+            Generated {new Date().toISOString().slice(0, 10)} | tilthockey.com
           </Text>
           <Text
             style={styles.footerText}

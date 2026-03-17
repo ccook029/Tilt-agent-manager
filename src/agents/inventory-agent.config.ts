@@ -195,8 +195,8 @@ Flag any discrepancy over 5 units for immediate escalation to Jeremy.`,
   },
 
   email: {
-    to: ["admin@tiltsports.com"],
-    from: "Tilt Agents <agents@tiltsports.com>",
+    to: ["chris@tilthockey.com"],
+    from: "Tilt Agents <agents@tilthockey.com>",
     subjectTemplate: "Inventory — {{task_label}}",
   },
 

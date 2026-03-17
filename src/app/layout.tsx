@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Tilt Corporate Headquarters",
-  description: "AI-powered corporate headquarters for Tilt Sports Inc.",
+  description: "AI-powered corporate headquarters for Tilt Hockey Inc.",
 };
 
 export default function RootLayout({
@@ -39,7 +39,7 @@ export default function RootLayout({
                 Operations
               </Link>
               <span className="text-xs text-gray-700">|</span>
-              <span className="text-sm text-gray-600">Tilt Sports Inc.</span>
+              <span className="text-sm text-gray-600">Tilt Hockey Inc.</span>
             </div>
           </div>
         </header>

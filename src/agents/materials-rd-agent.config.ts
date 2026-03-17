@@ -200,8 +200,8 @@ Include:
   },
 
   email: {
-    to: ["admin@tiltsports.com"],
-    from: "Tilt Agents <agents@tiltsports.com>",
+    to: ["chris@tilthockey.com"],
+    from: "Tilt Agents <agents@tilthockey.com>",
     subjectTemplate: "Materials R&D — {{task_label}}",
   },
 

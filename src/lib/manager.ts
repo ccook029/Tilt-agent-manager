@@ -6,7 +6,7 @@ import type { AgentRunLog, ManagerSummary } from "./types";
 
 const MANAGER_MODEL = "claude-sonnet-4-20250514";
 
-const MANAGER_SYSTEM_PROMPT = `You are the Manager Agent for Tilt Sports Inc.
+const MANAGER_SYSTEM_PROMPT = `You are the Manager Agent for Tilt Hockey Inc.
 You receive the outputs of multiple specialist AI agents that ran today.
 Your job is to:
 1. Summarise the key findings and action items from each agent.

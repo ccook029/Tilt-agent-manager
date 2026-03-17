@@ -14,8 +14,8 @@ function getResendClient(): Resend {
  * Send the manager summary as an email digest.
  */
 export async function sendDigestEmail(summary: ManagerSummary): Promise<void> {
-  const from = process.env.EMAIL_FROM ?? "agents@tiltsports.com";
-  const to = process.env.EMAIL_TO ?? "admin@tiltsports.com";
+  const from = process.env.EMAIL_FROM ?? "agents@tilthockey.com";
+  const to = process.env.EMAIL_TO ?? "chris@tilthockey.com";
 
   const agentList = summary.agentResults
     .map((r) => `  - ${r.agentName}: ${r.status}`)
@@ -48,8 +48,8 @@ export async function sendAgentEmail(
   output: string,
   subject?: string
 ): Promise<void> {
-  const from = process.env.EMAIL_FROM ?? "agents@tiltsports.com";
-  const to = process.env.EMAIL_TO ?? "admin@tiltsports.com";
+  const from = process.env.EMAIL_FROM ?? "agents@tilthockey.com";
+  const to = process.env.EMAIL_TO ?? "chris@tilthockey.com";
 
   const resend = getResendClient();
 

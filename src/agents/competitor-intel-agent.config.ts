@@ -59,7 +59,7 @@ CONTEXT ABOUT TILT HOCKEY:
 - Tilt Hockey manufactures hockey equipment with a focus on innovative materials (UHMWPE)
 - Positioned as a premium challenger brand
 - Key markets: Ontario hockey leagues (OJHL, PJHL, OHL) and growing NHL presence
-- Website: tiltsports.com
+- Website: tilthockey.com
 
 Be direct and actionable. Write for a founder who reads this in 5 minutes.`,
 
@@ -74,8 +74,8 @@ Additional context from the team: {{context}}
 Based on this data, produce the weekly competitor intelligence report. Focus on what changed since last week and what Tilt Hockey should do about it. Do NOT mention scraping, data collection methods, or technical failures — just analyze the intel provided.`,
 
   email: {
-    to: ["admin@tiltsports.com"],
-    from: "Tilt Agents <agents@tiltsports.com>",
+    to: ["chris@tilthockey.com"],
+    from: "Tilt Agents <agents@tilthockey.com>",
     subjectTemplate: "Competitor Intel Report — {{scan_date}}",
   },
 
