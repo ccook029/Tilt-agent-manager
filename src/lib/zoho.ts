@@ -211,14 +211,26 @@ export async function fetchAllItems(): Promise<ZohoItem[]> {
 
 /** Fetch recent purchase orders (last 90 days, open/partially received). */
 export async function fetchOpenPurchaseOrders(): Promise<ZohoPurchaseOrder[]> {
-  const res = await zohoGet<ZohoPurchaseOrdersResponse>("/purchaseorders", {
-    status: "open,partially_received",
-    per_page: "100",
-    sort_column: "expected_delivery_date",
-    sort_order: "A",
-  });
+  // Fetch open and partially received POs separately (Zoho doesn't accept comma-separated status)
+  const [openRes, partialRes] = await Promise.all([
+    zohoGet<ZohoPurchaseOrdersResponse>("/purchaseorders", {
+      status: "open",
+      per_page: "100",
+      sort_column: "date",
+      sort_order: "D",
+    }),
+    zohoGet<ZohoPurchaseOrdersResponse>("/purchaseorders", {
+      status: "partially_received",
+      per_page: "100",
+      sort_column: "date",
+      sort_order: "D",
+    }),
+  ]);
 
-  return res.purchaseorders ?? [];
+  return [
+    ...(openRes.purchaseorders ?? []),
+    ...(partialRes.purchaseorders ?? []),
+  ];
 }
 
 /** Fetch sales orders from the last N days for velocity calculations. */
