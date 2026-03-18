@@ -1,13 +1,60 @@
 // ---------------------------------------------------------------------------
-// GET /api/cron/run-agents — Vercel Cron endpoint
+// GET /api/cron/run-agents — Single Vercel Cron endpoint
 //
-// Vercel calls this on the schedule defined in vercel.json.
-// Secured via CRON_SECRET (Vercel injects the Authorization header).
+// Runs daily at 12:00 UTC (8 AM ET). Dispatches the right agent pipelines
+// based on the current day of the week:
+//
+//   Mon–Fri:  Website Analytics (daily report)
+//   Monday:   Competitor Social, Inventory Weekly, Product Design Innovation
+//   Wednesday: Competitor Intel
+//   Friday:   Materials R&D Research
+//
+// This single-cron approach works on any Vercel plan (Hobby or Pro).
+// Individual routes still work for manual triggers via POST.
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
-import { runAllAgents } from "@/lib/orchestrator";
+import { sendErrorNotification } from "@/lib/email";
+import { runDailyReport } from "@/lib/pipelines/analytics";
+import { runCompetitorReport } from "@/lib/pipelines/competitors";
+import { runSocialIntelReport } from "@/lib/pipelines/competitor-social";
+import { runInventoryWeeklyReport } from "@/lib/pipelines/inventory";
+import { runResearchScan } from "@/lib/pipelines/materials-rd";
+import { runInnovation } from "@/lib/pipelines/product-design";
 
-export const maxDuration = 300; // allow up to 5 min for all agents
+export const maxDuration = 300;
+
+interface PipelineTask {
+  name: string;
+  run: () => Promise<unknown>;
+}
+
+function getScheduledTasks(day: number): PipelineTask[] {
+  const tasks: PipelineTask[] = [];
+
+  // Analytics: Mon–Fri (day 1–5)
+  if (day >= 1 && day <= 5) {
+    tasks.push({ name: "Website Analytics", run: () => runDailyReport() });
+  }
+
+  // Monday (day 1): Social, Inventory, Product Design
+  if (day === 1) {
+    tasks.push({ name: "Competitor Social", run: () => runSocialIntelReport() });
+    tasks.push({ name: "Inventory Weekly", run: () => runInventoryWeeklyReport() });
+    tasks.push({ name: "Product Design Innovation", run: () => runInnovation() });
+  }
+
+  // Wednesday (day 3): Competitor Intel
+  if (day === 3) {
+    tasks.push({ name: "Competitor Intel", run: () => runCompetitorReport() });
+  }
+
+  // Friday (day 5): Materials R&D
+  if (day === 5) {
+    tasks.push({ name: "Materials R&D Research", run: () => runResearchScan() });
+  }
+
+  return tasks;
+}
 
 export async function GET(request: NextRequest) {
   // Verify the request is from Vercel Cron
@@ -16,24 +63,53 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  try {
-    const result = await runAllAgents();
+  const now = new Date();
+  const day = now.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const tasks = getScheduledTasks(day);
+
+  if (tasks.length === 0) {
     return NextResponse.json({
       ok: true,
-      agentsRun: result.logs.length,
-      statuses: result.logs.map((l) => ({
-        agent: l.agentName,
-        status: l.status,
-        durationMs: l.durationMs,
-      })),
-      summaryGenerated: !!result.summary,
-      emailSent: result.emailSent,
+      message: "No agents scheduled for today (weekend)",
+      day,
     });
-  } catch (err) {
-    console.error("[cron] run-agents failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown error" },
-      { status: 500 }
-    );
   }
+
+  // Run each pipeline sequentially to stay within memory/timeout limits
+  const results: { name: string; status: "success" | "error"; error?: string }[] = [];
+
+  for (const task of tasks) {
+    try {
+      await task.run();
+      results.push({ name: task.name, status: "success" });
+      console.log(`[cron] ${task.name}: success`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      results.push({ name: task.name, status: "error", error: message });
+      console.error(`[cron] ${task.name}: failed —`, message);
+
+      // Try to send error notification
+      try {
+        const emailTo =
+          process.env.REPORT_EMAIL_TO?.split(",").map((e) => e.trim()) ??
+          ["chris@tilthockey.com"];
+        await sendErrorNotification(
+          emailTo,
+          "Tilt Agents <agents@tilthockey.com>",
+          `${task.name} pipeline failed:\n\n${message}`
+        );
+      } catch {
+        console.error(`[cron] Error notification for ${task.name} also failed`);
+      }
+    }
+  }
+
+  const allOk = results.every((r) => r.status === "success");
+
+  return NextResponse.json({
+    ok: allOk,
+    day,
+    date: now.toISOString(),
+    results,
+  });
 }
