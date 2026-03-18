@@ -164,21 +164,23 @@ export async function sendAnalyticsReport(
 }
 
 /**
- * Send an error notification when the analytics pipeline fails.
+ * Send an error notification when a pipeline fails.
  */
 export async function sendErrorNotification(
   to: string[],
   from: string,
-  errorMessage: string
+  errorMessage: string,
+  agentName?: string
 ): Promise<void> {
   const resend = getResendClient();
+  const label = agentName ?? "Agent";
 
   await sendOrThrow(resend, {
     from,
     to,
-    subject: "[URGENT] Tilt Analytics Agent — Pipeline Error",
+    subject: `[URGENT] Tilt ${label} — Pipeline Error`,
     text: [
-      "The Website Analytics Agent encountered an error:",
+      `The ${label} encountered an error:`,
       "",
       errorMessage,
       "",

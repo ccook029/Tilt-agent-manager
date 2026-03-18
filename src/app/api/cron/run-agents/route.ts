@@ -96,7 +96,8 @@ export async function GET(request: NextRequest) {
         await sendErrorNotification(
           emailTo,
           "Tilt Agents <agents@tilthockey.com>",
-          `${task.name} pipeline failed:\n\n${message}`
+          `${task.name} pipeline failed:\n\n${message}`,
+          task.name
         );
       } catch {
         console.error(`[cron] Error notification for ${task.name} also failed`);
