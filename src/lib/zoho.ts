@@ -273,11 +273,23 @@ export async function fetchRecentSalesOrders(
  * Returns structured inventory snapshot + sales velocity + open POs.
  */
 export async function fetchInventorySnapshot(): Promise<string> {
-  const [items, salesOrders, purchaseOrders] = await Promise.all([
-    fetchAllItems(),
-    fetchRecentSalesOrders(30),
-    fetchOpenPurchaseOrders(),
-  ]);
+  // Items are required — if this fails, the whole pipeline should fail
+  const items = await fetchAllItems();
+
+  // Sales orders and purchase orders — fetch if authorized, skip gracefully if not
+  let salesOrders: ZohoSalesOrder[] = [];
+  try {
+    salesOrders = await fetchRecentSalesOrders(30);
+  } catch (err) {
+    console.warn("[zoho] Could not fetch sales orders (may need broader OAuth scope):", err instanceof Error ? err.message : err);
+  }
+
+  let purchaseOrders: ZohoPurchaseOrder[] = [];
+  try {
+    purchaseOrders = await fetchOpenPurchaseOrders();
+  } catch (err) {
+    console.warn("[zoho] Could not fetch purchase orders (may need broader OAuth scope):", err instanceof Error ? err.message : err);
+  }
 
   // Calculate 30-day sales velocity per SKU
   const velocityMap = new Map<string, number>();
