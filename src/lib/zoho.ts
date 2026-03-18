@@ -5,10 +5,10 @@
 // and purchase orders from Zoho Inventory.
 //
 // Required env vars:
-//   ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_REFRESH_TOKEN, ZOHO_ORG_ID
+//   ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_REFRESH_TOKEN, ZOHO_ORGANIZATION_ID
 //
 // Optional:
-//   ZOHO_API_DOMAIN  (defaults to https://www.zohoapis.com)
+//   ZOHO_DOMAIN       (defaults to https://www.zohoapis.com)
 //   ZOHO_ACCOUNTS_URL (defaults to https://accounts.zoho.com)
 // ---------------------------------------------------------------------------
 
@@ -75,8 +75,8 @@ async function zohoGet<T>(
   params?: Record<string, string>
 ): Promise<T> {
   const token = await getAccessToken();
-  const orgId = getEnvOrThrow("ZOHO_ORG_ID");
-  const domain = process.env.ZOHO_API_DOMAIN ?? "https://www.zohoapis.com";
+  const orgId = getEnvOrThrow("ZOHO_ORGANIZATION_ID");
+  const domain = process.env.ZOHO_DOMAIN ?? "https://www.zohoapis.com";
 
   const url = new URL(`${domain}/inventory/v1${path}`);
   url.searchParams.set("organization_id", orgId);
