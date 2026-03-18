@@ -14,6 +14,7 @@ import { callClaude, substituteVariables } from "@/lib/anthropic";
 import { sendAnalyticsReport, sendErrorNotification } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
+import { fetchInventorySnapshot } from "@/lib/zoho";
 import agentConfig from "@/agents/inventory-agent.config";
 
 export const maxDuration = 300;
@@ -52,19 +53,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!context || !context.trim()) {
-      return NextResponse.json(
-        { error: "context is required — describe the inventory concern or provide data" },
-        { status: 400 }
-      );
-    }
-
     const startedAt = new Date();
     const taskLabel = TASK_LABELS[task] ?? task;
 
+    // Fetch live Zoho data and combine with any user-provided context
+    const inventoryData = await fetchInventorySnapshot();
+    const fullContext = [
+      "## Live Zoho Inventory Data",
+      inventoryData,
+      context ? `\n## Additional Context\n${context}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
     // Build the user message
     const variables: Record<string, string> = {
-      context,
+      context: fullContext,
       product_name: product_name,
       task_label: taskLabel,
     };

@@ -1,21 +1,29 @@
 // ---------------------------------------------------------------------------
-// Pipeline: Weekly inventory health report
+// Pipeline: Weekly inventory health report — powered by Zoho Inventory data
 // ---------------------------------------------------------------------------
 import { callClaude, substituteVariables } from "@/lib/anthropic";
 import { sendAnalyticsReport } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
+import { fetchInventorySnapshot } from "@/lib/zoho";
 import agentConfig from "@/agents/inventory-agent.config";
 
 export async function runInventoryWeeklyReport(context?: string) {
   const startedAt = new Date();
   const reportDate = startedAt.toISOString().slice(0, 10);
 
+  // Fetch live inventory data from Zoho
+  const inventoryData = await fetchInventorySnapshot();
+
   const variables: Record<string, string> = {
     date: reportDate,
   };
 
   let userMessage = substituteVariables(agentConfig.weeklyReportPrompt, variables);
+
+  // Inject the real Zoho data
+  userMessage += `\n\n---\n\nHere is the live inventory data from Zoho Inventory:\n\n${inventoryData}`;
+
   if (context) {
     userMessage += `\n\nAdditional focus from the team: ${context}`;
   }
