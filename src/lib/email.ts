@@ -11,6 +11,23 @@ function getResendClient(): Resend {
 }
 
 /**
+ * Helper: send via Resend and throw if the API returns an error.
+ * The Resend SDK v6 does NOT throw on errors — it returns { data, error }.
+ */
+async function sendOrThrow(
+  resend: Resend,
+  payload: Parameters<typeof resend.emails.send>[0]
+): Promise<string> {
+  const { data, error } = await resend.emails.send(payload);
+  if (error) {
+    throw new Error(
+      `Resend API error: ${error.name} — ${error.message}`
+    );
+  }
+  return data?.id ?? "unknown";
+}
+
+/**
  * Send the manager summary as an email digest.
  */
 export async function sendDigestEmail(summary: ManagerSummary): Promise<void> {
@@ -23,7 +40,7 @@ export async function sendDigestEmail(summary: ManagerSummary): Promise<void> {
 
   const resend = getResendClient();
 
-  await resend.emails.send({
+  await sendOrThrow(resend, {
     from,
     to,
     subject: `[Tilt Agents] Daily Digest — ${new Date().toLocaleDateString()}`,
@@ -53,7 +70,7 @@ export async function sendAgentEmail(
 
   const resend = getResendClient();
 
-  await resend.emails.send({
+  await sendOrThrow(resend, {
     from,
     to,
     subject: subject ?? `[Tilt Agents] ${agentName} — Output`,
@@ -120,7 +137,7 @@ export async function sendAnalyticsReport(
     ];
   }
 
-  await resend.emails.send(emailPayload);
+  await sendOrThrow(resend, emailPayload);
 }
 
 /**
@@ -133,7 +150,7 @@ export async function sendErrorNotification(
 ): Promise<void> {
   const resend = getResendClient();
 
-  await resend.emails.send({
+  await sendOrThrow(resend, {
     from,
     to,
     subject: "[URGENT] Tilt Analytics Agent — Pipeline Error",
