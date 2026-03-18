@@ -31,6 +31,7 @@ export default function AgentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [runningTask, setRunningTask] = useState<string | null>(null);
   const [innovating, setInnovating] = useState(false);
   const [activeTab, setActiveTab] = useState<"history" | "files" | "chat">(
     isMaya ? "chat" : "history"
@@ -56,7 +57,10 @@ export default function AgentDetailPage() {
     if (!persona) return;
     setRunning(true);
     try {
-      await fetch(persona.runEndpoint, {
+      // For agents with task-based endpoints, default to the weekly report
+      const isInventory = agentId === "inventory";
+      const endpoint = isInventory ? "/api/inventory/weekly" : persona.runEndpoint;
+      await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
@@ -66,6 +70,23 @@ export default function AgentDetailPage() {
       console.error("Failed to trigger run");
     } finally {
       setRunning(false);
+    }
+  };
+
+  const triggerTask = async (task: string) => {
+    if (!persona) return;
+    setRunningTask(task);
+    try {
+      await fetch(persona.runEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task }),
+      });
+      await fetchLogs();
+    } catch {
+      console.error(`Failed to trigger task: ${task}`);
+    } finally {
+      setRunningTask(null);
     }
   };
 
@@ -170,6 +191,37 @@ export default function AgentDetailPage() {
               ))}
             </span>
           )}
+        </div>
+      )}
+
+      {/* Task action buttons for agents with task types (e.g. Stockton) */}
+      {persona?.taskTypes && !isMaya && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Quick Actions
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {persona.taskTypes.map((task) => (
+              <button
+                key={task}
+                onClick={() => triggerTask(task)}
+                disabled={runningTask !== null}
+                className="px-4 py-2 bg-gray-800/80 hover:bg-gray-700 border border-gray-700/60 hover:border-[#e4002b]/40 disabled:opacity-50 rounded-lg text-sm font-medium transition-all"
+              >
+                {runningTask === task ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    Running...
+                  </span>
+                ) : (
+                  task
+                    .split("-")
+                    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                    .join(" ")
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
