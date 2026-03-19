@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 250" fill="none">
+  <!--
+    Tilt Hockey T-Shield logo (SVG recreation)
+    Replace with official PNG at /images/tilt-shield.png if preferred
+  -->
+
+  <!-- Shield body (dark fill) -->
+  <path d="M5 0 H195 V140 Q195 210 100 245 Q5 210 5 140 Z" fill="#111"/>
+
+  <!-- Top black bar (T crossbar face) -->
+  <rect x="5" y="0" width="190" height="48" fill="#000"/>
+
+  <!-- Gray depth band (3D edge of crossbar) -->
+  <polygon points="5,48 195,48 195,64 5,64" fill="#666"/>
+
+  <!-- Light highlight band (T crossbar bottom edge) -->
+  <polygon points="5,64 195,64 195,80 5,80" fill="#aaa"/>
+
+  <!-- T vertical stroke — angled down-left, front face (medium gray) -->
+  <polygon points="55,80 120,80 75,230 10,200" fill="#888"/>
+
+  <!-- T vertical stroke — right depth face (dark gray) -->
+  <polygon points="120,80 165,80 120,230 75,230" fill="#444"/>
+
+  <!-- Shield right body (black, to the right of T stroke) -->
+  <path d="M165 80 H195 V140 Q195 210 100 245 L120 230 Z" fill="#000"/>
+
+  <!-- Shield left body (black, to the left of T stroke) -->
+  <path d="M5 80 L55 80 L10 200 Q5 180 5 140 Z" fill="#000"/>
+
+  <!-- Top bar (re-layered for crisp edges) -->
+  <rect x="5" y="0" width="190" height="46" fill="#000"/>
+
+  <!-- 3D depth stripe below top bar -->
+  <polygon points="5,46 195,46 195,60 5,60" fill="#555"/>
+
+  <!-- Bevel/highlight stripe -->
+  <polygon points="5,60 195,60 195,76 5,76" fill="#999"/>
+</svg>
