@@ -87,7 +87,11 @@ export async function POST(request: NextRequest) {
       // Standard tasks — fetch both Sheet and Inventory data
       const [inventoryData, sheetData] = await Promise.all([
         fetchInventorySnapshot(),
-        fetchSheetSnapshot().catch(() => ""),
+        fetchSheetSnapshot().catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[inventory/run] Sheet snapshot failed for task="${task}":`, msg);
+          return `## ⚠️ Zoho Sheet Data Unavailable\n\nError: ${msg}\n\nThe master spreadsheet could not be loaded. Operating on Zoho Inventory data only.`;
+        }),
       ]);
       fullContext = [
         "## Live Zoho Inventory Data",

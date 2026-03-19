@@ -17,8 +17,16 @@ export async function runInventoryWeeklyReport(context?: string) {
   // Fetch live data from both Zoho Inventory and the master Sheet
   const [inventoryData, sheetData, syncReport] = await Promise.all([
     fetchInventorySnapshot(),
-    fetchSheetSnapshot().catch(() => ""),
-    fetchSyncReport().catch(() => ""),
+    fetchSheetSnapshot().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[inventory-pipeline] Sheet snapshot failed:", msg);
+      return `## ⚠️ Zoho Sheet Data Unavailable\n\nError: ${msg}\n\nThe master spreadsheet could not be loaded. Inventory data below is from Zoho Inventory only.`;
+    }),
+    fetchSyncReport().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[inventory-pipeline] Sync report failed:", msg);
+      return `## ⚠️ Reconciliation Unavailable\n\nError: ${msg}`;
+    }),
   ]);
 
   const variables: Record<string, string> = {
