@@ -11,7 +11,7 @@ export default function Home() {
       {/* Background: stick product photo */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <Image
-          src="/images/tilt-sticks.png"
+          src="/images/tilt-sticks.jpg"
           alt=""
           fill
           className="object-cover opacity-[0.06]"
@@ -22,7 +22,7 @@ export default function Home() {
       {/* T-Shield watermark */}
       <div className="fixed bottom-8 right-8 pointer-events-none z-0 opacity-[0.04]">
         <Image
-          src="/images/tilt-shield.svg"
+          src="/images/tilt-shield.png"
           alt=""
           width={300}
           height={360}
@@ -33,7 +33,7 @@ export default function Home() {
       <div className="text-center py-16 relative">
         <div className="flex items-center justify-center mb-8">
           <Image
-            src="/images/tilt-shield.svg"
+            src="/images/tilt-shield.png"
             alt="Tilt Hockey"
             width={140}
             height={175}
@@ -54,7 +54,7 @@ export default function Home() {
       {/* Leadership — Co-Founders */}
       <div>
         <div className="flex items-center gap-2 mb-5">
-          <Image src="/images/tilt-shield.svg" alt="" width={20} height={24} className="opacity-70" />
+          <Image src="/images/tilt-shield.png" alt="" width={20} height={24} className="opacity-70" />
           <h2 className="font-semibold text-gray-300 uppercase tracking-wider text-sm">
             Leadership
           </h2>
@@ -92,7 +92,7 @@ export default function Home() {
       {/* Team Grid */}
       <div>
         <div className="flex items-center gap-2 mb-5">
-          <Image src="/images/tilt-shield.svg" alt="" width={20} height={24} className="opacity-70" />
+          <Image src="/images/tilt-shield.png" alt="" width={20} height={24} className="opacity-70" />
           <h2 className="font-semibold text-gray-300 uppercase tracking-wider text-sm">
             The Team
           </h2>
