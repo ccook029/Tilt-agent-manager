@@ -15,6 +15,8 @@ import { sendAnalyticsReport, sendErrorNotification } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import { fetchInventorySnapshot } from "@/lib/zoho";
+import { fetchSheetSnapshot } from "@/lib/zoho-sheet";
+import { fetchSyncReport, runSheetToInventorySync } from "@/lib/zoho-sync";
 import agentConfig from "@/agents/inventory-agent.config";
 
 export const maxDuration = 300;
@@ -25,6 +27,8 @@ const TASK_LABELS: Record<string, string> = {
   "sku-audit": "SKU Audit",
   "shipment-tracker": "Shipment Tracker",
   "inventory-reconciliation": "Inventory Reconciliation",
+  "sheet-reconciliation": "Sheet ↔ Inventory Reconciliation",
+  "sheet-sync": "Sheet → Inventory Sync",
 };
 
 export async function POST(request: NextRequest) {
@@ -56,15 +60,44 @@ export async function POST(request: NextRequest) {
     const startedAt = new Date();
     const taskLabel = TASK_LABELS[task] ?? task;
 
-    // Fetch live Zoho data and combine with any user-provided context
-    const inventoryData = await fetchInventorySnapshot();
-    const fullContext = [
-      "## Live Zoho Inventory Data",
-      inventoryData,
-      context ? `\n## Additional Context\n${context}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    // Fetch data based on task type
+    let fullContext: string;
+
+    if (task === "sheet-sync") {
+      // Actually apply the sync — create/update items in Zoho Inventory
+      const syncResult = await runSheetToInventorySync();
+      fullContext = [
+        "## Sheet → Inventory Sync Results",
+        syncResult,
+        context ? `\n## Additional Context\n${context}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    } else if (task === "sheet-reconciliation") {
+      // Compare sheet vs inventory (read-only)
+      const syncReport = await fetchSyncReport();
+      fullContext = [
+        "## Sheet ↔ Inventory Reconciliation Data",
+        syncReport,
+        context ? `\n## Additional Context\n${context}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    } else {
+      // Standard tasks — fetch both Sheet and Inventory data
+      const [inventoryData, sheetData] = await Promise.all([
+        fetchInventorySnapshot(),
+        fetchSheetSnapshot().catch(() => ""),
+      ]);
+      fullContext = [
+        "## Live Zoho Inventory Data",
+        inventoryData,
+        sheetData ? `\n${sheetData}` : "",
+        context ? `\n## Additional Context\n${context}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    }
 
     // Build the user message
     const variables: Record<string, string> = {

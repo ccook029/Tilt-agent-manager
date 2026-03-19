@@ -2,7 +2,8 @@
 // zoho.ts — Zoho Inventory API client
 //
 // Authenticates via OAuth 2.0 refresh token flow, pulls items, sales orders,
-// and purchase orders from Zoho Inventory.
+// and purchase orders from Zoho Inventory. Also supports creating and
+// updating items to keep Zoho Inventory in sync with the master spreadsheet.
 //
 // Required env vars:
 //   ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_REFRESH_TOKEN, ZOHO_ORGANIZATION_ID
@@ -16,13 +17,13 @@
 
 let cachedToken: { accessToken: string; expiresAt: number } | null = null;
 
-function getEnvOrThrow(name: string): string {
+export function getEnvOrThrow(name: string): string {
   const val = process.env[name];
   if (!val) throw new Error(`${name} env var is not set`);
   return val;
 }
 
-async function getAccessToken(): Promise<string> {
+export async function getAccessToken(): Promise<string> {
   // Return cached token if still valid (with 60s buffer)
   if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
     return cachedToken.accessToken;
@@ -330,7 +331,7 @@ export async function fetchInventorySnapshot(): Promise<string> {
       "### Next Steps",
       "1. Go to the Zoho API Console (https://api-console.zoho.com/)",
       "2. Select your Self Client or Server-based Application",
-      "3. Generate a new authorization code with scope: `ZohoInventory.fullaccess.all`",
+      "3. Generate a new authorization code with scope: `ZohoInventory.fullaccess.all,ZohoSheet.dataAPI.READ`",
       "4. Exchange it for a new refresh token",
       "5. Update the ZOHO_REFRESH_TOKEN environment variable in Vercel",
     ].join("\n");
@@ -440,6 +441,131 @@ export async function fetchInventorySnapshot(): Promise<string> {
     "## Open Purchase Orders",
     poTable,
   ].join("\n");
+}
+
+// ---- Zoho Inventory write operations --------------------------------------
+
+async function zohoPost<T>(
+  path: string,
+  body: Record<string, unknown>,
+  params?: Record<string, string>
+): Promise<T> {
+  const token = await getAccessToken();
+  const orgId = getEnvOrThrow("ZOHO_ORGANIZATION_ID");
+  const domain = process.env.ZOHO_DOMAIN ?? "https://www.zohoapis.com";
+
+  const url = new URL(`${domain}/inventory/v1${path}`);
+  url.searchParams.set("organization_id", orgId);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, v);
+    }
+  }
+
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      Authorization: `Zoho-oauthtoken ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) cachedToken = null;
+    throw new Error(`Zoho API POST ${path} failed (${res.status}): ${text}`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+async function zohoPut<T>(
+  path: string,
+  body: Record<string, unknown>,
+  params?: Record<string, string>
+): Promise<T> {
+  const token = await getAccessToken();
+  const orgId = getEnvOrThrow("ZOHO_ORGANIZATION_ID");
+  const domain = process.env.ZOHO_DOMAIN ?? "https://www.zohoapis.com";
+
+  const url = new URL(`${domain}/inventory/v1${path}`);
+  url.searchParams.set("organization_id", orgId);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, v);
+    }
+  }
+
+  const res = await fetch(url.toString(), {
+    method: "PUT",
+    headers: {
+      Authorization: `Zoho-oauthtoken ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) cachedToken = null;
+    throw new Error(`Zoho API PUT ${path} failed (${res.status}): ${text}`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+/** Create a new item in Zoho Inventory. */
+export async function createInventoryItem(item: {
+  name: string;
+  sku: string;
+  rate?: number;
+  purchase_rate?: number;
+  reorder_level?: number;
+  unit?: string;
+  description?: string;
+  item_type?: string;
+  product_type?: string;
+}): Promise<ZohoItem> {
+  const res = await zohoPost<{ item: ZohoItem }>("/items", {
+    name: item.name,
+    sku: item.sku,
+    rate: item.rate ?? 0,
+    purchase_rate: item.purchase_rate ?? 0,
+    reorder_level: item.reorder_level ?? 0,
+    unit: item.unit ?? "qty",
+    description: item.description ?? "",
+    item_type: item.item_type ?? "inventory",
+    product_type: item.product_type ?? "goods",
+  });
+  return res.item;
+}
+
+/** Update an existing item in Zoho Inventory. */
+export async function updateInventoryItem(
+  itemId: string,
+  updates: {
+    name?: string;
+    sku?: string;
+    rate?: number;
+    purchase_rate?: number;
+    reorder_level?: number;
+    unit?: string;
+    description?: string;
+  }
+): Promise<ZohoItem> {
+  // Only send fields that are provided
+  const body: Record<string, unknown> = {};
+  if (updates.name !== undefined) body.name = updates.name;
+  if (updates.sku !== undefined) body.sku = updates.sku;
+  if (updates.rate !== undefined) body.rate = updates.rate;
+  if (updates.purchase_rate !== undefined) body.purchase_rate = updates.purchase_rate;
+  if (updates.reorder_level !== undefined) body.reorder_level = updates.reorder_level;
+  if (updates.unit !== undefined) body.unit = updates.unit;
+  if (updates.description !== undefined) body.description = updates.description;
+
+  const res = await zohoPut<{ item: ZohoItem }>(`/items/${itemId}`, body);
+  return res.item;
 }
 
 // ---- Helpers --------------------------------------------------------------

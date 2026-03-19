@@ -6,14 +6,20 @@ import { sendAnalyticsReport } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import { fetchInventorySnapshot } from "@/lib/zoho";
+import { fetchSheetSnapshot } from "@/lib/zoho-sheet";
+import { fetchSyncReport } from "@/lib/zoho-sync";
 import agentConfig from "@/agents/inventory-agent.config";
 
 export async function runInventoryWeeklyReport(context?: string) {
   const startedAt = new Date();
   const reportDate = startedAt.toISOString().slice(0, 10);
 
-  // Fetch live inventory data from Zoho
-  const inventoryData = await fetchInventorySnapshot();
+  // Fetch live data from both Zoho Inventory and the master Sheet
+  const [inventoryData, sheetData, syncReport] = await Promise.all([
+    fetchInventorySnapshot(),
+    fetchSheetSnapshot().catch(() => ""),
+    fetchSyncReport().catch(() => ""),
+  ]);
 
   const variables: Record<string, string> = {
     date: reportDate,
@@ -21,8 +27,14 @@ export async function runInventoryWeeklyReport(context?: string) {
 
   let userMessage = substituteVariables(agentConfig.weeklyReportPrompt, variables);
 
-  // Inject the real Zoho data
+  // Inject both data sources
   userMessage += `\n\n---\n\nHere is the live inventory data from Zoho Inventory:\n\n${inventoryData}`;
+  if (sheetData) {
+    userMessage += `\n\n---\n\n${sheetData}`;
+  }
+  if (syncReport) {
+    userMessage += `\n\n---\n\n${syncReport}`;
+  }
 
   if (context) {
     userMessage += `\n\nAdditional focus from the team: ${context}`;
