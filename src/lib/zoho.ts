@@ -340,7 +340,7 @@ export async function fetchInventorySnapshot(): Promise<string> {
   // Calculate 30-day sales velocity per SKU
   const velocityMap = new Map<string, number>();
   for (const order of salesOrders) {
-    for (const li of order.line_items) {
+    for (const li of order.line_items ?? []) {
       velocityMap.set(li.sku, (velocityMap.get(li.sku) ?? 0) + li.quantity);
     }
   }
@@ -391,7 +391,7 @@ export async function fetchInventorySnapshot(): Promise<string> {
     po.purchaseorder_number,
     po.vendor_name,
     po.expected_delivery_date || "TBD",
-    String(po.line_items.length) + " items",
+    String((po.line_items ?? []).length) + " items",
     po.status,
     `$${po.total.toFixed(2)}`,
   ]);
