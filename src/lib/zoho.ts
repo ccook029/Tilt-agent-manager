@@ -47,7 +47,11 @@ async function getAccessToken(): Promise<string> {
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Zoho OAuth token refresh failed (${res.status}): ${body}`);
+    cachedToken = null;
+    throw new Error(
+      `Zoho OAuth token refresh failed (${res.status}): ${body}. ` +
+        "The refresh token may be expired or revoked — regenerate it in the Zoho API Console."
+    );
   }
 
   const data = (await res.json()) as {
@@ -57,7 +61,11 @@ async function getAccessToken(): Promise<string> {
   };
 
   if (data.error) {
-    throw new Error(`Zoho OAuth error: ${data.error}`);
+    cachedToken = null;
+    throw new Error(
+      `Zoho OAuth error: ${data.error}. ` +
+        "The refresh token may be expired or revoked — regenerate it in the Zoho API Console."
+    );
   }
 
   cachedToken = {
@@ -94,6 +102,10 @@ async function zohoGet<T>(
 
   if (!res.ok) {
     const body = await res.text();
+    // Invalidate token cache on auth failures so next call attempts a fresh token
+    if (res.status === 401 || res.status === 403) {
+      cachedToken = null;
+    }
     throw new Error(`Zoho API ${path} failed (${res.status}): ${body}`);
   }
 
@@ -273,22 +285,55 @@ export async function fetchRecentSalesOrders(
  * Returns structured inventory snapshot + sales velocity + open POs.
  */
 export async function fetchInventorySnapshot(): Promise<string> {
-  // Items are required — if this fails, the whole pipeline should fail
-  const items = await fetchAllItems();
+  // Each data source is fetched independently so a single permission issue
+  // doesn't take down the whole pipeline.
+  const errors: string[] = [];
 
-  // Sales orders and purchase orders — fetch if authorized, skip gracefully if not
+  let items: ZohoItem[] = [];
+  try {
+    items = await fetchAllItems();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[zoho] Could not fetch items:", msg);
+    errors.push(`Items: ${msg}`);
+  }
+
   let salesOrders: ZohoSalesOrder[] = [];
   try {
     salesOrders = await fetchRecentSalesOrders(30);
   } catch (err) {
-    console.warn("[zoho] Could not fetch sales orders (may need broader OAuth scope):", err instanceof Error ? err.message : err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[zoho] Could not fetch sales orders:", msg);
+    errors.push(`Sales Orders: ${msg}`);
   }
 
   let purchaseOrders: ZohoPurchaseOrder[] = [];
   try {
     purchaseOrders = await fetchOpenPurchaseOrders();
   } catch (err) {
-    console.warn("[zoho] Could not fetch purchase orders (may need broader OAuth scope):", err instanceof Error ? err.message : err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[zoho] Could not fetch purchase orders:", msg);
+    errors.push(`Purchase Orders: ${msg}`);
+  }
+
+  // If we couldn't fetch ANY data, return a clear diagnostic instead of crashing
+  if (items.length === 0 && errors.length > 0) {
+    return [
+      "## ⚠️ Zoho Inventory Data Unavailable",
+      "",
+      "The agent could not retrieve data from Zoho Inventory.",
+      "This is likely caused by an expired or revoked refresh token.",
+      "",
+      "### Errors",
+      ...errors.map((e) => `- ${e}`),
+      "",
+      "### Next Steps",
+      "1. Go to the Zoho API Console (https://api-console.zoho.com/)",
+      "2. Select your Self Client or Server-based Application",
+      "3. Generate a new authorization code with scope: `ZohoInventory.fullaccess.all`",
+      "4. Exchange it for a new refresh token",
+      "5. Update the ZOHO_REFRESH_TOKEN environment variable in Vercel",
+    ].join("\n");
   }
 
   // Calculate 30-day sales velocity per SKU
