@@ -10,6 +10,7 @@
 //
 // Optional:
 //   ZOHO_SHEET_WORKSHEET_NAME — worksheet tab name (defaults to "Sheet1")
+//   ZOHO_SHEET_DOMAIN          — Sheet API domain (defaults based on ZOHO_DOMAIN)
 // ---------------------------------------------------------------------------
 
 import { getAccessToken, getEnvOrThrow } from "./zoho";
@@ -39,7 +40,33 @@ export interface SheetProduct {
 
 // ---- Zoho Sheet API -------------------------------------------------------
 
-const SHEET_API_BASE = "https://sheet.zoho.com/api/v2";
+/**
+ * Derive the Sheet API base URL. Order of precedence:
+ *  1. ZOHO_SHEET_DOMAIN env var (explicit override)
+ *  2. Inferred from ZOHO_DOMAIN (e.g. zohoapis.eu → sheet.zoho.eu)
+ *  3. Default: https://sheet.zoho.com
+ */
+function getSheetApiBase(): string {
+  if (process.env.ZOHO_SHEET_DOMAIN) {
+    return process.env.ZOHO_SHEET_DOMAIN.replace(/\/+$/, "") + "/api/v2";
+  }
+
+  const zohoDomain = process.env.ZOHO_DOMAIN ?? "";
+  if (zohoDomain.includes(".zoho.eu") || zohoDomain.includes("zohoapis.eu")) {
+    return "https://sheet.zoho.eu/api/v2";
+  }
+  if (zohoDomain.includes(".zoho.in") || zohoDomain.includes("zohoapis.in")) {
+    return "https://sheet.zoho.in/api/v2";
+  }
+  if (zohoDomain.includes(".zoho.com.au") || zohoDomain.includes("zohoapis.com.au")) {
+    return "https://sheet.zoho.com.au/api/v2";
+  }
+  if (zohoDomain.includes(".zoho.jp") || zohoDomain.includes("zohoapis.jp")) {
+    return "https://sheet.zoho.jp/api/v2";
+  }
+
+  return "https://sheet.zoho.com/api/v2";
+}
 
 /**
  * Fetch all rows from the master inventory worksheet.
@@ -56,7 +83,8 @@ export async function fetchSheetRows(): Promise<SheetRow[]> {
   const batchSize = 1000;
 
   while (true) {
-    const url = new URL(`${SHEET_API_BASE}/${resourceId}`);
+    const sheetBase = getSheetApiBase();
+    const url = new URL(`${sheetBase}/${resourceId}`);
     url.searchParams.set("method", "worksheet.records.fetch");
     url.searchParams.set("worksheet_name", worksheetName);
     url.searchParams.set("records_start_index", String(startIndex));
@@ -72,8 +100,9 @@ export async function fetchSheetRows(): Promise<SheetRow[]> {
     if (!res.ok) {
       const body = await res.text();
       throw new Error(
-        `Zoho Sheet API failed (${res.status}): ${body}. ` +
-          "Check ZOHO_SHEET_RESOURCE_ID and ensure the refresh token has ZohoSheet.dataAPI.READ scope."
+        `Zoho Sheet API failed (${res.status}) at ${sheetBase}: ${body}. ` +
+          "Check ZOHO_SHEET_RESOURCE_ID and ensure the refresh token has ZohoSheet.dataAPI.READ scope. " +
+          "If using a regional Zoho (EU/IN/AU), set ZOHO_SHEET_DOMAIN to the correct Sheet URL."
       );
     }
 
