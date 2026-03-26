@@ -569,6 +569,49 @@ export async function updateInventoryItem(
   return res.item;
 }
 
+// ---- Inventory Adjustments ------------------------------------------------
+
+export interface AdjustmentLineItem {
+  item_id: string;
+  quantity_adjusted: number;
+}
+
+export interface InventoryAdjustmentResult {
+  inventory_adjustment_id: string;
+  inventory_adjustment_number: string;
+  date: string;
+  reason: string;
+  line_items: {
+    item_id: string;
+    quantity_adjusted: number;
+  }[];
+}
+
+/**
+ * Create an inventory adjustment in Zoho Inventory.
+ * Used to correct stock_on_hand to match the master spreadsheet.
+ *
+ * Each line item specifies an item_id and quantity_adjusted:
+ *  - Positive = increase stock (under-counted in Inventory)
+ *  - Negative = decrease stock (over-counted in Inventory)
+ */
+export async function createInventoryAdjustment(opts: {
+  date: string;
+  reason: string;
+  line_items: AdjustmentLineItem[];
+}): Promise<InventoryAdjustmentResult> {
+  const res = await zohoPost<{ inventory_adjustment: InventoryAdjustmentResult }>(
+    "/inventoryadjustments",
+    {
+      date: opts.date,
+      reason: opts.reason,
+      adjustment_type: "quantity",
+      line_items: opts.line_items,
+    }
+  );
+  return res.inventory_adjustment;
+}
+
 // ---- Helpers --------------------------------------------------------------
 
 function formatTable(header: string[], rows: string[][]): string {

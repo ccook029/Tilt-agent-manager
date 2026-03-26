@@ -20,7 +20,11 @@ import {
   buildGroupKey,
   type StockGroup,
 } from "./zoho-sheet";
-import { fetchAllItems, type ZohoItem } from "./zoho";
+import {
+  fetchAllItems,
+  createInventoryAdjustment,
+  type ZohoItem,
+} from "./zoho";
 
 // ---- Types ----------------------------------------------------------------
 
@@ -261,4 +265,149 @@ export async function fetchSyncReport(): Promise<string> {
       "- Incorrect worksheet tab names (expected: Player, Goalie)",
     ].join("\n");
   }
+}
+
+// ---- Apply: adjust Inventory stock to match the Sheet ---------------------
+
+export interface AdjustmentResult {
+  adjusted: { sku: string; name: string; from: number; to: number; diff: number; success: boolean; error?: string }[];
+  errors: string[];
+  adjustmentId?: string;
+}
+
+/**
+ * Apply stock adjustments to Zoho Inventory so stock_on_hand matches
+ * the master spreadsheet's available stick counts.
+ *
+ * Creates a single Zoho Inventory Adjustment with one line item per
+ * discrepant SKU. Only adjusts matched SKUs with differences — does
+ * not create new items or touch unmatched/non-stick SKUs.
+ */
+export async function applyStockAdjustments(): Promise<string> {
+  const diff = await compareSheetToInventory();
+
+  if (diff.discrepancies.length === 0) {
+    const msg = diff.inSync.length > 0
+      ? `All ${diff.inSync.length} matched stick SKUs are already in sync.`
+      : "No matched SKUs found to adjust.";
+
+    const sections = [
+      "## Sheet → Inventory Sync: No Adjustments Needed",
+      "",
+      msg,
+    ];
+
+    if (diff.unmatchedSheet.length > 0) {
+      sections.push(`\n${diff.unmatchedSheet.length} Sheet groups have no matching Inventory SKU — these need to be created manually.`);
+    }
+    if (diff.unmatchedInventory.length > 0) {
+      sections.push(`${diff.unmatchedInventory.length} Inventory stick SKUs couldn't be matched to a Sheet group.`);
+    }
+
+    return sections.join("\n");
+  }
+
+  // Build line items for the adjustment
+  const lineItems = diff.discrepancies.map((m) => ({
+    item_id: m.inventoryItem.item_id,
+    quantity_adjusted: m.difference,
+  }));
+
+  const result: AdjustmentResult = {
+    adjusted: [],
+    errors: [],
+  };
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    const adjustment = await createInventoryAdjustment({
+      date: today,
+      reason: `Sheet reconciliation sync — ${diff.discrepancies.length} SKUs adjusted to match master spreadsheet (${today})`,
+      line_items: lineItems,
+    });
+
+    result.adjustmentId = adjustment.inventory_adjustment_id;
+
+    for (const m of diff.discrepancies) {
+      result.adjusted.push({
+        sku: m.inventoryItem.sku,
+        name: m.inventoryItem.name,
+        from: m.inventoryCount,
+        to: m.sheetCount,
+        diff: m.difference,
+        success: true,
+      });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    result.errors.push(msg);
+
+    for (const m of diff.discrepancies) {
+      result.adjusted.push({
+        sku: m.inventoryItem.sku,
+        name: m.inventoryItem.name,
+        from: m.inventoryCount,
+        to: m.sheetCount,
+        diff: m.difference,
+        success: false,
+        error: msg,
+      });
+    }
+  }
+
+  // Format the result report
+  const sections: string[] = [
+    "## Sheet → Inventory Sync Complete",
+    "",
+  ];
+
+  if (result.adjustmentId) {
+    const successCount = result.adjusted.filter((a) => a.success).length;
+    sections.push(
+      `Adjustment ID: ${result.adjustmentId}`,
+      `SKUs Adjusted: ${successCount}/${result.adjusted.length}`,
+      `Errors: ${result.errors.length}`,
+      "",
+      "### Adjustments Applied"
+    );
+
+    for (const a of result.adjusted) {
+      if (a.success) {
+        const dir = a.diff > 0 ? "+" : "";
+        sections.push(`- ✅ **${a.sku}** — ${a.name}: ${a.from} → ${a.to} (${dir}${a.diff})`);
+      } else {
+        sections.push(`- ❌ **${a.sku}** — ${a.name}: ${a.error}`);
+      }
+    }
+  } else {
+    sections.push(
+      `❌ Adjustment failed: ${result.errors.join(", ")}`,
+      "",
+      "### SKUs That Need Adjustment"
+    );
+    for (const a of result.adjusted) {
+      const dir = a.diff > 0 ? "+" : "";
+      sections.push(`- **${a.sku}** — ${a.name}: ${a.from} → ${a.to} (${dir}${a.diff})`);
+    }
+  }
+
+  if (diff.unmatchedSheet.length > 0) {
+    sections.push(
+      "",
+      "### Still Unmatched (Manual Action Needed)",
+      ...diff.unmatchedSheet.map(
+        (g) => `- **${g.level} ${g.carbon}** — ${g.available} available sticks (no Inventory SKU exists)`
+      )
+    );
+  }
+
+  if (diff.inSync.length > 0) {
+    sections.push(
+      "",
+      `${diff.inSync.length} other SKUs were already in sync — no changes needed.`
+    );
+  }
+
+  return sections.join("\n");
 }
