@@ -125,6 +125,7 @@ export interface ZohoItem {
   unit: string;
   rate: number;
   purchase_rate: number;
+  description?: string;
   group_name?: string;
   category_name?: string;
   vendor_name?: string;

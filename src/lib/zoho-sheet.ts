@@ -34,6 +34,8 @@ export interface SheetProduct {
   unit: string;
   category: string;
   description: string;
+  level: string;
+  carbon: string;
   /** Raw row data for any extra columns */
   raw: Record<string, string | number>;
 }
@@ -186,6 +188,18 @@ const COLUMN_MAP: Record<string, keyof SheetProduct> = {
   description: "description",
   desc: "description",
   details: "description",
+
+  // Stick-specific: level (JR, INT, SR, Goalie)
+  level: "level",
+  "stick level": "level",
+  "player level": "level",
+  size: "level",
+
+  // Stick-specific: carbon weave (18k, 24k, etc.)
+  carbon: "carbon",
+  "carbon weave": "carbon",
+  weave: "carbon",
+  "carbon type": "carbon",
 };
 
 function normalizeColumnName(col: string): keyof SheetProduct | null {
@@ -214,6 +228,8 @@ export async function fetchSheetProducts(): Promise<SheetProduct[]> {
       unit: "qty",
       category: "",
       description: "",
+      level: "",
+      carbon: "",
       raw: {},
     };
 
@@ -261,10 +277,12 @@ export async function fetchSheetSnapshot(): Promise<string> {
       ].join("\n");
     }
 
-    const header = ["SKU", "Product Name", "Rate", "Purchase Rate", "Reorder Level", "Unit", "Category"];
+    const header = ["SKU", "Product Name", "Level", "Carbon", "Rate", "Purchase Rate", "Reorder Level", "Unit", "Category"];
     const rows = products.map((p) => [
       p.sku,
       p.name,
+      p.level || "-",
+      p.carbon || "-",
       p.rate ? `$${p.rate.toFixed(2)}` : "-",
       p.purchase_rate ? `$${p.purchase_rate.toFixed(2)}` : "-",
       String(p.reorder_level || "-"),

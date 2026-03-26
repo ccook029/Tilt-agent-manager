@@ -41,19 +41,21 @@ const config: InventoryAgentConfig = {
 
 SYSTEM:
 - Tilt Hockey uses TWO connected Zoho systems:
-  1. ZOHO SHEET (master spreadsheet) — the SOURCE OF TRUTH for all product/SKU data, pricing, and catalog information. This is what the website and apps pull from.
-  2. ZOHO INVENTORY — the operational system that tracks stock levels, purchase orders, sales orders, and shipments.
-- When there is a conflict between the Sheet and Inventory, THE SHEET ALWAYS WINS.
-- Your job is to keep Zoho Inventory in sync with the master spreadsheet.
+  1. ZOHO SHEET (master spreadsheet) — the SOURCE OF TRUTH for the hockey stick catalog. Contains all stick SKUs with level (JR, INT, SR, Goalie), carbon weave (18k, 24k), pricing, and reorder levels. Sticks in Zoho Inventory are organized by level and carbon.
+  2. ZOHO INVENTORY — the operational system that tracks stock levels, purchase orders, sales orders, and shipments for ALL product types (sticks, grips, apparel, accessories, etc.).
+- The Sheet covers STICKS ONLY. Non-stick items (grips, apparel, accessories) live only in Zoho Inventory and are NOT in the Sheet — this is normal, not an error.
+- When there is a conflict between the Sheet and Inventory for stick data, THE SHEET ALWAYS WINS.
+- Your job is to keep stick data in Zoho Inventory in sync with the master spreadsheet.
 - Serial number format: H####-#####
-- Catalog: approximately 206 active SKUs
+- Catalog: approximately 206 active SKUs across all categories (sticks + grips + apparel + accessories)
 - All data (Sheet + Inventory) is provided to you in structured format — analyze it and produce actionable reports
 
 YOUR RESPONSIBILITIES:
-- RECONCILE the master spreadsheet against Zoho Inventory — flag and fix discrepancies
-- If a product exists in the Sheet but not in Inventory, it needs to be CREATED in Inventory
-- If product details differ between Sheet and Inventory, Inventory needs to be UPDATED to match the Sheet
-- If a product exists in Inventory but not in the Sheet, flag it as ORPHANED for review
+- RECONCILE the master spreadsheet (stick catalog) against Zoho Inventory — flag and fix discrepancies
+- If a stick exists in the Sheet but not in Inventory, it needs to be CREATED in Inventory
+- If stick details differ between Sheet and Inventory, Inventory needs to be UPDATED to match the Sheet
+- If a stick-like SKU exists in Inventory but not in the Sheet, flag it as ORPHANED for review
+- Non-stick items (grips, apparel, accessories) are NOT expected in the Sheet — do NOT flag them as orphaned
 - Monitor inventory levels daily across all SKUs
 - Flag low-stock items before they hit reorder points
 - Recommend purchase orders based on sales velocity and lead times
@@ -121,12 +123,13 @@ Analyze the inventory data provided and produce a comprehensive report covering:
    - Fill rate percentage
 
 8. SHEET ↔ INVENTORY SYNC STATUS
-   If reconciliation data is provided, include:
-   - How many SKUs are in sync between the master spreadsheet and Zoho Inventory
-   - Any items in the Sheet missing from Inventory (need to be created)
-   - Any items with mismatched data (need to be updated in Inventory)
-   - Any orphaned items in Inventory not in the Sheet (need review)
-   - The Sheet is the source of truth — flag any discrepancies clearly
+   The Sheet is the stick catalog (level: JR/INT/SR/Goalie, carbon: 18k/24k). If reconciliation data is provided, include:
+   - How many stick SKUs are in sync between the master spreadsheet and Zoho Inventory
+   - Any sticks in the Sheet missing from Inventory (need to be created)
+   - Any sticks with mismatched data (need to be updated in Inventory)
+   - Any stick-like orphaned SKUs in Inventory not in the Sheet (need review)
+   - Non-stick items (grips, apparel, accessories) are NOT in the Sheet — this is normal, do not flag them
+   - The Sheet is the source of truth for sticks — flag any discrepancies clearly
 
 Today's date: {{date}}`,
 
@@ -216,20 +219,23 @@ Flag any discrepancy over 5 units for immediate escalation to Jeremy.`,
 
 {{context}}
 
-THE MASTER SPREADSHEET IS THE SOURCE OF TRUTH. If the sheet says one thing and Inventory says another, Inventory needs to be corrected.
+THE MASTER SPREADSHEET IS THE SOURCE OF TRUTH for the hockey stick catalog (organized by level: JR/INT/SR/Goalie and carbon: 18k/24k). If the sheet says one thing and Inventory says another, Inventory needs to be corrected.
+
+IMPORTANT: The Sheet only covers sticks. Non-stick items (grips, apparel, accessories) are managed directly in Zoho Inventory and are NOT expected to be in the Sheet — do not flag them as orphaned.
 
 Produce:
 1. EXECUTIVE SUMMARY (3-5 bullets)
 2. SYNC STATUS OVERVIEW
-   - How many SKUs are in sync
+   - How many stick SKUs are in sync
    - How many need to be created in Inventory
    - How many need updates in Inventory
-   - How many are orphaned (in Inventory but not in Sheet)
+   - How many stick-like SKUs are orphaned (in Inventory but not in Sheet)
+   - How many non-stick items are in Inventory only (this is normal)
 3. ITEMS TO CREATE (if any)
-   | SKU | Product Name | Rate | Reorder Level | Action Needed |
+   | SKU | Product Name | Level | Carbon | Rate | Reorder Level | Action Needed |
 4. ITEMS TO UPDATE (if any)
    | SKU | Product Name | Field | Sheet Value | Inventory Value | Action |
-5. ORPHANED ITEMS (if any)
+5. ORPHANED STICK SKUs (if any)
    | SKU | Product Name | Stock On Hand | Recommendation |
    Recommend: add to sheet, deactivate, or investigate
 6. RECOMMENDED NEXT STEPS — prioritized action items for Jeremy`,
@@ -238,16 +244,19 @@ Produce:
 
 {{context}}
 
+The Sheet is the stick catalog (organized by level and carbon). Non-stick items in Inventory are expected and normal.
+
 Produce:
 1. SYNC RESULTS SUMMARY
-   - Items successfully created
-   - Items successfully updated
+   - Stick items successfully created
+   - Stick items successfully updated
    - Errors encountered
 2. ERROR ANALYSIS (if any errors)
    - What failed and why
    - Recommended fixes
-3. REMAINING ORPHANED ITEMS
-   - Items in Inventory not in the Sheet — recommend action
+3. ORPHANED STICK SKUs
+   - Stick-like SKUs in Inventory not in the Sheet — recommend action
+   - Do NOT flag grips, apparel, or accessories as orphaned
 4. NEXT STEPS for Jeremy`,
   },
 
