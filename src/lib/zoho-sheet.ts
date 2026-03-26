@@ -1,43 +1,66 @@
 // ---------------------------------------------------------------------------
 // zoho-sheet.ts — Zoho Sheet API client
 //
-// Reads product data from the Tilt master spreadsheet in Zoho Sheets.
-// The sheet is the source of truth for all product/SKU data.
+// Reads stick-level inventory data from the Tilt master spreadsheet.
+// The spreadsheet tracks INDIVIDUAL sticks by serial number across
+// multiple tabs (Player, Goalie). Each row = one physical stick.
+//
+// The reconciliation groups sticks by Level + Carbon to produce
+// stock counts that can be compared against Zoho Inventory SKUs.
 //
 // Required env vars:
 //   ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_REFRESH_TOKEN
 //   ZOHO_SHEET_RESOURCE_ID  — the resource ID from the Zoho Sheet URL
 //
 // Optional:
-//   ZOHO_SHEET_WORKSHEET_NAME — worksheet tab name (defaults to "Sheet1")
-//   ZOHO_SHEET_DOMAIN          — Sheet API domain (defaults based on ZOHO_DOMAIN)
+//   ZOHO_SHEET_DOMAIN — Sheet API domain (defaults based on ZOHO_DOMAIN)
 // ---------------------------------------------------------------------------
 
 import { getAccessToken, getEnvOrThrow } from "./zoho";
 
 // ---- Types ----------------------------------------------------------------
 
-/** A row from the master inventory spreadsheet. Column names are normalized. */
+/** Raw row from the Zoho Sheet API. Column names are as-is from the sheet. */
 export interface SheetRow {
   row_index: number;
   [column: string]: string | number;
 }
 
-/** Parsed product record from the sheet with expected columns. */
-export interface SheetProduct {
+/** A single stick record parsed from the spreadsheet. */
+export interface StickRecord {
   row_index: number;
-  sku: string;
-  name: string;
-  rate: number;
-  purchase_rate: number;
-  reorder_level: number;
-  unit: string;
-  category: string;
-  description: string;
+  tab: string;
+  level: string;
+  size: number;
+  carbon: string;
+  kick_point: string;
+  hand: string;
+  flex: number;
+  curve: string;
+  base_color: string;
+  decal_color: string;
+  serial_number: string;
+  status: string;
+  date_sold: string;
+}
+
+/**
+ * Aggregated stock count for a Level + Carbon combination.
+ * This is what gets compared against Zoho Inventory SKUs.
+ */
+export interface StockGroup {
   level: string;
   carbon: string;
-  /** Raw row data for any extra columns */
-  raw: Record<string, string | number>;
+  /** Grouping key used for matching: e.g. "INTERMEDIATE|18K" */
+  groupKey: string;
+  /** Count of sticks with Status = "Available" */
+  available: number;
+  /** Count of sticks with Status = "Sold" */
+  sold: number;
+  /** Total sticks in this group (all statuses) */
+  total: number;
+  /** Serial numbers of available sticks */
+  availableSerials: string[];
 }
 
 // ---- Zoho Sheet API -------------------------------------------------------
@@ -70,22 +93,23 @@ function getSheetApiBase(): string {
   return "https://sheet.zoho.com/api/v2";
 }
 
+/** Tabs to read for inventory counts. */
+const INVENTORY_TABS = ["Player", "Goalie"];
+
 /**
- * Fetch all rows from the master inventory worksheet.
+ * Fetch all rows from a specific worksheet tab.
  * Zoho Sheet API limits to 1000 rows per call, so we paginate.
  */
-export async function fetchSheetRows(): Promise<SheetRow[]> {
+export async function fetchSheetRows(worksheetName: string): Promise<SheetRow[]> {
   const resourceId = getEnvOrThrow("ZOHO_SHEET_RESOURCE_ID");
-  const worksheetName =
-    process.env.ZOHO_SHEET_WORKSHEET_NAME ?? "Sheet1";
   const token = await getAccessToken();
+  const sheetBase = getSheetApiBase();
 
   const allRows: SheetRow[] = [];
   let startIndex = 1;
   const batchSize = 1000;
 
   while (true) {
-    const sheetBase = getSheetApiBase();
     const url = new URL(`${sheetBase}/${resourceId}`);
     url.searchParams.set("method", "worksheet.records.fetch");
     url.searchParams.set("worksheet_name", worksheetName);
@@ -102,9 +126,8 @@ export async function fetchSheetRows(): Promise<SheetRow[]> {
     if (!res.ok) {
       const body = await res.text();
       throw new Error(
-        `Zoho Sheet API failed (${res.status}) at ${sheetBase}: ${body}. ` +
-          "Check ZOHO_SHEET_RESOURCE_ID and ensure the refresh token has ZohoSheet.dataAPI.READ scope. " +
-          "If using a regional Zoho (EU/IN/AU), set ZOHO_SHEET_DOMAIN to the correct Sheet URL."
+        `Zoho Sheet API failed (${res.status}) for tab "${worksheetName}" at ${sheetBase}: ${body}. ` +
+          "Check ZOHO_SHEET_RESOURCE_ID and ensure the refresh token has ZohoSheet.dataAPI.READ scope."
       );
     }
 
@@ -116,7 +139,7 @@ export async function fetchSheetRows(): Promise<SheetRow[]> {
     };
 
     if (data.error_message) {
-      throw new Error(`Zoho Sheet API error: ${data.error_message}`);
+      throw new Error(`Zoho Sheet API error for tab "${worksheetName}": ${data.error_message}`);
     }
 
     const records = data.records ?? [];
@@ -124,7 +147,6 @@ export async function fetchSheetRows(): Promise<SheetRow[]> {
 
     allRows.push(...records);
 
-    // If we got fewer than the batch size, we've reached the end
     if (records.length < batchSize) break;
     startIndex += batchSize;
 
@@ -135,166 +157,216 @@ export async function fetchSheetRows(): Promise<SheetRow[]> {
   return allRows;
 }
 
-// ---- Column name mapping --------------------------------------------------
+// ---- Column name normalization --------------------------------------------
 
-// The sheet may have various column header names. We normalize them to
-// a standard set. Add mappings here as the sheet evolves.
-const COLUMN_MAP: Record<string, keyof SheetProduct> = {
-  // SKU variations
-  sku: "sku",
-  "sku #": "sku",
-  "sku number": "sku",
-  "item sku": "sku",
-  "product sku": "sku",
-
-  // Name variations
-  name: "name",
-  "product name": "name",
-  "item name": "name",
-  product: "name",
-  title: "name",
-
-  // Rate / price variations
-  rate: "rate",
-  price: "rate",
-  "selling price": "rate",
-  "sales price": "rate",
-  "retail price": "rate",
-
-  // Purchase rate
-  "purchase rate": "purchase_rate",
-  "purchase price": "purchase_rate",
-  cost: "purchase_rate",
-  "unit cost": "purchase_rate",
-
-  // Reorder level
-  "reorder level": "reorder_level",
-  "reorder point": "reorder_level",
-  "reorder qty": "reorder_level",
-  "min stock": "reorder_level",
-
-  // Unit
-  unit: "unit",
-  uom: "unit",
-  "unit of measure": "unit",
-
-  // Category
-  category: "category",
-  "category name": "category",
-  type: "category",
-  "product type": "category",
-
-  // Description
-  description: "description",
-  desc: "description",
-  details: "description",
-
-  // Stick-specific: level (JR, INT, SR, Goalie)
+/** Map of possible column header names to our standard field names. */
+const COLUMN_MAP: Record<string, keyof StickRecord> = {
   level: "level",
-  "stick level": "level",
-  "player level": "level",
-  size: "level",
-
-  // Stick-specific: carbon weave (18k, 24k, etc.)
+  "size (inches)": "size",
+  "size": "size",
   carbon: "carbon",
-  "carbon weave": "carbon",
-  weave: "carbon",
-  "carbon type": "carbon",
+  "kick point": "kick_point",
+  "kickpoint": "kick_point",
+  hand: "hand",
+  flex: "flex",
+  curve: "curve",
+  "base color": "base_color",
+  "base colour": "base_color",
+  "decal color": "decal_color",
+  "decal colour": "decal_color",
+  "serial number": "serial_number",
+  "serial": "serial_number",
+  "serial #": "serial_number",
+  status: "status",
+  "date sold": "date_sold",
+  "sold date": "date_sold",
 };
 
-function normalizeColumnName(col: string): keyof SheetProduct | null {
+function normalizeColumn(col: string): keyof StickRecord | null {
   const lower = col.toLowerCase().trim();
   return COLUMN_MAP[lower] ?? null;
 }
 
-// ---- Parse sheet rows into products ---------------------------------------
+// ---- Parse sheet rows into stick records ----------------------------------
 
 /**
- * Fetch and parse the master spreadsheet into typed product records.
- * Skips rows missing a SKU.
+ * Parse raw sheet rows into typed StickRecord objects.
+ * Skips rows without a serial number (blank/header rows).
  */
-export async function fetchSheetProducts(): Promise<SheetProduct[]> {
-  const rows = await fetchSheetRows();
-  const products: SheetProduct[] = [];
+function parseStickRecords(rows: SheetRow[], tab: string): StickRecord[] {
+  const sticks: StickRecord[] = [];
 
   for (const row of rows) {
-    const product: SheetProduct = {
+    const stick: StickRecord = {
       row_index: row.row_index,
-      sku: "",
-      name: "",
-      rate: 0,
-      purchase_rate: 0,
-      reorder_level: 0,
-      unit: "qty",
-      category: "",
-      description: "",
+      tab,
       level: "",
+      size: 0,
       carbon: "",
-      raw: {},
+      kick_point: "",
+      hand: "",
+      flex: 0,
+      curve: "",
+      base_color: "",
+      decal_color: "",
+      serial_number: "",
+      status: "",
+      date_sold: "",
     };
 
     for (const [col, val] of Object.entries(row)) {
       if (col === "row_index") continue;
 
-      // Store raw value
-      product.raw[col] = val;
+      const mapped = normalizeColumn(col);
+      if (!mapped) continue;
 
-      const mapped = normalizeColumnName(col);
-      if (!mapped || mapped === "raw" || mapped === "row_index") continue;
-
-      if (mapped === "rate" || mapped === "purchase_rate" || mapped === "reorder_level") {
-        product[mapped] = typeof val === "number" ? val : parseFloat(String(val)) || 0;
+      if (mapped === "size" || mapped === "flex") {
+        stick[mapped] = typeof val === "number" ? val : parseFloat(String(val)) || 0;
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (product as any)[mapped] = String(val).trim();
+        (stick as any)[mapped] = String(val).trim();
       }
     }
 
-    // Skip rows without a SKU — they're probably header/blank rows
-    if (!product.sku) continue;
+    // Skip rows without a serial number — blank or header rows
+    if (!stick.serial_number) continue;
 
-    products.push(product);
+    sticks.push(stick);
   }
 
-  return products;
+  return sticks;
+}
+
+// ---- Fetch all stick records from Player + Goalie tabs --------------------
+
+/**
+ * Fetch and parse stick records from both the Player and Goalie tabs.
+ */
+export async function fetchAllStickRecords(): Promise<StickRecord[]> {
+  const allSticks: StickRecord[] = [];
+
+  for (const tab of INVENTORY_TABS) {
+    try {
+      const rows = await fetchSheetRows(tab);
+      const sticks = parseStickRecords(rows, tab);
+      allSticks.push(...sticks);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[zoho-sheet] Failed to read tab "${tab}":`, msg);
+      throw new Error(`Failed to read "${tab}" tab: ${msg}`);
+    }
+  }
+
+  return allSticks;
+}
+
+// ---- Aggregate into stock groups by Level + Carbon ------------------------
+
+/**
+ * Normalize a level string for grouping.
+ * "Intermediate" → "INTERMEDIATE", "Jr" → "JUNIOR", etc.
+ */
+function normalizeLevel(raw: string): string {
+  const upper = raw.toUpperCase().trim();
+  if (upper.startsWith("INT")) return "INTERMEDIATE";
+  if (upper.startsWith("JR") || upper.startsWith("JUN")) return "JUNIOR";
+  if (upper.startsWith("SR") || upper.startsWith("SEN")) return "SENIOR";
+  if (upper.startsWith("GOAL")) return "GOALIE";
+  return upper;
+}
+
+/** Normalize carbon string: "18k" → "18K" */
+function normalizeCarbon(raw: string): string {
+  return raw.toUpperCase().trim();
+}
+
+/**
+ * Build a grouping key from Level + Carbon.
+ * e.g. "INTERMEDIATE|18K"
+ */
+export function buildGroupKey(level: string, carbon: string): string {
+  return `${normalizeLevel(level)}|${normalizeCarbon(carbon)}`;
+}
+
+/**
+ * Aggregate individual stick records into stock groups by Level + Carbon.
+ * Only counts sticks with a valid Level and Carbon.
+ */
+export function aggregateStockGroups(sticks: StickRecord[]): StockGroup[] {
+  const groups = new Map<string, StockGroup>();
+
+  for (const stick of sticks) {
+    if (!stick.level || !stick.carbon) continue;
+
+    const key = buildGroupKey(stick.level, stick.carbon);
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        level: normalizeLevel(stick.level),
+        carbon: normalizeCarbon(stick.carbon),
+        groupKey: key,
+        available: 0,
+        sold: 0,
+        total: 0,
+        availableSerials: [],
+      };
+      groups.set(key, group);
+    }
+
+    group.total++;
+    const status = stick.status.toLowerCase().trim();
+    if (status === "available") {
+      group.available++;
+      group.availableSerials.push(stick.serial_number);
+    } else if (status === "sold") {
+      group.sold++;
+    }
+  }
+
+  return Array.from(groups.values()).sort((a, b) =>
+    a.groupKey.localeCompare(b.groupKey)
+  );
 }
 
 // ---- Formatted output for prompt injection --------------------------------
 
 /**
- * Fetch sheet data and format as a text block for Claude.
+ * Fetch stick data from all tabs and format as a text block for Claude.
  */
 export async function fetchSheetSnapshot(): Promise<string> {
   try {
-    const products = await fetchSheetProducts();
+    const sticks = await fetchAllStickRecords();
 
-    if (products.length === 0) {
+    if (sticks.length === 0) {
       return [
         "## ⚠️ Zoho Sheet Data Empty",
         "",
-        "No product rows found in the master spreadsheet.",
-        "Check that ZOHO_SHEET_RESOURCE_ID and ZOHO_SHEET_WORKSHEET_NAME are correct.",
+        "No stick records found in the Player or Goalie tabs.",
+        "Check that ZOHO_SHEET_RESOURCE_ID is correct.",
       ].join("\n");
     }
 
-    const header = ["SKU", "Product Name", "Level", "Carbon", "Rate", "Purchase Rate", "Reorder Level", "Unit", "Category"];
-    const rows = products.map((p) => [
-      p.sku,
-      p.name,
-      p.level || "-",
-      p.carbon || "-",
-      p.rate ? `$${p.rate.toFixed(2)}` : "-",
-      p.purchase_rate ? `$${p.purchase_rate.toFixed(2)}` : "-",
-      String(p.reorder_level || "-"),
-      p.unit || "qty",
-      p.category || "-",
+    const groups = aggregateStockGroups(sticks);
+
+    const header = ["Level", "Carbon", "Available", "Sold", "Total"];
+    const rows = groups.map((g) => [
+      g.level,
+      g.carbon,
+      String(g.available),
+      String(g.sold),
+      String(g.total),
     ]);
 
     const table = formatSheetTable(header, rows);
 
+    const totalAvailable = groups.reduce((sum, g) => sum + g.available, 0);
+    const totalSold = groups.reduce((sum, g) => sum + g.sold, 0);
+
     return [
-      "## Master Spreadsheet (Source of Truth)",
-      `Total Products: ${products.length}`,
+      "## Master Spreadsheet — Stick Inventory (Source of Truth)",
+      `Total Sticks: ${sticks.length} (${totalAvailable} available, ${totalSold} sold)`,
+      `Stock Groups (Level + Carbon): ${groups.length}`,
+      `Tabs read: ${INVENTORY_TABS.join(", ")}`,
       "",
       table,
     ].join("\n");

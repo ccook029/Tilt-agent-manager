@@ -1,285 +1,247 @@
 // ---------------------------------------------------------------------------
-// zoho-sync.ts — Sheet → Inventory reconciliation
+// zoho-sync.ts — Sheet → Inventory stock reconciliation
 //
-// The master Zoho Sheet is the source of truth for hockey stick catalog data.
-// This module compares sheet products against Zoho Inventory items and
-// produces a diff report. It can also apply changes (create/update items in
-// Zoho Inventory).
+// The master Zoho Sheet tracks individual sticks by serial number.
+// Zoho Inventory tracks stock at the SKU level (Level + Carbon combos).
 //
-// IMPORTANT: The Sheet is specifically the stick catalog. Zoho Inventory also
-// contains non-stick products (grips, apparel, accessories, etc.) that are
-// NOT in the Sheet. These should NOT be flagged as orphaned.
+// This module:
+//   1. Reads individual sticks from the Sheet (Player + Goalie tabs)
+//   2. Aggregates them by Level + Carbon into stock groups
+//   3. Matches each group to a Zoho Inventory SKU
+//   4. Compares available counts and reports discrepancies
 //
-// Architecture:
-//   Sheet (source of truth) → compare → Zoho Inventory (operational system)
-//   When the sheet says something different, Inventory gets updated.
+// The Sheet is the source of truth for stick stock levels.
+// Non-stick items (grips, apparel, accessories) live only in Inventory.
 // ---------------------------------------------------------------------------
 
-import { fetchSheetProducts, type SheetProduct } from "./zoho-sheet";
 import {
-  fetchAllItems,
-  createInventoryItem,
-  updateInventoryItem,
-  type ZohoItem,
-} from "./zoho";
+  fetchAllStickRecords,
+  aggregateStockGroups,
+  buildGroupKey,
+  type StockGroup,
+} from "./zoho-sheet";
+import { fetchAllItems, type ZohoItem } from "./zoho";
 
 // ---- Types ----------------------------------------------------------------
 
+export interface StockMatch {
+  group: StockGroup;
+  inventoryItem: ZohoItem;
+  sheetCount: number;
+  inventoryCount: number;
+  difference: number;
+}
+
 export interface SyncDiff {
-  /** Products in the sheet that don't exist in Zoho Inventory */
-  toCreate: SheetProduct[];
-  /** Products that exist in both but have field differences */
-  toUpdate: {
-    sheet: SheetProduct;
-    inventory: ZohoItem;
-    changes: string[];
-  }[];
-  /** Stick-related items in Zoho Inventory that aren't in the sheet */
-  orphaned: ZohoItem[];
-  /** Non-stick items in Inventory that are outside the sheet's scope */
-  unmanaged: number;
-  /** Products that are fully in sync */
-  inSync: number;
+  /** Groups that match an Inventory SKU and stock counts agree */
+  inSync: StockMatch[];
+  /** Groups that match an Inventory SKU but stock counts differ */
+  discrepancies: StockMatch[];
+  /** Sheet groups with no matching Inventory SKU */
+  unmatchedSheet: StockGroup[];
+  /** Stick-like Inventory items with no matching Sheet group */
+  unmatchedInventory: ZohoItem[];
+  /** Non-stick Inventory items (grips, apparel, etc.) — not in scope */
+  nonStickItems: number;
 }
 
-export interface SyncResult {
-  created: { sku: string; name: string; success: boolean; error?: string }[];
-  updated: { sku: string; name: string; changes: string[]; success: boolean; error?: string }[];
-  errors: string[];
-}
-
-// ---- SKU classification ---------------------------------------------------
+// ---- SKU matching ---------------------------------------------------------
 
 /**
  * Known SKU prefixes for non-stick product categories.
- * Items with these prefixes are NOT expected to be in the Sheet and
- * should NOT be flagged as orphaned.
+ * Items with these prefixes are NOT expected in the Sheet.
  */
 const NON_STICK_PREFIXES = [
-  "GRIP-",   // Stick grips / accessories
-  "T-S-",    // T-shirts
-  "HOO-",    // Hoodies
-  "HAT-",    // Hats
-  "SOC-",    // Socks
-  "BAG-",    // Bags
-  "TOW-",    // Towels
-  "BAN-",    // Banners / marketing
-  "STI-",    // Stickers
-  "WAX-",    // Wax
-  "TAP-",    // Tape
-  "LAC-",    // Laces
+  "GRIP-",
+  "T-S-",
+  "HOO-",
+  "HAT-",
+  "SOC-",
+  "BAG-",
+  "TOW-",
+  "BAN-",
+  "STI-",
+  "WAX-",
+  "TAP-",
+  "LAC-",
 ];
 
-/**
- * Determine whether an inventory item looks like it should be in the
- * stick catalog (Sheet). Items with known non-stick prefixes are excluded.
- */
-function looksLikeStickSku(sku: string): boolean {
+function isNonStickSku(sku: string): boolean {
   const upper = sku.toUpperCase();
-  return !NON_STICK_PREFIXES.some((prefix) => upper.startsWith(prefix));
+  return NON_STICK_PREFIXES.some((prefix) => upper.startsWith(prefix));
 }
 
-// ---- Diff: compare sheet vs inventory -------------------------------------
+/**
+ * Try to match a Zoho Inventory item to a Level+Carbon group key.
+ *
+ * Strategy: check the item's name and SKU for level/carbon indicators.
+ * For example:
+ *   - Name "Intermediate 18K" → "INTERMEDIATE|18K"
+ *   - SKU "INT-18K" → "INTERMEDIATE|18K"
+ *   - Name "Junior 24K Carbon" → "JUNIOR|24K"
+ */
+function inferGroupKey(item: ZohoItem): string | null {
+  const text = `${item.name} ${item.sku}`.toUpperCase();
+
+  // Detect level
+  let level = "";
+  if (/\bINT(?:ERMEDIATE)?\b/.test(text)) level = "INTERMEDIATE";
+  else if (/\bJR\b|\bJUN(?:IOR)?\b/.test(text)) level = "JUNIOR";
+  else if (/\bSR\b|\bSEN(?:IOR)?\b/.test(text)) level = "SENIOR";
+  else if (/\bGOAL(?:IE|TENDER)?\b/.test(text)) level = "GOALIE";
+
+  // Detect carbon
+  let carbon = "";
+  if (/\b18K\b/.test(text)) carbon = "18K";
+  else if (/\b24K\b/.test(text)) carbon = "24K";
+  else if (/\b12K\b/.test(text)) carbon = "12K";
+  else if (/\b30K\b/.test(text)) carbon = "30K";
+
+  if (level && carbon) {
+    return buildGroupKey(level, carbon);
+  }
+
+  return null;
+}
+
+// ---- Diff: compare sheet stock vs inventory -------------------------------
 
 /**
- * Compare the master sheet against Zoho Inventory and produce a diff.
+ * Compare the master sheet stick counts against Zoho Inventory.
  * Does NOT make any changes — read-only comparison.
- *
- * Only items that look like stick SKUs are flagged as orphaned when
- * they're missing from the Sheet. Non-stick items (grips, apparel, etc.)
- * are counted as "unmanaged" — they live in Inventory only.
  */
 export async function compareSheetToInventory(): Promise<SyncDiff> {
-  const [sheetProducts, inventoryItems] = await Promise.all([
-    fetchSheetProducts(),
+  const [sticks, inventoryItems] = await Promise.all([
+    fetchAllStickRecords(),
     fetchAllItems(),
   ]);
 
-  // Index inventory items by SKU for fast lookup
-  const inventoryBySku = new Map<string, ZohoItem>();
-  for (const item of inventoryItems) {
-    if (item.sku) {
-      inventoryBySku.set(item.sku.toUpperCase(), item);
-    }
+  const groups = aggregateStockGroups(sticks);
+
+  // Build a map of group key → StockGroup
+  const groupByKey = new Map<string, StockGroup>();
+  for (const group of groups) {
+    groupByKey.set(group.groupKey, group);
   }
 
-  const toCreate: SheetProduct[] = [];
-  const toUpdate: SyncDiff["toUpdate"] = [];
-  let inSync = 0;
+  // Try to match each inventory item to a group key
+  const matchedGroupKeys = new Set<string>();
+  const inSync: StockMatch[] = [];
+  const discrepancies: StockMatch[] = [];
+  const unmatchedInventory: ZohoItem[] = [];
+  let nonStickItems = 0;
 
-  for (const product of sheetProducts) {
-    const skuKey = product.sku.toUpperCase();
-    const inventoryItem = inventoryBySku.get(skuKey);
+  for (const item of inventoryItems) {
+    if (!item.sku) continue;
 
-    if (!inventoryItem) {
-      toCreate.push(product);
+    // Skip non-stick items
+    if (isNonStickSku(item.sku)) {
+      nonStickItems++;
       continue;
     }
 
-    // Compare fields — Sheet is source of truth
-    const changes: string[] = [];
-
-    if (product.name && product.name !== inventoryItem.name) {
-      changes.push(`name: "${inventoryItem.name}" → "${product.name}"`);
-    }
-    if (product.rate > 0 && product.rate !== inventoryItem.rate) {
-      changes.push(`rate: $${inventoryItem.rate} → $${product.rate}`);
-    }
-    if (product.purchase_rate > 0 && product.purchase_rate !== inventoryItem.purchase_rate) {
-      changes.push(`purchase_rate: $${inventoryItem.purchase_rate} → $${product.purchase_rate}`);
-    }
-    if (product.reorder_level > 0 && product.reorder_level !== inventoryItem.reorder_level) {
-      changes.push(`reorder_level: ${inventoryItem.reorder_level} → ${product.reorder_level}`);
-    }
-    if (product.unit && product.unit !== inventoryItem.unit) {
-      changes.push(`unit: "${inventoryItem.unit}" → "${product.unit}"`);
-    }
-    if (product.description && product.description !== inventoryItem.description) {
-      changes.push(`description updated`);
+    const groupKey = inferGroupKey(item);
+    if (!groupKey) {
+      unmatchedInventory.push(item);
+      continue;
     }
 
-    if (changes.length > 0) {
-      toUpdate.push({ sheet: product, inventory: inventoryItem, changes });
+    const group = groupByKey.get(groupKey);
+    if (!group) {
+      unmatchedInventory.push(item);
+      continue;
+    }
+
+    matchedGroupKeys.add(groupKey);
+
+    const match: StockMatch = {
+      group,
+      inventoryItem: item,
+      sheetCount: group.available,
+      inventoryCount: item.stock_on_hand,
+      difference: group.available - item.stock_on_hand,
+    };
+
+    if (match.difference === 0) {
+      inSync.push(match);
     } else {
-      inSync++;
+      discrepancies.push(match);
     }
   }
 
-  // Separate unmatched inventory items into orphaned sticks vs. unmanaged non-stick items
-  const sheetSkus = new Set(sheetProducts.map((p) => p.sku.toUpperCase()));
-  const unmatchedItems = inventoryItems.filter(
-    (item) => item.sku && !sheetSkus.has(item.sku.toUpperCase())
-  );
+  // Sheet groups with no matching inventory item
+  const unmatchedSheet = groups.filter((g) => !matchedGroupKeys.has(g.groupKey));
 
-  const orphaned: ZohoItem[] = [];
-  let unmanaged = 0;
-
-  for (const item of unmatchedItems) {
-    if (looksLikeStickSku(item.sku)) {
-      orphaned.push(item);
-    } else {
-      unmanaged++;
-    }
-  }
-
-  return { toCreate, toUpdate, orphaned, unmanaged, inSync };
-}
-
-// ---- Apply: sync inventory to match the sheet -----------------------------
-
-/**
- * Apply the diff — create missing items and update mismatched fields
- * in Zoho Inventory to match the master sheet.
- *
- * Respects Zoho's rate limit of 100 requests/min by throttling.
- */
-export async function applySyncToInventory(
-  diff: SyncDiff
-): Promise<SyncResult> {
-  const result: SyncResult = {
-    created: [],
-    updated: [],
-    errors: [],
-  };
-
-  // Create missing items
-  for (const product of diff.toCreate) {
-    try {
-      await createInventoryItem({
-        name: product.name,
-        sku: product.sku,
-        rate: product.rate,
-        purchase_rate: product.purchase_rate,
-        reorder_level: product.reorder_level,
-        unit: product.unit || "qty",
-        description: product.description,
-      });
-      result.created.push({ sku: product.sku, name: product.name, success: true });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      result.created.push({ sku: product.sku, name: product.name, success: false, error: msg });
-      result.errors.push(`Create ${product.sku}: ${msg}`);
-    }
-    // Throttle to stay under Zoho's 100 req/min limit
-    await sleep(700);
-  }
-
-  // Update mismatched items
-  for (const { sheet, inventory, changes } of diff.toUpdate) {
-    try {
-      const updates: Record<string, unknown> = {};
-      if (sheet.name && sheet.name !== inventory.name) updates.name = sheet.name;
-      if (sheet.rate > 0 && sheet.rate !== inventory.rate) updates.rate = sheet.rate;
-      if (sheet.purchase_rate > 0 && sheet.purchase_rate !== inventory.purchase_rate)
-        updates.purchase_rate = sheet.purchase_rate;
-      if (sheet.reorder_level > 0 && sheet.reorder_level !== inventory.reorder_level)
-        updates.reorder_level = sheet.reorder_level;
-      if (sheet.unit && sheet.unit !== inventory.unit) updates.unit = sheet.unit;
-      if (sheet.description && sheet.description !== inventory.description)
-        updates.description = sheet.description;
-
-      await updateInventoryItem(inventory.item_id, updates);
-      result.updated.push({ sku: sheet.sku, name: sheet.name, changes, success: true });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      result.updated.push({ sku: sheet.sku, name: sheet.name, changes, success: false, error: msg });
-      result.errors.push(`Update ${sheet.sku}: ${msg}`);
-    }
-    await sleep(700);
-  }
-
-  return result;
+  return { inSync, discrepancies, unmatchedSheet, unmatchedInventory, nonStickItems };
 }
 
 // ---- Formatted output for prompt injection --------------------------------
 
 /**
  * Run a full comparison and format the results as text for Claude.
- * Does NOT apply changes — just reports the diff.
  */
 export async function fetchSyncReport(): Promise<string> {
   try {
     const diff = await compareSheetToInventory();
 
     const sections: string[] = [
-      "## Sheet ↔ Inventory Reconciliation Report",
+      "## Sheet ↔ Inventory Stock Reconciliation Report",
       "",
-      "The master spreadsheet covers hockey sticks. Non-stick items (grips, apparel, accessories) are managed directly in Zoho Inventory.",
+      "The master spreadsheet tracks individual sticks by serial number.",
+      "Stock counts are grouped by Level + Carbon and compared to Zoho Inventory SKUs.",
       "",
-      `Stick SKUs in Sync: ${diff.inSync}`,
-      `Need to Create in Inventory: ${diff.toCreate.length}`,
-      `Need to Update in Inventory: ${diff.toUpdate.length}`,
-      `Orphaned Stick SKUs (in Inventory, not in Sheet): ${diff.orphaned.length}`,
-      `Non-Stick Items (managed in Inventory only): ${diff.unmanaged}`,
+      `Matched & In Sync: ${diff.inSync.length} SKUs`,
+      `Stock Discrepancies: ${diff.discrepancies.length} SKUs`,
+      `Unmatched Sheet Groups (no Inventory SKU): ${diff.unmatchedSheet.length}`,
+      `Unmatched Inventory SKUs (no Sheet group): ${diff.unmatchedInventory.length}`,
+      `Non-Stick Items (grips, apparel, etc.): ${diff.nonStickItems} (not in scope)`,
     ];
 
-    if (diff.toCreate.length > 0) {
+    if (diff.discrepancies.length > 0) {
       sections.push(
         "",
-        "### New Sticks (in Sheet, missing from Inventory)",
-        ...diff.toCreate.map(
-          (p) => `- **${p.sku}** — ${p.name}${p.level ? ` [${p.level}]` : ""}${p.carbon ? ` ${p.carbon}` : ""} (rate: $${p.rate}, reorder: ${p.reorder_level})`
+        "### Stock Discrepancies (Sheet ≠ Inventory)",
+        "The Sheet count is the source of truth. Inventory should be adjusted to match.",
+        ""
+      );
+      for (const m of diff.discrepancies) {
+        const direction = m.difference > 0 ? "UNDER-COUNTED" : "OVER-COUNTED";
+        sections.push(
+          `- **${m.inventoryItem.sku}** — ${m.inventoryItem.name}`,
+          `  Sheet: ${m.sheetCount} available | Inventory: ${m.inventoryCount} on hand | Diff: ${m.difference > 0 ? "+" : ""}${m.difference} (${direction})`
+        );
+      }
+    }
+
+    if (diff.inSync.length > 0) {
+      sections.push(
+        "",
+        "### In Sync",
+        ...diff.inSync.map(
+          (m) => `- **${m.inventoryItem.sku}** — ${m.inventoryItem.name}: ${m.sheetCount} units ✓`
         )
       );
     }
 
-    if (diff.toUpdate.length > 0) {
-      sections.push("", "### Items Needing Updates (Sheet → Inventory)");
-      for (const { sheet, changes } of diff.toUpdate) {
-        sections.push(`- **${sheet.sku}** — ${sheet.name}`);
-        for (const change of changes) {
-          sections.push(`  - ${change}`);
-        }
-      }
-    }
-
-    if (diff.orphaned.length > 0) {
+    if (diff.unmatchedSheet.length > 0) {
       sections.push(
         "",
-        "### Orphaned Stick SKUs (in Inventory, not in Sheet)",
-        "These look like stick SKUs but are NOT in the master spreadsheet.",
-        "Review whether they should be added to the sheet or deactivated.",
-        ...diff.orphaned.map(
+        "### Sheet Groups Without Inventory SKU",
+        "These Level+Carbon combinations exist in the Sheet but could not be matched to any Zoho Inventory item.",
+        "Action: Create the corresponding SKU in Zoho Inventory or update the SKU name to include Level + Carbon.",
+        ...diff.unmatchedSheet.map(
+          (g) => `- **${g.level} ${g.carbon}** — ${g.available} available sticks (${g.availableSerials.length} serials)`
+        )
+      );
+    }
+
+    if (diff.unmatchedInventory.length > 0) {
+      sections.push(
+        "",
+        "### Stick SKUs Without Sheet Match",
+        "These Inventory items look like sticks but could not be matched to a Sheet group.",
+        "This may mean the SKU name/description doesn't contain recognizable Level + Carbon info.",
+        ...diff.unmatchedInventory.map(
           (i) => `- **${i.sku}** — ${i.name} (stock: ${i.stock_on_hand})`
         )
       );
@@ -296,83 +258,7 @@ export async function fetchSyncReport(): Promise<string> {
       "This may be caused by:",
       "- Expired Zoho refresh token (needs both ZohoInventory and ZohoSheet scopes)",
       "- Missing ZOHO_SHEET_RESOURCE_ID env var",
-      "- Incorrect worksheet name",
+      "- Incorrect worksheet tab names (expected: Player, Goalie)",
     ].join("\n");
   }
-}
-
-/**
- * Run the full sync: compare then apply changes to Zoho Inventory.
- * Returns a formatted report of what was done.
- */
-export async function runSheetToInventorySync(): Promise<string> {
-  const diff = await compareSheetToInventory();
-
-  if (diff.toCreate.length === 0 && diff.toUpdate.length === 0) {
-    return [
-      "## Sheet → Inventory Sync: Already in Sync",
-      "",
-      `All ${diff.inSync} stick SKUs match between the master spreadsheet and Zoho Inventory.`,
-      `${diff.unmanaged} non-stick items in Inventory are outside the sheet's scope (grips, apparel, accessories).`,
-      diff.orphaned.length > 0
-        ? `\n${diff.orphaned.length} stick-like SKUs in Inventory are not in the sheet — review for potential cleanup.`
-        : "",
-    ].join("\n");
-  }
-
-  const result = await applySyncToInventory(diff);
-
-  const sections: string[] = [
-    "## Sheet → Inventory Sync Complete",
-    "",
-    `Created: ${result.created.filter((r) => r.success).length}/${result.created.length}`,
-    `Updated: ${result.updated.filter((r) => r.success).length}/${result.updated.length}`,
-    `Errors: ${result.errors.length}`,
-  ];
-
-  if (result.created.length > 0) {
-    sections.push("", "### Created Items");
-    for (const r of result.created) {
-      sections.push(
-        r.success
-          ? `- ✅ ${r.sku} — ${r.name}`
-          : `- ❌ ${r.sku} — ${r.name}: ${r.error}`
-      );
-    }
-  }
-
-  if (result.updated.length > 0) {
-    sections.push("", "### Updated Items");
-    for (const r of result.updated) {
-      sections.push(
-        r.success
-          ? `- ✅ ${r.sku} — ${r.name} (${r.changes.join(", ")})`
-          : `- ❌ ${r.sku} — ${r.name}: ${r.error}`
-      );
-    }
-  }
-
-  if (diff.orphaned.length > 0) {
-    sections.push(
-      "",
-      "### Orphaned Stick SKUs (action needed)",
-      "These look like stick SKUs but are not in the master spreadsheet.",
-      ...diff.orphaned.map((i) => `- ${i.sku} — ${i.name} (stock: ${i.stock_on_hand})`)
-    );
-  }
-
-  if (diff.unmanaged > 0) {
-    sections.push(
-      "",
-      `${diff.unmanaged} non-stick items (grips, apparel, accessories) are in Inventory only — not in scope for Sheet sync.`
-    );
-  }
-
-  return sections.join("\n");
-}
-
-// ---- Helpers --------------------------------------------------------------
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

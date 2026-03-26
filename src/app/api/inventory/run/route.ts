@@ -16,7 +16,7 @@ import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import { fetchInventorySnapshot } from "@/lib/zoho";
 import { fetchSheetSnapshot } from "@/lib/zoho-sheet";
-import { fetchSyncReport, runSheetToInventorySync } from "@/lib/zoho-sync";
+import { fetchSyncReport } from "@/lib/zoho-sync";
 import agentConfig from "@/agents/inventory-agent.config";
 
 export const maxDuration = 300;
@@ -63,17 +63,7 @@ export async function POST(request: NextRequest) {
     // Fetch data based on task type
     let fullContext: string;
 
-    if (task === "sheet-sync") {
-      // Actually apply the sync — create/update items in Zoho Inventory
-      const syncResult = await runSheetToInventorySync();
-      fullContext = [
-        "## Sheet → Inventory Sync Results",
-        syncResult,
-        context ? `\n## Additional Context\n${context}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n");
-    } else if (task === "sheet-reconciliation") {
+    if (task === "sheet-sync" || task === "sheet-reconciliation") {
       // Compare sheet vs inventory (read-only)
       const syncReport = await fetchSyncReport();
       fullContext = [

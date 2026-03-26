@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 import { NextResponse } from "next/server";
 import { getAccessToken } from "@/lib/zoho";
-import { fetchSheetRows } from "@/lib/zoho-sheet";
+import { fetchAllStickRecords } from "@/lib/zoho-sheet";
 import { fetchAllItems } from "@/lib/zoho";
 
 interface Check {
@@ -55,10 +55,10 @@ export async function GET() {
   // 3. Zoho Sheet API
   const sheetStart = Date.now();
   try {
-    const rows = await fetchSheetRows();
+    const sticks = await fetchAllStickRecords();
     checks.sheet = {
       status: "ok",
-      message: `Connected — ${rows.length} rows found`,
+      message: `Connected — ${sticks.length} stick records found (Player + Goalie tabs)`,
       durationMs: Date.now() - sheetStart,
     };
   } catch (err) {
@@ -82,7 +82,6 @@ function envSummary() {
     ZOHO_REFRESH_TOKEN: process.env.ZOHO_REFRESH_TOKEN ? "set" : "MISSING",
     ZOHO_ORGANIZATION_ID: process.env.ZOHO_ORGANIZATION_ID ? "set" : "MISSING",
     ZOHO_SHEET_RESOURCE_ID: process.env.ZOHO_SHEET_RESOURCE_ID ? "set" : "MISSING",
-    ZOHO_SHEET_WORKSHEET_NAME: process.env.ZOHO_SHEET_WORKSHEET_NAME ?? "(default: Sheet1)",
     ZOHO_DOMAIN: process.env.ZOHO_DOMAIN ?? "(default: https://www.zohoapis.com)",
     ZOHO_SHEET_DOMAIN: process.env.ZOHO_SHEET_DOMAIN ?? "(auto-derived from ZOHO_DOMAIN)",
     ZOHO_ACCOUNTS_URL: process.env.ZOHO_ACCOUNTS_URL ?? "(default: https://accounts.zoho.com)",
