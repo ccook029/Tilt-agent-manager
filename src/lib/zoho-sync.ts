@@ -2,13 +2,15 @@
 // zoho-sync.ts — Sheet → Inventory stock reconciliation
 //
 // The master Zoho Sheet tracks individual sticks by serial number.
-// Zoho Inventory tracks stock at the SKU level (Level + Carbon combos).
+// Zoho Inventory tracks stock at the SKU level.
 //
-// This module:
-//   1. Reads individual sticks from the Sheet (Player + Goalie tabs)
-//   2. Aggregates them by Level + Carbon into stock groups
-//   3. Matches each group to a Zoho Inventory SKU
-//   4. Compares available counts and reports discrepancies
+// This module uses EXPLICIT SKU MAPPINGS to match each Zoho Inventory
+// stick SKU to a filter that counts matching sticks in the Sheet.
+//
+// SKU types:
+//   Player sticks:  matched by tab + level + carbon (+ size for EXT)
+//   Goalie sticks:  matched by tab + level (no carbon distinction)
+//   Tier 1 sticks:  matched by level only (no carbon distinction)
 //
 // The Sheet is the source of truth for stick stock levels.
 // Non-stick items (grips, apparel, accessories) live only in Inventory.
@@ -16,9 +18,7 @@
 
 import {
   fetchAllStickRecords,
-  aggregateStockGroups,
-  buildGroupKey,
-  type StockGroup,
+  type StickRecord,
 } from "./zoho-sheet";
 import {
   fetchAllItems,
@@ -28,46 +28,123 @@ import {
 
 // ---- Types ----------------------------------------------------------------
 
-export interface StockMatch {
-  group: StockGroup;
-  inventoryItem: ZohoItem;
+export interface SkuMatch {
+  sku: string;
+  name: string;
+  itemId: string;
   sheetCount: number;
   inventoryCount: number;
   difference: number;
 }
 
 export interface SyncDiff {
-  /** Groups that match an Inventory SKU and stock counts agree */
-  inSync: StockMatch[];
-  /** Groups that match an Inventory SKU but stock counts differ */
-  discrepancies: StockMatch[];
-  /** Sheet groups with no matching Inventory SKU */
-  unmatchedSheet: StockGroup[];
-  /** Stick-like Inventory items with no matching Sheet group */
-  unmatchedInventory: ZohoItem[];
-  /** Non-stick Inventory items (grips, apparel, etc.) — not in scope */
+  /** SKUs where sheet count matches inventory stock_on_hand */
+  inSync: SkuMatch[];
+  /** SKUs where sheet count differs from inventory stock_on_hand */
+  discrepancies: SkuMatch[];
+  /** Active stick SKUs in Inventory that have no mapping defined */
+  unmappedSkus: ZohoItem[];
+  /** Non-stick Inventory items — not in scope */
   nonStickItems: number;
+  /** Stick records from Sheet that didn't match any SKU filter */
+  unmatchedSticks: number;
+  /** Total available sticks counted from the Sheet */
+  totalSheetAvailable: number;
 }
 
-// ---- SKU matching ---------------------------------------------------------
+// ---- Explicit SKU → Sheet filter mapping ----------------------------------
 
 /**
- * Known SKU prefixes for non-stick product categories.
- * Items with these prefixes are NOT expected in the Sheet.
+ * Filter criteria for matching Sheet stick records to a Zoho Inventory SKU.
+ * Each SKU defines what sticks it represents.
  */
+interface SkuFilter {
+  /** Which tab(s) to look in. If omitted, checks all tabs. */
+  tab?: string;
+  /** Level value in the Sheet (normalized to uppercase). */
+  level?: string;
+  /** Carbon value in the Sheet (e.g. "18K"). If omitted, matches any carbon. */
+  carbon?: string;
+  /** Size filter: "standard" = ≤66", "ext" = >66". If omitted, matches any size. */
+  sizeClass?: "standard" | "ext";
+}
+
+/**
+ * Explicit mapping of every active Tilt stick SKU to its Sheet filter.
+ *
+ * Player sticks: Level + Carbon, split by size for Senior EXT variants
+ * Goalie sticks: Level only (from the Goalie tab)
+ * Tier 1: Level only
+ */
+const SKU_FILTERS: Record<string, SkuFilter> = {
+  // Player — Intermediate (all sizes)
+  "TILT-NSD-18":     { tab: "Player", level: "INTERMEDIATE", carbon: "18K" },
+  "TILT-NSD-24":     { tab: "Player", level: "INTERMEDIATE", carbon: "24K" },
+
+  // Player — Junior (all sizes)
+  "TILT-NSDI-18":    { tab: "Player", level: "JUNIOR", carbon: "18K" },
+  "TILT-NSDI-24":    { tab: "Player", level: "JUNIOR", carbon: "24K" },
+
+  // Player — Senior regular (63-66")
+  "TILT-NGSD-18":    { tab: "Player", level: "SENIOR", carbon: "18K", sizeClass: "standard" },
+  "TILT-NGSD-24":    { tab: "Player", level: "SENIOR", carbon: "24K", sizeClass: "standard" },
+
+  // Player — Senior EXT (over 66")
+  "TILT-NGSDEXT-18": { tab: "Player", level: "SENIOR", carbon: "18K", sizeClass: "ext" },
+  "TILT-NGSDEXT-24": { tab: "Player", level: "SENIOR", carbon: "24K", sizeClass: "ext" },
+
+  // Player — Tier 1 (any carbon)
+  "TILT-NSDI-TIER":  { tab: "Player", level: "TIER 1" },
+
+  // Goalie — by player level (any carbon)
+  "TILT-X1-G-INT":   { tab: "Goalie", level: "INTERMEDIATE" },
+  "TILT-X1-G-JR":    { tab: "Goalie", level: "JUNIOR" },
+  "TILT-X1-G-SR":    { tab: "Goalie", level: "SENIOR" },
+};
+
+/** Senior EXT size threshold: sticks over 66" are EXT. */
+const SENIOR_EXT_THRESHOLD = 66;
+
+/**
+ * Normalize a level string for matching.
+ */
+function normalizeLevel(raw: string): string {
+  const upper = raw.toUpperCase().trim();
+  if (upper.startsWith("INT")) return "INTERMEDIATE";
+  if (upper.startsWith("JR") || upper.startsWith("JUN")) return "JUNIOR";
+  if (upper.startsWith("SR") || upper.startsWith("SEN")) return "SENIOR";
+  if (upper.startsWith("GOAL")) return "GOALIE";
+  if (upper.startsWith("TIER")) return "TIER 1";
+  return upper;
+}
+
+/**
+ * Check if a stick record matches a SKU filter.
+ */
+function stickMatchesFilter(stick: StickRecord, filter: SkuFilter): boolean {
+  // Tab filter
+  if (filter.tab && stick.tab !== filter.tab) return false;
+
+  // Level filter
+  if (filter.level && normalizeLevel(stick.level) !== filter.level) return false;
+
+  // Carbon filter
+  if (filter.carbon && stick.carbon.toUpperCase().trim() !== filter.carbon) return false;
+
+  // Size class filter (for Senior standard vs EXT)
+  if (filter.sizeClass) {
+    if (filter.sizeClass === "ext" && stick.size <= SENIOR_EXT_THRESHOLD) return false;
+    if (filter.sizeClass === "standard" && stick.size > SENIOR_EXT_THRESHOLD) return false;
+  }
+
+  return true;
+}
+
+// ---- Non-stick SKU detection ----------------------------------------------
+
 const NON_STICK_PREFIXES = [
-  "GRIP-",
-  "T-S-",
-  "HOO-",
-  "HAT-",
-  "SOC-",
-  "BAG-",
-  "TOW-",
-  "BAN-",
-  "STI-",
-  "WAX-",
-  "TAP-",
-  "LAC-",
+  "GRIP-", "T-S-", "HOO-", "HAT-", "SOC-", "BAG-",
+  "TOW-", "BAN-", "STI-", "WAX-", "TAP-", "LAC-",
 ];
 
 function isNonStickSku(sku: string): boolean {
@@ -75,96 +152,57 @@ function isNonStickSku(sku: string): boolean {
   return NON_STICK_PREFIXES.some((prefix) => upper.startsWith(prefix));
 }
 
-/**
- * Try to match a Zoho Inventory item to a Level+Carbon group key.
- *
- * Strategy: check the item's name and SKU for level/carbon indicators.
- * For example:
- *   - Name "Intermediate 18K" → "INTERMEDIATE|18K"
- *   - SKU "INT-18K" → "INTERMEDIATE|18K"
- *   - Name "Junior 24K Carbon" → "JUNIOR|24K"
- */
-function inferGroupKey(item: ZohoItem): string | null {
-  const text = `${item.name} ${item.sku}`.toUpperCase();
-
-  // Detect level
-  let level = "";
-  if (/\bINT(?:ERMEDIATE)?\b/.test(text)) level = "INTERMEDIATE";
-  else if (/\bJR\b|\bJUN(?:IOR)?\b/.test(text)) level = "JUNIOR";
-  else if (/\bSR\b|\bSEN(?:IOR)?\b/.test(text)) level = "SENIOR";
-  else if (/\bGOAL(?:IE|TENDER)?\b/.test(text)) level = "GOALIE";
-  else if (/\bTIER\s*1\b/.test(text)) level = "TIER 1";
-
-  // Detect carbon
-  let carbon = "";
-  if (/\b18K\b/.test(text)) carbon = "18K";
-  else if (/\b24K\b/.test(text)) carbon = "24K";
-  else if (/\b12K\b/.test(text)) carbon = "12K";
-  else if (/\b30K\b/.test(text)) carbon = "30K";
-
-  if (level && carbon) {
-    return buildGroupKey(level, carbon);
-  }
-
-  return null;
-}
-
 // ---- Diff: compare sheet stock vs inventory -------------------------------
 
 /**
  * Compare the master sheet stick counts against Zoho Inventory.
+ * Uses explicit SKU filters for accurate matching.
  * Does NOT make any changes — read-only comparison.
  */
 export async function compareSheetToInventory(): Promise<SyncDiff> {
-  const [sticks, inventoryItems] = await Promise.all([
+  const [allSticks, inventoryItems] = await Promise.all([
     fetchAllStickRecords(),
     fetchAllItems(),
   ]);
 
-  const groups = aggregateStockGroups(sticks);
+  // Only count "Available" sticks
+  const availableSticks = allSticks.filter(
+    (s) => s.status.toLowerCase().trim() === "available"
+  );
 
-  // Build a map of group key → StockGroup
-  const groupByKey = new Map<string, StockGroup>();
-  for (const group of groups) {
-    groupByKey.set(group.groupKey, group);
+  // Index inventory items by SKU (uppercase)
+  const inventoryBySku = new Map<string, ZohoItem>();
+  for (const item of inventoryItems) {
+    if (item.sku) {
+      inventoryBySku.set(item.sku.toUpperCase(), item);
+    }
   }
 
-  // Try to match each inventory item to a group key
-  const matchedGroupKeys = new Set<string>();
-  const inSync: StockMatch[] = [];
-  const discrepancies: StockMatch[] = [];
-  const unmatchedInventory: ZohoItem[] = [];
-  let nonStickItems = 0;
+  // For each mapped SKU, count matching available sticks
+  const inSync: SkuMatch[] = [];
+  const discrepancies: SkuMatch[] = [];
+  const matchedSticks = new Set<number>(); // Track by row_index to avoid double-counting
 
-  for (const item of inventoryItems) {
-    if (!item.sku) continue;
+  for (const [sku, filter] of Object.entries(SKU_FILTERS)) {
+    const item = inventoryBySku.get(sku.toUpperCase());
+    if (!item) continue; // SKU not in Inventory — skip (shouldn't happen for active SKUs)
 
-    // Skip non-stick items
-    if (isNonStickSku(item.sku)) {
-      nonStickItems++;
-      continue;
+    // Count matching available sticks
+    let count = 0;
+    for (const stick of availableSticks) {
+      if (stickMatchesFilter(stick, filter)) {
+        count++;
+        matchedSticks.add(stick.row_index);
+      }
     }
 
-    const groupKey = inferGroupKey(item);
-    if (!groupKey) {
-      unmatchedInventory.push(item);
-      continue;
-    }
-
-    const group = groupByKey.get(groupKey);
-    if (!group) {
-      unmatchedInventory.push(item);
-      continue;
-    }
-
-    matchedGroupKeys.add(groupKey);
-
-    const match: StockMatch = {
-      group,
-      inventoryItem: item,
-      sheetCount: group.available,
+    const match: SkuMatch = {
+      sku: item.sku,
+      name: item.name,
+      itemId: item.item_id,
+      sheetCount: count,
       inventoryCount: item.stock_on_hand,
-      difference: group.available - item.stock_on_hand,
+      difference: count - item.stock_on_hand,
     };
 
     if (match.difference === 0) {
@@ -174,10 +212,33 @@ export async function compareSheetToInventory(): Promise<SyncDiff> {
     }
   }
 
-  // Sheet groups with no matching inventory item
-  const unmatchedSheet = groups.filter((g) => !matchedGroupKeys.has(g.groupKey));
+  // Find unmapped stick SKUs (active sticks in Inventory with no filter defined)
+  const mappedSkus = new Set(Object.keys(SKU_FILTERS).map((s) => s.toUpperCase()));
+  const unmappedSkus: ZohoItem[] = [];
+  let nonStickItems = 0;
 
-  return { inSync, discrepancies, unmatchedSheet, unmatchedInventory, nonStickItems };
+  for (const item of inventoryItems) {
+    if (!item.sku) continue;
+    const upper = item.sku.toUpperCase();
+    if (mappedSkus.has(upper)) continue;
+    if (isNonStickSku(item.sku)) {
+      nonStickItems++;
+      continue;
+    }
+    unmappedSkus.push(item);
+  }
+
+  // Count sticks that didn't match any filter
+  const unmatchedSticks = availableSticks.length - matchedSticks.size;
+
+  return {
+    inSync,
+    discrepancies,
+    unmappedSkus,
+    nonStickItems,
+    unmatchedSticks,
+    totalSheetAvailable: availableSticks.length,
+  };
 }
 
 // ---- Formatted output for prompt injection --------------------------------
@@ -189,17 +250,25 @@ export async function fetchSyncReport(): Promise<string> {
   try {
     const diff = await compareSheetToInventory();
 
+    const totalMatched = diff.inSync.length + diff.discrepancies.length;
+    const totalMappedCount = [...diff.inSync, ...diff.discrepancies].reduce(
+      (sum, m) => sum + m.sheetCount, 0
+    );
+
     const sections: string[] = [
       "## Sheet ↔ Inventory Stock Reconciliation Report",
       "",
-      "The master spreadsheet tracks individual sticks by serial number.",
-      "Stock counts are grouped by Level + Carbon and compared to Zoho Inventory SKUs.",
+      "Each Zoho Inventory stick SKU is matched to specific sticks in the Sheet",
+      "by tab, level, carbon, and size. Available stick counts are compared to stock_on_hand.",
       "",
-      `Matched & In Sync: ${diff.inSync.length} SKUs`,
-      `Stock Discrepancies: ${diff.discrepancies.length} SKUs`,
-      `Unmatched Sheet Groups (no Inventory SKU): ${diff.unmatchedSheet.length}`,
-      `Unmatched Inventory SKUs (no Sheet group): ${diff.unmatchedInventory.length}`,
-      `Non-Stick Items (grips, apparel, etc.): ${diff.nonStickItems} (not in scope)`,
+      `Total Available Sticks in Sheet: ${diff.totalSheetAvailable}`,
+      `Sticks Matched to SKUs: ${totalMappedCount}`,
+      `Unmatched Sticks: ${diff.unmatchedSticks}`,
+      "",
+      `SKUs In Sync: ${diff.inSync.length}`,
+      `SKUs With Discrepancies: ${diff.discrepancies.length}`,
+      `Unmapped Stick SKUs in Inventory: ${diff.unmappedSkus.length}`,
+      `Non-Stick Items (excluded): ${diff.nonStickItems}`,
     ];
 
     if (diff.discrepancies.length > 0) {
@@ -212,7 +281,7 @@ export async function fetchSyncReport(): Promise<string> {
       for (const m of diff.discrepancies) {
         const direction = m.difference > 0 ? "UNDER-COUNTED" : "OVER-COUNTED";
         sections.push(
-          `- **${m.inventoryItem.sku}** — ${m.inventoryItem.name}`,
+          `- **${m.sku}** — ${m.name}`,
           `  Sheet: ${m.sheetCount} available | Inventory: ${m.inventoryCount} on hand | Diff: ${m.difference > 0 ? "+" : ""}${m.difference} (${direction})`
         );
       }
@@ -223,30 +292,26 @@ export async function fetchSyncReport(): Promise<string> {
         "",
         "### In Sync",
         ...diff.inSync.map(
-          (m) => `- **${m.inventoryItem.sku}** — ${m.inventoryItem.name}: ${m.sheetCount} units ✓`
+          (m) => `- **${m.sku}** — ${m.name}: ${m.sheetCount} units ✓`
         )
       );
     }
 
-    if (diff.unmatchedSheet.length > 0) {
+    if (diff.unmatchedSticks > 0) {
       sections.push(
         "",
-        "### Sheet Groups Without Inventory SKU",
-        "These Level+Carbon combinations exist in the Sheet but could not be matched to any Zoho Inventory item.",
-        "Action: Create the corresponding SKU in Zoho Inventory or update the SKU name to include Level + Carbon.",
-        ...diff.unmatchedSheet.map(
-          (g) => `- **${g.level} ${g.carbon}** — ${g.available} available sticks (${g.availableSerials.length} serials)`
-        )
+        `### ⚠️ ${diff.unmatchedSticks} Available Sticks Not Matched to Any SKU`,
+        "These sticks exist in the Sheet but didn't match any SKU filter.",
+        "This may indicate new levels, carbons, or size ranges that need mapping."
       );
     }
 
-    if (diff.unmatchedInventory.length > 0) {
+    if (diff.unmappedSkus.length > 0) {
       sections.push(
         "",
-        "### Stick SKUs Without Sheet Match",
-        "These Inventory items look like sticks but could not be matched to a Sheet group.",
-        "This may mean the SKU name/description doesn't contain recognizable Level + Carbon info.",
-        ...diff.unmatchedInventory.map(
+        "### Unmapped Inventory SKUs",
+        "These stick-like SKUs have no mapping defined. They may be legacy/discontinued.",
+        ...diff.unmappedSkus.map(
           (i) => `- **${i.sku}** — ${i.name} (stock: ${i.stock_on_hand})`
         )
       );
@@ -281,16 +346,15 @@ export interface AdjustmentResult {
  * the master spreadsheet's available stick counts.
  *
  * Creates a single Zoho Inventory Adjustment with one line item per
- * discrepant SKU. Only adjusts matched SKUs with differences — does
- * not create new items or touch unmatched/non-stick SKUs.
+ * discrepant SKU. Only adjusts mapped SKUs with differences.
  */
 export async function applyStockAdjustments(): Promise<string> {
   const diff = await compareSheetToInventory();
 
   if (diff.discrepancies.length === 0) {
     const msg = diff.inSync.length > 0
-      ? `All ${diff.inSync.length} matched stick SKUs are already in sync.`
-      : "No matched SKUs found to adjust.";
+      ? `All ${diff.inSync.length} mapped stick SKUs are already in sync.`
+      : "No mapped SKUs found to adjust.";
 
     const sections = [
       "## Sheet → Inventory Sync: No Adjustments Needed",
@@ -298,11 +362,8 @@ export async function applyStockAdjustments(): Promise<string> {
       msg,
     ];
 
-    if (diff.unmatchedSheet.length > 0) {
-      sections.push(`\n${diff.unmatchedSheet.length} Sheet groups have no matching Inventory SKU — these need to be created manually.`);
-    }
-    if (diff.unmatchedInventory.length > 0) {
-      sections.push(`${diff.unmatchedInventory.length} Inventory stick SKUs couldn't be matched to a Sheet group.`);
+    if (diff.unmatchedSticks > 0) {
+      sections.push(`\n⚠️ ${diff.unmatchedSticks} available sticks in the Sheet didn't match any SKU filter.`);
     }
 
     return sections.join("\n");
@@ -310,7 +371,7 @@ export async function applyStockAdjustments(): Promise<string> {
 
   // Build line items for the adjustment
   const lineItems = diff.discrepancies.map((m) => ({
-    item_id: m.inventoryItem.item_id,
+    item_id: m.itemId,
     quantity_adjusted: m.difference,
   }));
 
@@ -324,7 +385,7 @@ export async function applyStockAdjustments(): Promise<string> {
   try {
     const adjustment = await createInventoryAdjustment({
       date: today,
-      reason: `Sheet reconciliation sync — ${diff.discrepancies.length} SKUs adjusted to match master spreadsheet (${today})`,
+      reason: `Sheet reconciliation — ${diff.discrepancies.length} SKUs adjusted to match master spreadsheet (${today})`,
       line_items: lineItems,
     });
 
@@ -332,8 +393,8 @@ export async function applyStockAdjustments(): Promise<string> {
 
     for (const m of diff.discrepancies) {
       result.adjusted.push({
-        sku: m.inventoryItem.sku,
-        name: m.inventoryItem.name,
+        sku: m.sku,
+        name: m.name,
         from: m.inventoryCount,
         to: m.sheetCount,
         diff: m.difference,
@@ -346,8 +407,8 @@ export async function applyStockAdjustments(): Promise<string> {
 
     for (const m of diff.discrepancies) {
       result.adjusted.push({
-        sku: m.inventoryItem.sku,
-        name: m.inventoryItem.name,
+        sku: m.sku,
+        name: m.name,
         from: m.inventoryCount,
         to: m.sheetCount,
         diff: m.difference,
@@ -365,9 +426,11 @@ export async function applyStockAdjustments(): Promise<string> {
 
   if (result.adjustmentId) {
     const successCount = result.adjusted.filter((a) => a.success).length;
+    const totalUnits = result.adjusted.reduce((sum, a) => sum + Math.abs(a.diff), 0);
     sections.push(
       `Adjustment ID: ${result.adjustmentId}`,
       `SKUs Adjusted: ${successCount}/${result.adjusted.length}`,
+      `Total Units Adjusted: ${totalUnits}`,
       `Errors: ${result.errors.length}`,
       "",
       "### Adjustments Applied"
@@ -393,13 +456,10 @@ export async function applyStockAdjustments(): Promise<string> {
     }
   }
 
-  if (diff.unmatchedSheet.length > 0) {
+  if (diff.unmatchedSticks > 0) {
     sections.push(
       "",
-      "### Still Unmatched (Manual Action Needed)",
-      ...diff.unmatchedSheet.map(
-        (g) => `- **${g.level} ${g.carbon}** — ${g.available} available sticks (no Inventory SKU exists)`
-      )
+      `⚠️ ${diff.unmatchedSticks} available sticks in the Sheet didn't match any SKU filter — may need new mappings.`
     );
   }
 
