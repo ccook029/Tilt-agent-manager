@@ -177,9 +177,12 @@ const COLUMN_MAP: Record<string, keyof StickRecord> = {
   "serial number": "serial_number",
   "serial": "serial_number",
   "serial #": "serial_number",
+  "sku": "serial_number",           // Goalie tab uses "SKU" as the stick identifier
   status: "status",
   "date sold": "date_sold",
   "sold date": "date_sold",
+  "paddle": "size",                 // Goalie tab: paddle size (inches)
+  "graphic color": "decal_color",   // Goalie tab: graphic color → decal_color
 };
 
 function normalizeColumn(col: string): keyof StickRecord | null {
