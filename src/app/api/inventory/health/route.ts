@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { getAccessToken } from "@/lib/zoho";
 import { fetchAllStickRecords, fetchSheetRows } from "@/lib/zoho-sheet";
 import { fetchAllItems } from "@/lib/zoho";
+import { compareSheetToInventory } from "@/lib/zoho-sync";
 
 interface Check {
   status: "ok" | "error";
@@ -105,12 +106,40 @@ export async function GET() {
     checks.sheet = { status: "error", message: msg, durationMs: Date.now() - sheetStart };
   }
 
+  // 4. Sync comparison debug — run the actual comparison logic
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let syncDebug: Record<string, any> = {};
+  try {
+    const diff = await compareSheetToInventory();
+    syncDebug = {
+      totalSheetAvailable: diff.totalSheetAvailable,
+      unmatchedSticks: diff.unmatchedSticks,
+      inSync: diff.inSync.map((m) => ({
+        sku: m.sku,
+        sheetCount: m.sheetCount,
+        inventoryCount: m.inventoryCount,
+      })),
+      discrepancies: diff.discrepancies.map((m) => ({
+        sku: m.sku,
+        sheetCount: m.sheetCount,
+        inventoryCount: m.inventoryCount,
+        difference: m.difference,
+      })),
+      unmappedSkus: diff.unmappedSkus.map((i) => i.sku),
+      nonStickItems: diff.nonStickItems,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    syncDebug = { error: msg };
+  }
+
   const healthy = Object.values(checks).every((c) => c.status === "ok");
 
   return NextResponse.json({
     healthy,
     checks,
     tabDiagnostics,
+    syncDebug,
     env: envSummary(),
   });
 }
