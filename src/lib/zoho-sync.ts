@@ -93,6 +93,7 @@ function inferGroupKey(item: ZohoItem): string | null {
   else if (/\bJR\b|\bJUN(?:IOR)?\b/.test(text)) level = "JUNIOR";
   else if (/\bSR\b|\bSEN(?:IOR)?\b/.test(text)) level = "SENIOR";
   else if (/\bGOAL(?:IE|TENDER)?\b/.test(text)) level = "GOALIE";
+  else if (/\bTIER\s*1\b/.test(text)) level = "TIER 1";
 
   // Detect carbon
   let carbon = "";

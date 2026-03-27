@@ -272,6 +272,7 @@ function normalizeLevel(raw: string): string {
   if (upper.startsWith("JR") || upper.startsWith("JUN")) return "JUNIOR";
   if (upper.startsWith("SR") || upper.startsWith("SEN")) return "SENIOR";
   if (upper.startsWith("GOAL")) return "GOALIE";
+  if (upper.startsWith("TIER")) return "TIER 1";
   return upper;
 }
 
