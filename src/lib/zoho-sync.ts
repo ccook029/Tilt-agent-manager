@@ -385,7 +385,7 @@ export async function applyStockAdjustments(): Promise<string> {
   try {
     const adjustment = await createInventoryAdjustment({
       date: today,
-      reason: `Sheet reconciliation — ${diff.discrepancies.length} SKUs adjusted to match master spreadsheet (${today})`,
+      reason: `Sheet sync ${today} (${diff.discrepancies.length} SKUs)`,
       line_items: lineItems,
     });
 
