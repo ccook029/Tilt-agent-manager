@@ -467,3 +467,64 @@ export async function applyStockAdjustments(): Promise<string> {
 
   return sections.join("\n");
 }
+
+// ---- Zero out negative stock -----------------------------------------------
+
+/**
+ * Find all Zoho Inventory items with negative stock_on_hand and adjust to 0.
+ */
+export async function zeroNegativeStock(): Promise<string> {
+  const items = await fetchAllItems();
+  const negativeItems = items.filter((i) => i.stock_on_hand < 0);
+
+  if (negativeItems.length === 0) {
+    return "## No Negative Stock Found\n\nAll items have stock_on_hand >= 0. No adjustments needed.";
+  }
+
+  const lineItems = negativeItems.map((item) => ({
+    item_id: item.item_id,
+    quantity_adjusted: -item.stock_on_hand, // e.g. stock is -3, adjust by +3 to reach 0
+  }));
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    const adjustment = await createInventoryAdjustment({
+      date: today,
+      reason: `Zero negative stock ${today}`,
+      line_items: lineItems,
+    });
+
+    const sections = [
+      "## Negative Stock Zeroed Out",
+      "",
+      `Adjustment ID: ${adjustment.inventory_adjustment_id}`,
+      `Items Fixed: ${negativeItems.length}`,
+      "",
+      "### Adjustments Applied",
+    ];
+
+    for (const item of negativeItems) {
+      sections.push(
+        `- **${item.sku}** — ${item.name}: ${item.stock_on_hand} → 0 (+${-item.stock_on_hand})`
+      );
+    }
+
+    return sections.join("\n");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const sections = [
+      "## ❌ Failed to Zero Negative Stock",
+      "",
+      `Error: ${msg}`,
+      "",
+      "### Items That Need Adjustment",
+    ];
+    for (const item of negativeItems) {
+      sections.push(
+        `- **${item.sku}** — ${item.name}: ${item.stock_on_hand} → 0`
+      );
+    }
+    return sections.join("\n");
+  }
+}

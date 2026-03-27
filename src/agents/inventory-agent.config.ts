@@ -241,6 +241,16 @@ Produce:
 5. RECOMMENDED INVENTORY ADJUSTMENTS — specific adjustment quantities for Jeremy to approve
 6. NEXT STEPS — prioritized action items`,
 
+    "zero-negative": `Review the results of zeroing out negative stock levels in Zoho Inventory.
+
+{{context}}
+
+Produce:
+1. SUMMARY — how many items were adjusted, total units corrected
+2. DETAILS — list each adjusted SKU with before/after values
+3. ROOT CAUSE NOTES — possible reasons items had negative stock (overselling, adjustment errors, returns not processed)
+4. RECOMMENDATIONS — steps to prevent negative stock in the future`,
+
     "sheet-sync": `Analyze the Sheet ↔ Inventory stock reconciliation data below. The Sheet tracks individual sticks by serial number, grouped by Level + Carbon.
 
 {{context}}

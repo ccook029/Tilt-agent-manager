@@ -16,7 +16,7 @@ import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import { fetchInventorySnapshot } from "@/lib/zoho";
 import { fetchSheetSnapshot } from "@/lib/zoho-sheet";
-import { fetchSyncReport, applyStockAdjustments } from "@/lib/zoho-sync";
+import { fetchSyncReport, applyStockAdjustments, zeroNegativeStock } from "@/lib/zoho-sync";
 import agentConfig from "@/agents/inventory-agent.config";
 
 export const maxDuration = 300;
@@ -29,6 +29,7 @@ const TASK_LABELS: Record<string, string> = {
   "inventory-reconciliation": "Inventory Reconciliation",
   "sheet-reconciliation": "Sheet ↔ Inventory Reconciliation",
   "sheet-sync": "Sheet → Inventory Sync",
+  "zero-negative": "Zero Negative Stock",
 };
 
 export async function POST(request: NextRequest) {
@@ -63,7 +64,17 @@ export async function POST(request: NextRequest) {
     // Fetch data based on task type
     let fullContext: string;
 
-    if (task === "sheet-sync") {
+    if (task === "zero-negative") {
+      // Zero out all negative stock_on_hand values
+      const result = await zeroNegativeStock();
+      fullContext = [
+        "## Zero Negative Stock Results",
+        result,
+        context ? `\n## Additional Context\n${context}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    } else if (task === "sheet-sync") {
       // Apply stock adjustments — correct Inventory stock_on_hand to match the Sheet
       const syncResult = await applyStockAdjustments();
       fullContext = [
