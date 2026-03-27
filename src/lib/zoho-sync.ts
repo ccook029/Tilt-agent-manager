@@ -142,14 +142,9 @@ function stickMatchesFilter(stick: StickRecord, filter: SkuFilter): boolean {
 
 // ---- Non-stick SKU detection ----------------------------------------------
 
-const NON_STICK_PREFIXES = [
-  "GRIP-", "T-S-", "HOO-", "HAT-", "SOC-", "BAG-",
-  "TOW-", "BAN-", "STI-", "WAX-", "TAP-", "LAC-",
-];
-
+/** All Tilt stick SKUs start with "TILT-". Everything else is non-stick. */
 function isNonStickSku(sku: string): boolean {
-  const upper = sku.toUpperCase();
-  return NON_STICK_PREFIXES.some((prefix) => upper.startsWith(prefix));
+  return !sku.toUpperCase().startsWith("TILT-");
 }
 
 // ---- Diff: compare sheet stock vs inventory -------------------------------
@@ -181,7 +176,7 @@ export async function compareSheetToInventory(): Promise<SyncDiff> {
   // For each mapped SKU, count matching available sticks
   const inSync: SkuMatch[] = [];
   const discrepancies: SkuMatch[] = [];
-  const matchedSticks = new Set<number>(); // Track by row_index to avoid double-counting
+  const matchedSticks = new Set<string>(); // Track by tab+row_index to avoid cross-tab collisions
 
   for (const [sku, filter] of Object.entries(SKU_FILTERS)) {
     const item = inventoryBySku.get(sku.toUpperCase());
@@ -192,7 +187,7 @@ export async function compareSheetToInventory(): Promise<SyncDiff> {
     for (const stick of availableSticks) {
       if (stickMatchesFilter(stick, filter)) {
         count++;
-        matchedSticks.add(stick.row_index);
+        matchedSticks.add(`${stick.tab}:${stick.row_index}`);
       }
     }
 
