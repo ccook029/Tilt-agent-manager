@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 import { NextResponse } from "next/server";
 import { getAccessToken } from "@/lib/zoho";
-import { fetchAllStickRecords } from "@/lib/zoho-sheet";
+import { fetchAllStickRecords, fetchSheetRows } from "@/lib/zoho-sheet";
 import { fetchAllItems } from "@/lib/zoho";
 
 interface Check {
@@ -52,13 +52,52 @@ export async function GET() {
     checks.inventory = { status: "error", message: msg, durationMs: Date.now() - invStart };
   }
 
-  // 3. Zoho Sheet API
+  // 3. Zoho Sheet API — with per-tab diagnostics
   const sheetStart = Date.now();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tabDiagnostics: Record<string, any> = {};
   try {
     const sticks = await fetchAllStickRecords();
+
+    // Per-tab breakdown
+    const playerSticks = sticks.filter((s) => s.tab === "Player");
+    const goalieSticks = sticks.filter((s) => s.tab === "Goalie");
+    const playerAvailable = playerSticks.filter((s) => s.status.toLowerCase().trim() === "available").length;
+    const goalieAvailable = goalieSticks.filter((s) => s.status.toLowerCase().trim() === "available").length;
+
+    tabDiagnostics.player = {
+      totalRecords: playerSticks.length,
+      available: playerAvailable,
+      sampleLevels: [...new Set(playerSticks.slice(0, 50).map((s) => s.level))],
+    };
+    tabDiagnostics.goalie = {
+      totalRecords: goalieSticks.length,
+      available: goalieAvailable,
+      sampleLevels: [...new Set(goalieSticks.slice(0, 50).map((s) => s.level))],
+      sampleStatuses: [...new Set(goalieSticks.map((s) => s.status))],
+    };
+
+    // Fetch raw Goalie rows to show column names
+    try {
+      const rawGoalieRows = await fetchSheetRows("Goalie");
+      tabDiagnostics.goalie.rawRowCount = rawGoalieRows.length;
+      tabDiagnostics.goalie.columnNames = rawGoalieRows.length > 0
+        ? Object.keys(rawGoalieRows[0]).filter((k) => k !== "row_index")
+        : [];
+      // First 3 raw rows for debugging
+      tabDiagnostics.goalie.sampleRawRows = rawGoalieRows.slice(0, 3).map((row) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const clean: Record<string, any> = {};
+        for (const [k, v] of Object.entries(row)) {
+          if (k !== "row_index") clean[k] = v;
+        }
+        return clean;
+      });
+    } catch { /* ignore, main check already covers this */ }
+
     checks.sheet = {
       status: "ok",
-      message: `Connected — ${sticks.length} stick records found (Player + Goalie tabs)`,
+      message: `Connected — ${sticks.length} stick records (Player: ${playerSticks.length}, Goalie: ${goalieSticks.length})`,
       durationMs: Date.now() - sheetStart,
     };
   } catch (err) {
@@ -71,6 +110,7 @@ export async function GET() {
   return NextResponse.json({
     healthy,
     checks,
+    tabDiagnostics,
     env: envSummary(),
   });
 }
