@@ -1,15 +1,15 @@
 // GET /api/hq-metrics — JSON summary for Master HQ dashboard
 //
 // Returns current month and previous month numbers for:
-//   - revenue (from Zoho Sales Orders)
+//   - revenue (from Zoho Books paid invoices — NOT sales orders)
 //   - site visits (GA4 sessions)
-//   - inquiries (GA4 conversions)
+//   - inquiries (0 until a real source is wired up)
 //   - sticks sold this week vs last week (from Zoho Sales Orders line items)
 //
 // Publicly accessible, no auth required.
 
 import { NextResponse } from "next/server";
-import { fetchRecentSalesOrders } from "@/lib/zoho";
+import { fetchPaidInvoices, fetchRecentSalesOrders } from "@/lib/zoho";
 import { fetchGA4Metrics, type GA4DateRange } from "@/lib/ga4";
 
 export const maxDuration = 60;
@@ -55,34 +55,39 @@ export async function GET() {
   const previousRange = monthRange(prevYear, prevMonth);
 
   // Fetch all data sources in parallel — each is optional
-  const [zohoResult, ga4CurrentResult, ga4PreviousResult] =
-    await Promise.allSettled([
-      fetchRecentSalesOrders(62), // ~2 months of orders
-      fetchGA4Metrics(currentRange),
-      fetchGA4Metrics(previousRange),
-    ]);
+  const [
+    currentInvoicesResult,
+    previousInvoicesResult,
+    salesOrdersResult,
+    ga4CurrentResult,
+    ga4PreviousResult,
+  ] = await Promise.allSettled([
+    fetchPaidInvoices(currentRange.startDate, currentRange.endDate),
+    fetchPaidInvoices(previousRange.startDate, previousRange.endDate),
+    fetchRecentSalesOrders(62), // for weekly sticks sold
+    fetchGA4Metrics(currentRange),
+    fetchGA4Metrics(previousRange),
+  ]);
 
-  // --- Revenue from Zoho Sales Orders ---
+  // --- Revenue from Zoho Books PAID invoices only ---
   let currentRevenue = 0;
   let previousRevenue = 0;
   let revenueError: string | undefined;
 
-  if (zohoResult.status === "fulfilled") {
-    const orders = zohoResult.value;
-    const currentStart = currentRange.startDate;
-    const currentEnd = currentRange.endDate;
-    const prevStart = previousRange.startDate;
-    const prevEnd = previousRange.endDate;
-
-    for (const order of orders) {
-      if (order.date >= currentStart && order.date <= currentEnd) {
-        currentRevenue += order.total;
-      } else if (order.date >= prevStart && order.date <= prevEnd) {
-        previousRevenue += order.total;
-      }
+  if (currentInvoicesResult.status === "fulfilled") {
+    for (const inv of currentInvoicesResult.value) {
+      currentRevenue += inv.total;
     }
   } else {
-    revenueError = zohoResult.reason?.message ?? "Failed to fetch sales orders";
+    revenueError = currentInvoicesResult.reason?.message ?? "Failed to fetch invoices";
+  }
+
+  if (previousInvoicesResult.status === "fulfilled") {
+    for (const inv of previousInvoicesResult.value) {
+      previousRevenue += inv.total;
+    }
+  } else {
+    revenueError = revenueError ?? previousInvoicesResult.reason?.message ?? "Failed to fetch invoices";
   }
 
   // --- Weekly sticks sold from Zoho Sales Orders line items ---
@@ -94,8 +99,8 @@ export async function GET() {
   let currentWeekSticks = 0;
   let previousWeekSticks = 0;
 
-  if (zohoResult.status === "fulfilled") {
-    for (const order of zohoResult.value) {
+  if (salesOrdersResult.status === "fulfilled") {
+    for (const order of salesOrdersResult.value) {
       const inCurrentWeek = order.date >= thisWeek.start && order.date <= thisWeek.end;
       const inPreviousWeek = order.date >= lastWeek.start && order.date <= lastWeek.end;
 
@@ -110,27 +115,26 @@ export async function GET() {
     }
   }
 
-  // --- Site visits & inquiries from GA4 ---
+  // --- Site visits from GA4 ---
   let currentVisits = 0;
-  let currentInquiries = 0;
   let previousVisits = 0;
-  let previousInquiries = 0;
   let ga4Error: string | undefined;
 
   if (ga4CurrentResult.status === "fulfilled") {
     currentVisits = ga4CurrentResult.value.sessions;
-    currentInquiries = ga4CurrentResult.value.conversions;
   } else {
     ga4Error = ga4CurrentResult.reason?.message ?? "Failed to fetch GA4 data";
   }
 
   if (ga4PreviousResult.status === "fulfilled") {
     previousVisits = ga4PreviousResult.value.sessions;
-    previousInquiries = ga4PreviousResult.value.conversions;
   } else {
-    ga4Error =
-      ga4Error ?? ga4PreviousResult.reason?.message ?? "Failed to fetch GA4 data";
+    ga4Error = ga4Error ?? ga4PreviousResult.reason?.message ?? "Failed to fetch GA4 data";
   }
+
+  // --- Inquiries: no real source yet, return 0 ---
+  const currentInquiries = 0;
+  const previousInquiries = 0;
 
   // --- Build response ---
   const monthNames = [
@@ -172,9 +176,7 @@ export async function GET() {
       siteVisits: previousVisits > 0
         ? Math.round(((currentVisits - previousVisits) / previousVisits) * 1000) / 10
         : null,
-      inquiries: previousInquiries > 0
-        ? Math.round(((currentInquiries - previousInquiries) / previousInquiries) * 1000) / 10
-        : null,
+      inquiries: null,
     },
     errors: [
       ...(revenueError ? [{ source: "zoho", message: revenueError }] : []),

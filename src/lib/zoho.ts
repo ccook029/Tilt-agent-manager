@@ -113,6 +113,90 @@ async function zohoGet<T>(
   return res.json() as Promise<T>;
 }
 
+// ---- Zoho Books API helper ------------------------------------------------
+
+async function zohoBooks<T>(
+  path: string,
+  params?: Record<string, string>
+): Promise<T> {
+  const token = await getAccessToken();
+  const orgId = getEnvOrThrow("ZOHO_ORGANIZATION_ID");
+  const domain = process.env.ZOHO_DOMAIN ?? "https://www.zohoapis.com";
+
+  const url = new URL(`${domain}/books/v3${path}`);
+  url.searchParams.set("organization_id", orgId);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, v);
+    }
+  }
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Zoho-oauthtoken ${token}` },
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    if (res.status === 401 || res.status === 403) cachedToken = null;
+    throw new Error(`Zoho Books ${path} failed (${res.status}): ${body}`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+// ---- Zoho Books: Paid Invoices -------------------------------------------
+
+export interface ZohoInvoice {
+  invoice_id: string;
+  invoice_number: string;
+  customer_name: string;
+  status: string;
+  total: number;
+  date: string; // YYYY-MM-DD
+}
+
+interface ZohoInvoicesResponse {
+  invoices: ZohoInvoice[];
+  page_context: {
+    page: number;
+    per_page: number;
+    has_more_page: boolean;
+    total: number;
+  };
+}
+
+/**
+ * Fetch paid invoices from Zoho Books for a given date range.
+ * Only returns invoices with status "paid".
+ */
+export async function fetchPaidInvoices(
+  startDate: string,
+  endDate: string
+): Promise<ZohoInvoice[]> {
+  const allInvoices: ZohoInvoice[] = [];
+  let page = 1;
+
+  while (true) {
+    const res = await zohoBooks<ZohoInvoicesResponse>("/invoices", {
+      page: String(page),
+      per_page: "200",
+      status: "paid",
+      date_start: startDate,
+      date_end: endDate,
+      sort_column: "date",
+      sort_order: "D",
+    });
+
+    allInvoices.push(...(res.invoices ?? []));
+
+    if (!res.page_context?.has_more_page) break;
+    page++;
+    if (page > 10) break;
+  }
+
+  return allInvoices;
+}
+
 // ---- Zoho Inventory types (partial, relevant fields) ----------------------
 
 export interface ZohoItem {
