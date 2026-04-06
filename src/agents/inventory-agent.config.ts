@@ -251,6 +251,44 @@ Produce:
 3. ROOT CAUSE NOTES — possible reasons items had negative stock (overselling, adjustment errors, returns not processed)
 4. RECOMMENDATIONS — steps to prevent negative stock in the future`,
 
+    "factory-reorder": `You are Stockton Ledger, Director of Inventory Operations at Tilt Hockey. Generate a biweekly factory reorder recommendation.
+
+The data below contains current stock levels, sales velocity (14-day and 30-day), custom orders from the "Custom Player Sticks" and "Custom Goalie Sticks" tabs in the master spreadsheet, and open purchase orders already in the pipeline.
+
+{{context}}
+
+ORDERING RULES:
+- Target approximately 25 TOTAL sticks per factory order (this is the standard biweekly order size)
+- Custom orders from the Custom tabs MUST be included — these are committed orders for specific customers
+- After accounting for custom orders, fill the remaining slots with replenishment stock
+- Replenishment priorities:
+  1. SKUs that sold the most in the last 14 days (replace what was sold)
+  2. SKUs with low available stock relative to their velocity
+  3. Maintain reasonable distribution across SKUs — don't let any popular SKU go to zero
+- Subtract open PO quantities (sticks already ordered but not yet received) from replenishment needs
+- Do NOT order SKUs that already have excess inventory relative to their sales velocity
+
+Produce:
+1. EXECUTIVE SUMMARY (3-5 bullets — the "need to know" for Jeremy and Chris)
+2. RECOMMENDED FACTORY ORDER
+   | SKU | Product | Qty | Reason | Unit Cost | Line Total |
+   - Clearly separate custom orders vs. replenishment stock in the table
+   - Show the total stick count and total estimated cost
+3. CUSTOM ORDER DETAILS
+   List each custom stick with its full specs (level, size, carbon, hand, flex, curve)
+   These are non-negotiable — they MUST be in the order
+4. REPLENISHMENT RATIONALE
+   For each replenishment SKU, explain: how many were sold, current stock, why this qty
+5. SKUs NOT ORDERED (and why)
+   Brief note on SKUs excluded from this order (adequate stock, low velocity, etc.)
+6. OPEN POs IN PIPELINE
+   Summarize what's already on the way so Jeremy can see the full picture
+7. INVENTORY HEALTH SNAPSHOT
+   Quick overview: total available stock, burn rate, estimated weeks of supply
+
+NOTE: This is a RECOMMENDATION only. All factory orders require Jeremy Elliott's approval.
+Today's date: {{date}}`,
+
     "sheet-sync": `Analyze the Sheet ↔ Inventory stock reconciliation data below. The Sheet tracks individual sticks by serial number, grouped by Level + Carbon.
 
 {{context}}

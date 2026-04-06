@@ -17,6 +17,7 @@ import { generateReportPDF } from "@/lib/pdf";
 import { fetchInventorySnapshot } from "@/lib/zoho";
 import { fetchSheetSnapshot } from "@/lib/zoho-sheet";
 import { fetchSyncReport, applyStockAdjustments, zeroNegativeStock } from "@/lib/zoho-sync";
+import { fetchFactoryReorderData } from "@/lib/factory-reorder";
 import agentConfig from "@/agents/inventory-agent.config";
 
 export const maxDuration = 300;
@@ -30,7 +31,20 @@ const TASK_LABELS: Record<string, string> = {
   "sheet-reconciliation": "Sheet ↔ Inventory Reconciliation",
   "sheet-sync": "Sheet → Inventory Sync",
   "zero-negative": "Zero Negative Stock",
+  "factory-reorder": "Factory Reorder Recommendation",
 };
+
+export async function GET(request: NextRequest) {
+  // Convenience GET handler — triggers factory-reorder by default
+  const task = request.nextUrl.searchParams.get("task") ?? "factory-reorder";
+  const fakeBody = { task, context: "", email: true };
+  const fakeRequest = new NextRequest(request.url, {
+    method: "POST",
+    body: JSON.stringify(fakeBody),
+    headers: { "Content-Type": "application/json" },
+  });
+  return POST(fakeRequest);
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -64,7 +78,16 @@ export async function POST(request: NextRequest) {
     // Fetch data based on task type
     let fullContext: string;
 
-    if (task === "zero-negative") {
+    if (task === "factory-reorder") {
+      // Compile reorder data from Sheet, Inventory, sales orders, and open POs
+      const reorderData = await fetchFactoryReorderData();
+      fullContext = [
+        reorderData,
+        context ? `\n## Additional Context\n${context}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    } else if (task === "zero-negative") {
       // Zero out all negative stock_on_hand values
       const result = await zeroNegativeStock();
       fullContext = [

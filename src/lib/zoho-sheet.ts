@@ -96,6 +96,9 @@ function getSheetApiBase(): string {
 /** Tabs to read for inventory counts. */
 const INVENTORY_TABS = ["Player", "Goalie"];
 
+/** Tabs that hold custom/special-order sticks. */
+const CUSTOM_TABS = ["Custom Player Sticks", "Custom Goalie Sticks"];
+
 /**
  * Fetch all rows from a specific worksheet tab.
  * Zoho Sheet API limits to 1000 rows per call, so we paginate.
@@ -257,6 +260,28 @@ export async function fetchAllStickRecords(): Promise<StickRecord[]> {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[zoho-sheet] Failed to read tab "${tab}":`, msg);
       throw new Error(`Failed to read "${tab}" tab: ${msg}`);
+    }
+  }
+
+  return allSticks;
+}
+
+/**
+ * Fetch and parse stick records from the Custom Player Sticks and Custom Goalie Sticks tabs.
+ * These represent custom/special orders that need to be included in factory orders.
+ */
+export async function fetchCustomStickRecords(): Promise<StickRecord[]> {
+  const allSticks: StickRecord[] = [];
+
+  for (const tab of CUSTOM_TABS) {
+    try {
+      const rows = await fetchSheetRows(tab);
+      const sticks = parseStickRecords(rows, tab);
+      allSticks.push(...sticks);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Custom tabs may not exist yet — warn but don't throw
+      console.warn(`[zoho-sheet] Could not read tab "${tab}":`, msg);
     }
   }
 
