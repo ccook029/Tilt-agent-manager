@@ -4,6 +4,7 @@
 //   - revenue (from Zoho Sales Orders)
 //   - site visits (GA4 sessions)
 //   - inquiries (GA4 conversions)
+//   - sticks sold this week vs last week (from Zoho Sales Orders line items)
 //
 // Publicly accessible, no auth required.
 
@@ -23,6 +24,23 @@ function monthRange(year: number, month: number): GA4DateRange {
   const start = new Date(year, month, 1);
   const end = new Date(year, month + 1, 0); // last day of month
   return { startDate: fmt(start), endDate: fmt(end) };
+}
+
+/** Get Monday–Sunday range for the week containing `date`. */
+function weekRange(date: Date): { start: string; end: string } {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=Sun, 1=Mon...
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { start: fmt(monday), end: fmt(sunday) };
+}
+
+/** Check if a SKU is a stick (all stick SKUs start with TILT-). */
+function isStickSku(sku: string): boolean {
+  return sku.toUpperCase().startsWith("TILT-");
 }
 
 export async function GET() {
@@ -67,6 +85,31 @@ export async function GET() {
     revenueError = zohoResult.reason?.message ?? "Failed to fetch sales orders";
   }
 
+  // --- Weekly sticks sold from Zoho Sales Orders line items ---
+  const thisWeek = weekRange(now);
+  const lastWeekDate = new Date(now);
+  lastWeekDate.setDate(lastWeekDate.getDate() - 7);
+  const lastWeek = weekRange(lastWeekDate);
+
+  let currentWeekSticks = 0;
+  let previousWeekSticks = 0;
+
+  if (zohoResult.status === "fulfilled") {
+    for (const order of zohoResult.value) {
+      const inCurrentWeek = order.date >= thisWeek.start && order.date <= thisWeek.end;
+      const inPreviousWeek = order.date >= lastWeek.start && order.date <= lastWeek.end;
+
+      if (inCurrentWeek || inPreviousWeek) {
+        for (const li of order.line_items ?? []) {
+          if (isStickSku(li.sku)) {
+            if (inCurrentWeek) currentWeekSticks += li.quantity;
+            if (inPreviousWeek) previousWeekSticks += li.quantity;
+          }
+        }
+      }
+    }
+  }
+
   // --- Site visits & inquiries from GA4 ---
   let currentVisits = 0;
   let currentInquiries = 0;
@@ -108,6 +151,19 @@ export async function GET() {
       revenue: Math.round(previousRevenue * 100) / 100,
       siteVisits: previousVisits,
       inquiries: previousInquiries,
+    },
+    sticksSold: {
+      currentWeek: {
+        label: `${thisWeek.start} – ${thisWeek.end}`,
+        total: currentWeekSticks,
+      },
+      previousWeek: {
+        label: `${lastWeek.start} – ${lastWeek.end}`,
+        total: previousWeekSticks,
+      },
+      change: previousWeekSticks > 0
+        ? Math.round(((currentWeekSticks - previousWeekSticks) / previousWeekSticks) * 1000) / 10
+        : null,
     },
     changes: {
       revenue: previousRevenue > 0
