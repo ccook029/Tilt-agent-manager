@@ -7,8 +7,8 @@ interface HqMetricsData {
   currentMonth: { label: string; revenue: number; siteVisits: number; inquiries: number };
   previousMonth: { label: string; revenue: number; siteVisits: number; inquiries: number };
   sticksSold: {
-    currentWeek: { label: string; total: number };
-    previousWeek: { label: string; total: number };
+    currentMonth: { label: string; total: number };
+    previousMonth: { label: string; total: number };
     change: number | null;
   };
   changes: { revenue: number | null; siteVisits: number | null; inquiries: number | null };
@@ -69,20 +69,20 @@ export default function HqMetrics() {
       <div className="px-8 pt-8 pb-6 border-b border-gray-800/40">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-medium uppercase tracking-wider text-gray-500">
-            Sticks Sold This Week
+            Sticks Sold This Month
           </span>
           <ChangeBadge value={data.sticksSold.change} />
         </div>
         <div className="flex items-baseline gap-3">
           <span className="text-5xl font-bold text-[#e4002b] tabular-nums tracking-tight">
-            {data.sticksSold.currentWeek.total}
+            {data.sticksSold.currentMonth.total}
           </span>
           <span className="text-sm text-gray-500">
-            vs {data.sticksSold.previousWeek.total} last week
+            vs {data.sticksSold.previousMonth.total} last month
           </span>
         </div>
         <p className="text-xs text-gray-600 mt-2">
-          {data.sticksSold.currentWeek.label}
+          {data.sticksSold.currentMonth.label}
         </p>
       </div>
 

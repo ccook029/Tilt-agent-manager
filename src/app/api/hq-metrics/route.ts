@@ -4,7 +4,7 @@
 //   - revenue (from Zoho Books paid invoices — NOT sales orders)
 //   - site visits (GA4 sessions)
 //   - inquiries (0 until a real source is wired up)
-//   - sticks sold this week vs last week (from Zoho Sales Orders line items)
+//   - sticks sold this month vs last month (from Zoho Sales Orders line items)
 //
 // Publicly accessible, no auth required.
 
@@ -24,18 +24,6 @@ function monthRange(year: number, month: number): GA4DateRange {
   const start = new Date(year, month, 1);
   const end = new Date(year, month + 1, 0); // last day of month
   return { startDate: fmt(start), endDate: fmt(end) };
-}
-
-/** Get Monday–Sunday range for the week containing `date`. */
-function weekRange(date: Date): { start: string; end: string } {
-  const d = new Date(date);
-  const day = d.getDay(); // 0=Sun, 1=Mon...
-  const diffToMonday = day === 0 ? -6 : 1 - day;
-  const monday = new Date(d);
-  monday.setDate(d.getDate() + diffToMonday);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  return { start: fmt(monday), end: fmt(sunday) };
 }
 
 /** Check if a SKU is a stick (all stick SKUs start with TILT-). */
@@ -90,25 +78,25 @@ export async function GET() {
     revenueError = revenueError ?? previousInvoicesResult.reason?.message ?? "Failed to fetch invoices";
   }
 
-  // --- Weekly sticks sold from Zoho Sales Orders line items ---
-  const thisWeek = weekRange(now);
-  const lastWeekDate = new Date(now);
-  lastWeekDate.setDate(lastWeekDate.getDate() - 7);
-  const lastWeek = weekRange(lastWeekDate);
-
-  let currentWeekSticks = 0;
-  let previousWeekSticks = 0;
+  // --- Monthly sticks sold from Zoho Sales Orders line items ---
+  let currentMonthSticks = 0;
+  let previousMonthSticks = 0;
 
   if (salesOrdersResult.status === "fulfilled") {
-    for (const order of salesOrdersResult.value) {
-      const inCurrentWeek = order.date >= thisWeek.start && order.date <= thisWeek.end;
-      const inPreviousWeek = order.date >= lastWeek.start && order.date <= lastWeek.end;
+    const curStart = currentRange.startDate;
+    const curEnd = currentRange.endDate;
+    const prvStart = previousRange.startDate;
+    const prvEnd = previousRange.endDate;
 
-      if (inCurrentWeek || inPreviousWeek) {
+    for (const order of salesOrdersResult.value) {
+      const inCurrent = order.date >= curStart && order.date <= curEnd;
+      const inPrevious = order.date >= prvStart && order.date <= prvEnd;
+
+      if (inCurrent || inPrevious) {
         for (const li of order.line_items ?? []) {
           if (isStickSku(li.sku)) {
-            if (inCurrentWeek) currentWeekSticks += li.quantity;
-            if (inPreviousWeek) previousWeekSticks += li.quantity;
+            if (inCurrent) currentMonthSticks += li.quantity;
+            if (inPrevious) previousMonthSticks += li.quantity;
           }
         }
       }
@@ -157,16 +145,16 @@ export async function GET() {
       inquiries: previousInquiries,
     },
     sticksSold: {
-      currentWeek: {
-        label: `${thisWeek.start} – ${thisWeek.end}`,
-        total: currentWeekSticks,
+      currentMonth: {
+        label: `${monthNames[currentMonth]} ${currentYear}`,
+        total: currentMonthSticks,
       },
-      previousWeek: {
-        label: `${lastWeek.start} – ${lastWeek.end}`,
-        total: previousWeekSticks,
+      previousMonth: {
+        label: `${monthNames[prevMonth]} ${prevYear}`,
+        total: previousMonthSticks,
       },
-      change: previousWeekSticks > 0
-        ? Math.round(((currentWeekSticks - previousWeekSticks) / previousWeekSticks) * 1000) / 10
+      change: previousMonthSticks > 0
+        ? Math.round(((currentMonthSticks - previousMonthSticks) / previousMonthSticks) * 1000) / 10
         : null,
     },
     changes: {
