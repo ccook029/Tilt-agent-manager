@@ -4,5 +4,15 @@
       "path": "/api/cron/run-agents",
       "schedule": "0 12 * * 1-5"
     }
+  ],
+  "headers": [
+    {
+      "source": "/api/hq-metrics",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
+      ]
+    }
   ]
 }
