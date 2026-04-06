@@ -168,7 +168,7 @@ Produce:
 
 {{context}}
 
-IMPORTANT: Only recommend ordering the 12 ACTIVE stick SKUs (TILT-NSD-*, TILT-NSDI-*, TILT-NGSD-*, TILT-NGSDEXT-*, TILT-NSDI-TIER, TILT-X1-G-*). Do NOT include any legacy/discontinued models (Canuck, Phenom, Beast, etc.).
+IMPORTANT: Only recommend ordering STICKS — the 12 active stick SKUs (TILT-NSD-*, TILT-NSDI-*, TILT-NGSD-*, TILT-NGSDEXT-*, TILT-NSDI-TIER, TILT-X1-G-*). Do NOT include any legacy/discontinued models (Canuck, Phenom, Beast, etc.). Do NOT include non-stick items (grips, apparel, accessories) — only sticks are ordered from the factory.
 
 Produce:
 1. PO Summary (supplier, total line items, estimated total cost)
