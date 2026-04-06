@@ -153,6 +153,13 @@ export interface ZohoInvoice {
   status: string;
   total: number;
   date: string; // YYYY-MM-DD
+  line_items: {
+    item_id: string;
+    name: string;
+    sku: string;
+    quantity: number;
+    rate: number;
+  }[];
 }
 
 interface ZohoInvoicesResponse {
@@ -166,10 +173,10 @@ interface ZohoInvoicesResponse {
 }
 
 /**
- * Fetch paid invoices from Zoho Inventory for a given date range.
- * Only returns invoices with status "paid".
+ * Fetch invoices from Zoho Inventory for a given date range.
+ * Excludes void and draft invoices.
  */
-export async function fetchPaidInvoices(
+export async function fetchInvoices(
   startDate: string,
   endDate: string
 ): Promise<ZohoInvoice[]> {
@@ -180,7 +187,6 @@ export async function fetchPaidInvoices(
     const res = await zohoGet<ZohoInvoicesResponse>("/invoices", {
       page: String(page),
       per_page: "200",
-      status: "paid",
       date_start: startDate,
       date_end: endDate,
       sort_column: "date",
@@ -194,7 +200,10 @@ export async function fetchPaidInvoices(
     if (page > 10) break;
   }
 
-  return allInvoices;
+  // Exclude void and draft — keep sent, paid, overdue, partially_paid, etc.
+  return allInvoices.filter(
+    (inv) => inv.status !== "void" && inv.status !== "draft"
+  );
 }
 
 // ---- Zoho Inventory types (partial, relevant fields) ----------------------

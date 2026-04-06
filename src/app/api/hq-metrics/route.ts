@@ -1,15 +1,15 @@
 // GET /api/hq-metrics — JSON summary for Master HQ dashboard
 //
 // Returns current month and previous month numbers for:
-//   - revenue (from Zoho Books paid invoices — NOT sales orders)
+//   - revenue (from Zoho Inventory invoices, excluding void/draft)
 //   - site visits (GA4 sessions)
 //   - inquiries (0 until a real source is wired up)
-//   - sticks sold this month vs last month (from Zoho Sales Orders line items)
+//   - sticks sold this month vs last month (TILT- SKUs from invoice line items)
 //
 // Publicly accessible, no auth required.
 
 import { NextResponse } from "next/server";
-import { fetchPaidInvoices, fetchRecentSalesOrders } from "@/lib/zoho";
+import { fetchInvoices } from "@/lib/zoho";
 import { fetchGA4Metrics, type GA4DateRange } from "@/lib/ga4";
 
 export const maxDuration = 60;
@@ -31,7 +31,7 @@ function fmt(d: Date): string {
 }
 
 /** Get the first and last day of a month (0-indexed month).
- *  If capToday is true, caps the end date to today (avoids future date errors in GA4). */
+ *  If capToday is provided, caps the end date to that date. */
 function monthRange(year: number, month: number, capToday?: Date): GA4DateRange {
   const start = new Date(year, month, 1);
   let end = new Date(year, month + 1, 0); // last day of month
@@ -59,25 +59,28 @@ export async function GET() {
   const [
     currentInvoicesResult,
     previousInvoicesResult,
-    salesOrdersResult,
     ga4CurrentResult,
     ga4PreviousResult,
   ] = await Promise.allSettled([
-    fetchPaidInvoices(currentRange.startDate, currentRange.endDate),
-    fetchPaidInvoices(previousRange.startDate, previousRange.endDate),
-    fetchRecentSalesOrders(62), // for weekly sticks sold
+    fetchInvoices(currentRange.startDate, currentRange.endDate),
+    fetchInvoices(previousRange.startDate, previousRange.endDate),
     fetchGA4Metrics(currentRange),
     fetchGA4Metrics(previousRange),
   ]);
 
-  // --- Revenue from Zoho Books PAID invoices only ---
+  // --- Revenue & sticks sold from invoices ---
   let currentRevenue = 0;
   let previousRevenue = 0;
+  let currentMonthSticks = 0;
+  let previousMonthSticks = 0;
   let revenueError: string | undefined;
 
   if (currentInvoicesResult.status === "fulfilled") {
     for (const inv of currentInvoicesResult.value) {
       currentRevenue += inv.total;
+      for (const li of inv.line_items ?? []) {
+        if (isStickSku(li.sku)) currentMonthSticks += li.quantity;
+      }
     }
   } else {
     revenueError = currentInvoicesResult.reason?.message ?? "Failed to fetch invoices";
@@ -86,34 +89,12 @@ export async function GET() {
   if (previousInvoicesResult.status === "fulfilled") {
     for (const inv of previousInvoicesResult.value) {
       previousRevenue += inv.total;
+      for (const li of inv.line_items ?? []) {
+        if (isStickSku(li.sku)) previousMonthSticks += li.quantity;
+      }
     }
   } else {
     revenueError = revenueError ?? previousInvoicesResult.reason?.message ?? "Failed to fetch invoices";
-  }
-
-  // --- Monthly sticks sold from Zoho Sales Orders line items ---
-  let currentMonthSticks = 0;
-  let previousMonthSticks = 0;
-
-  if (salesOrdersResult.status === "fulfilled") {
-    const curStart = currentRange.startDate;
-    const curEnd = currentRange.endDate;
-    const prvStart = previousRange.startDate;
-    const prvEnd = previousRange.endDate;
-
-    for (const order of salesOrdersResult.value) {
-      const inCurrent = order.date >= curStart && order.date <= curEnd;
-      const inPrevious = order.date >= prvStart && order.date <= prvEnd;
-
-      if (inCurrent || inPrevious) {
-        for (const li of order.line_items ?? []) {
-          if (isStickSku(li.sku)) {
-            if (inCurrent) currentMonthSticks += li.quantity;
-            if (inPrevious) previousMonthSticks += li.quantity;
-          }
-        }
-      }
-    }
   }
 
   // --- Site visits from GA4 ---
