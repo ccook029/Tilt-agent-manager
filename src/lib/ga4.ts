@@ -85,6 +85,34 @@ export async function fetchGA4Data(range: GA4DateRange): Promise<string> {
   ].join("\n");
 }
 
+/**
+ * Fetch raw numeric metrics for a date range.
+ * Returns sessions, conversions, and purchaseRevenue as numbers.
+ */
+export async function fetchGA4Metrics(
+  range: GA4DateRange
+): Promise<{ sessions: number; conversions: number; revenue: number }> {
+  const client = getClient();
+  const property = `properties/${getPropertyId()}`;
+
+  const [response] = await client.runReport({
+    property,
+    dateRanges: [{ startDate: range.startDate, endDate: range.endDate }],
+    metrics: [
+      { name: "sessions" },
+      { name: "conversions" },
+      { name: "purchaseRevenue" },
+    ],
+  });
+
+  const row = response.rows?.[0];
+  return {
+    sessions: Number(row?.metricValues?.[0]?.value ?? "0"),
+    conversions: Number(row?.metricValues?.[1]?.value ?? "0"),
+    revenue: Number(row?.metricValues?.[2]?.value ?? "0"),
+  };
+}
+
 // ---- Internal helpers -----------------------------------------------------
 
 const METRICS = [
