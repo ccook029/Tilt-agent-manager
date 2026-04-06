@@ -166,7 +166,7 @@ interface ZohoInvoicesResponse {
 }
 
 /**
- * Fetch paid invoices from Zoho Books for a given date range.
+ * Fetch paid invoices from Zoho Inventory for a given date range.
  * Only returns invoices with status "paid".
  */
 export async function fetchPaidInvoices(
@@ -177,7 +177,7 @@ export async function fetchPaidInvoices(
   let page = 1;
 
   while (true) {
-    const res = await zohoBooks<ZohoInvoicesResponse>("/invoices", {
+    const res = await zohoGet<ZohoInvoicesResponse>("/invoices", {
       page: String(page),
       per_page: "200",
       status: "paid",
