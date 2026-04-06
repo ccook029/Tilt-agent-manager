@@ -46,7 +46,11 @@ SYSTEM:
 - STOCK RECONCILIATION: The Sheet's count of "Available" sticks per Level+Carbon group should match the stock_on_hand for the corresponding Zoho Inventory SKU. If they don't match, THE SHEET IS CORRECT and Inventory needs adjustment.
 - The Sheet covers STICKS ONLY. Non-stick items (grips, apparel, accessories) live only in Zoho Inventory — this is normal.
 - Serial number format: H####-#####
-- Catalog: approximately 206 active SKUs across all categories (sticks + grips + apparel + accessories)
+- Catalog: Zoho Inventory contains ~206 SKUs but MOST ARE LEGACY/DISCONTINUED. The only ACTIVE stick SKUs are the 12 mapped in the Sheet:
+  PLAYER: TILT-NSD-18, TILT-NSD-24 (Intermediate), TILT-NSDI-18, TILT-NSDI-24 (Junior), TILT-NGSD-18, TILT-NGSD-24 (Senior Standard), TILT-NGSDEXT-18, TILT-NGSDEXT-24 (Senior Ext), TILT-NSDI-TIER (Tier 1)
+  GOALIE: TILT-X1-G-INT (Intermediate), TILT-X1-G-JR (Junior), TILT-X1-G-SR (Senior)
+- Old/legacy stick models (Canuck, Phenom, Beast, etc.) are DISCONTINUED — do NOT recommend ordering, restocking, or monitoring them. Ignore them in reports unless specifically asked about clearance.
+- Non-stick items (grips, apparel, accessories) also live in Zoho Inventory — these are separate from stick operations.
 
 YOUR RESPONSIBILITIES:
 - RECONCILE stick stock counts: count Available sticks per Level+Carbon in the Sheet, compare to stock_on_hand in Zoho Inventory, flag discrepancies
@@ -164,6 +168,8 @@ Produce:
 
 {{context}}
 
+IMPORTANT: Only recommend ordering the 12 ACTIVE stick SKUs (TILT-NSD-*, TILT-NSDI-*, TILT-NGSD-*, TILT-NGSDEXT-*, TILT-NSDI-TIER, TILT-X1-G-*). Do NOT include any legacy/discontinued models (Canuck, Phenom, Beast, etc.).
+
 Produce:
 1. PO Summary (supplier, total line items, estimated total cost)
 2. Line Items Table:
@@ -258,6 +264,7 @@ The data below contains current stock levels, sales velocity (14-day and 30-day)
 {{context}}
 
 ORDERING RULES:
+- ONLY order the 12 active SKUs (TILT-NSD-*, TILT-NSDI-*, TILT-NGSD-*, TILT-NGSDEXT-*, TILT-NSDI-TIER, TILT-X1-G-*). NEVER recommend ordering old/legacy models (Canuck, Phenom, Beast, etc.)
 - Target approximately 25 TOTAL sticks per factory order (this is the standard biweekly order size)
 - Custom orders from the Custom tabs MUST be included — these are committed orders for specific customers
 - After accounting for custom orders, fill the remaining slots with replenishment stock
