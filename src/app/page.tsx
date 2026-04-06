@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { getAllPersonas, getLeadership } from "@/lib/personas";
+import HqMetrics from "@/components/hq-metrics";
 
 export default function Home() {
   const team = getAllPersonas();
@@ -50,6 +51,9 @@ export default function Home() {
           and designing the next generation of hockey equipment.
         </p>
       </div>
+
+      {/* Key Metrics */}
+      <HqMetrics />
 
       {/* Leadership — Co-Founders */}
       <div>
