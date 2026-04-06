@@ -87,11 +87,12 @@ export async function fetchGA4Data(range: GA4DateRange): Promise<string> {
 
 /**
  * Fetch raw numeric metrics for a date range.
- * Returns sessions, conversions, and purchaseRevenue as numbers.
+ * Returns sessions and conversions as numbers.
+ * Revenue comes from Zoho Books, not GA4.
  */
 export async function fetchGA4Metrics(
   range: GA4DateRange
-): Promise<{ sessions: number; conversions: number; revenue: number }> {
+): Promise<{ sessions: number; conversions: number }> {
   const client = getClient();
   const property = `properties/${getPropertyId()}`;
 
@@ -101,7 +102,6 @@ export async function fetchGA4Metrics(
     metrics: [
       { name: "sessions" },
       { name: "conversions" },
-      { name: "purchaseRevenue" },
     ],
   });
 
@@ -109,7 +109,6 @@ export async function fetchGA4Metrics(
   return {
     sessions: Number(row?.metricValues?.[0]?.value ?? "0"),
     conversions: Number(row?.metricValues?.[1]?.value ?? "0"),
-    revenue: Number(row?.metricValues?.[2]?.value ?? "0"),
   };
 }
 

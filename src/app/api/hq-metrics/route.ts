@@ -30,10 +30,12 @@ function fmt(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Get the first and last day of a month (0-indexed month). */
-function monthRange(year: number, month: number): GA4DateRange {
+/** Get the first and last day of a month (0-indexed month).
+ *  If capToday is true, caps the end date to today (avoids future date errors in GA4). */
+function monthRange(year: number, month: number, capToday?: Date): GA4DateRange {
   const start = new Date(year, month, 1);
-  const end = new Date(year, month + 1, 0); // last day of month
+  let end = new Date(year, month + 1, 0); // last day of month
+  if (capToday && end > capToday) end = capToday;
   return { startDate: fmt(start), endDate: fmt(end) };
 }
 
@@ -50,7 +52,7 @@ export async function GET() {
   const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
   const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
 
-  const currentRange = monthRange(currentYear, currentMonth);
+  const currentRange = monthRange(currentYear, currentMonth, now); // cap to today
   const previousRange = monthRange(prevYear, prevMonth);
 
   // Fetch all data sources in parallel — each is optional
