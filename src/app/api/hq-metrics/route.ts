@@ -14,6 +14,17 @@ import { fetchGA4Metrics, type GA4DateRange } from "@/lib/ga4";
 
 export const maxDuration = 60;
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+/** Handle CORS preflight requests. */
+export function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 /** YYYY-MM-DD formatter */
 function fmt(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -174,6 +185,7 @@ export async function GET() {
 
   return NextResponse.json(response, {
     headers: {
+      ...CORS_HEADERS,
       "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
     },
   });
