@@ -166,6 +166,7 @@ export async function fetchSheetRows(worksheetName: string): Promise<SheetRow[]>
 const COLUMN_MAP: Record<string, keyof StickRecord> = {
   level: "level",
   "size (inches)": "size",
+  "size (inch)": "size",
   "size": "size",
   carbon: "carbon",
   "kick point": "kick_point",
