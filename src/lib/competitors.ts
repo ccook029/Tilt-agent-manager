@@ -258,6 +258,20 @@ function decodeEntities(str: string): string {
 
 // ---- Main scan pipeline --------------------------------------------------
 
+/** Max age for results in milliseconds (14 days). */
+const MAX_RESULT_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
+ * Check whether a result's published date is within the acceptable window.
+ * If no date is available, we keep it (let the prompt handle uncertainty).
+ */
+function isRecentEnough(publishedDate: string | undefined): boolean {
+  if (!publishedDate) return true; // no date → keep, prompt will flag as undated
+  const parsed = new Date(publishedDate);
+  if (isNaN(parsed.getTime())) return true; // unparseable → keep
+  return Date.now() - parsed.getTime() <= MAX_RESULT_AGE_MS;
+}
+
 /**
  * Build all search queries for a competitor, organized by intel category.
  */
@@ -312,6 +326,7 @@ async function gatherCompetitorIntel(
 
   for (const items of rssResults) {
     for (const item of items) {
+      if (!isRecentEnough(item.pubDate)) continue;
       allResults.push({
         competitor: competitor.name,
         category: categorizeNewsItem(item.title + " " + item.description),
@@ -381,10 +396,11 @@ async function gatherCompetitorIntel(
     for (const batch of serperNews) allResults.push(...batch);
   }
 
-  // Deduplicate by URL
+  // Deduplicate by URL and filter out stale results (>14 days old)
   const seen = new Set<string>();
   const deduped = allResults.filter((r) => {
     if (seen.has(r.url)) return false;
+    if (!isRecentEnough(r.publishedDate)) return false;
     seen.add(r.url);
     return true;
   });

@@ -61,6 +61,14 @@ CONTEXT ABOUT TILT HOCKEY:
 - Key markets: Ontario hockey leagues (OJHL, PJHL, OHL) and growing NHL presence
 - Website: tilthockey.com
 
+RECENCY RULES — CRITICAL:
+- ONLY report information that is genuinely recent (within the last 2 weeks)
+- If a search result references an event, product launch, or announcement, verify the DATE before including it — old news presented as new is worse than no news
+- If a result has no published date, clearly mark it as "date unverified" and note that it may be old
+- NEVER present old information (months or years old) as if it just happened
+- If most results for a competitor are old/stale, say "No significant recent activity" rather than recycling old news
+- When citing a source, always include the published date if available
+
 Be direct and actionable. Write for a founder who reads this in 5 minutes.`,
 
   userPrompt: `Here is the competitor intelligence data collected on {{scan_date}} from Google News and web search APIs (not web scraping).
@@ -71,7 +79,9 @@ Be direct and actionable. Write for a founder who reads this in 5 minutes.`,
 Additional context from the team: {{context}}
 {{/if}}
 
-Based on this data, produce the weekly competitor intelligence report. Focus on what changed since last week and what Tilt Hockey should do about it. Do NOT mention scraping, data collection methods, or technical failures — just analyze the intel provided.`,
+Based on this data, produce the weekly competitor intelligence report. Focus on what changed since last week and what Tilt Hockey should do about it. Do NOT mention scraping, data collection methods, or technical failures — just analyze the intel provided.
+
+IMPORTANT: Check the published dates on all results. If an article or event is more than 2 weeks old, do NOT include it as a finding. Only report genuinely new developments. If a competitor has no recent activity, say so — do not pad the report with stale information.`,
 
   email: {
     to: ["chris@tilthockey.com"],
