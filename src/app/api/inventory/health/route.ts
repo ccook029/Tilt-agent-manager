@@ -76,10 +76,20 @@ export async function GET() {
       .filter((s) => s.status.toLowerCase().trim() === "available")
       .map((s) => ({ size: s.size, carbon: s.carbon, serial: s.serial_number }));
 
+    // Fetch raw Player rows to show column names
+    let playerColumnNames: string[] = [];
+    try {
+      const rawPlayerRows = await fetchSheetRows("Player");
+      playerColumnNames = rawPlayerRows.length > 0
+        ? Object.keys(rawPlayerRows[0]).filter((k) => k !== "row_index")
+        : [];
+    } catch { /* ignore */ }
+
     tabDiagnostics.player = {
       totalRecords: playerSticks.length,
       available: playerAvailable,
       sampleLevels: [...new Set(playerSticks.slice(0, 50).map((s) => s.level))],
+      columnNames: playerColumnNames,
       seniorSizeDebug: {
         totalSenior: seniorSticks.length,
         allSizes: [...new Set(seniorSizes)],
