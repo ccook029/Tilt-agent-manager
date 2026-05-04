@@ -18,6 +18,7 @@ import { runDailyReport } from "@/lib/pipelines/analytics";
 import { runCompetitorReport } from "@/lib/pipelines/competitors";
 import { runSocialIntelReport } from "@/lib/pipelines/competitor-social";
 import { runInventoryWeeklyReport } from "@/lib/pipelines/inventory";
+import { runAutoReconciliation } from "@/lib/pipelines/reconciliation";
 import { runFactoryReorder } from "@/lib/pipelines/factory-reorder";
 import { runResearchScan } from "@/lib/pipelines/materials-rd";
 import { runInnovation } from "@/lib/pipelines/product-design";
@@ -50,6 +51,11 @@ function getScheduledTasks(now: Date): PipelineTask[] {
       tasks.push({ name: "Factory Reorder", run: () => runFactoryReorder() });
     }
     return tasks; // Don't run daily agents on the Sunday-night cron
+  }
+
+  // Inventory Reconciliation: Mon–Fri — runs first to keep Zoho Inventory in sync with the Sheet
+  if (day >= 1 && day <= 5) {
+    tasks.push({ name: "Inventory Reconciliation", run: () => runAutoReconciliation() });
   }
 
   // Analytics: Mon–Fri (day 1–5)
