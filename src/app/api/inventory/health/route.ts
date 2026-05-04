@@ -66,10 +66,28 @@ export async function GET() {
     const playerAvailable = playerSticks.filter((s) => s.status.toLowerCase().trim() === "available").length;
     const goalieAvailable = goalieSticks.filter((s) => s.status.toLowerCase().trim() === "available").length;
 
+    // Size diagnostics for Senior sticks (EXT classification debugging)
+    const seniorSticks = playerSticks.filter((s) => {
+      const level = s.level.toUpperCase().trim();
+      return level.startsWith("SR") || level.startsWith("SEN");
+    });
+    const seniorSizes = seniorSticks.map((s) => s.size).sort((a, b) => a - b);
+    const seniorAvailSizes = seniorSticks
+      .filter((s) => s.status.toLowerCase().trim() === "available")
+      .map((s) => ({ size: s.size, carbon: s.carbon, serial: s.serial_number }));
+
     tabDiagnostics.player = {
       totalRecords: playerSticks.length,
       available: playerAvailable,
       sampleLevels: [...new Set(playerSticks.slice(0, 50).map((s) => s.level))],
+      seniorSizeDebug: {
+        totalSenior: seniorSticks.length,
+        allSizes: [...new Set(seniorSizes)],
+        above66: seniorSticks.filter((s) => s.size > 66).length,
+        atOrBelow66: seniorSticks.filter((s) => s.size <= 66).length,
+        sizeZero: seniorSticks.filter((s) => s.size === 0).length,
+        sampleAvailable: seniorAvailSizes.slice(0, 20),
+      },
     };
     tabDiagnostics.goalie = {
       totalRecords: goalieSticks.length,
