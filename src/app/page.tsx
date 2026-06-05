@@ -3,6 +3,7 @@ import Image from "next/image";
 import { getAllPersonas, getLeadership } from "@/lib/personas";
 import HqMetrics from "@/components/hq-metrics";
 import TeamGrid from "@/components/team-grid";
+import TiltCard from "@/components/tilt-card";
 import { Stagger, StaggerItem } from "@/components/motion-primitives";
 
 export default function Home() {
@@ -68,7 +69,10 @@ export default function Home() {
         <Stagger className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-2">
           {founders.map((founder) => (
             <StaggerItem key={founder.name}>
-              <div className="lift rounded-xl border border-[#e4002b]/20 hover:border-[#e4002b]/40 p-6 bg-[#111]/60 relative overflow-hidden">
+              <TiltCard
+                max={6}
+                className="group rounded-xl border border-[#e4002b]/20 hover:border-[#e4002b]/40 p-6 bg-[#111]/60 relative overflow-hidden"
+              >
                 {/* Subtle red gradient top edge */}
                 <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#e4002b]/60 to-transparent" />
 
@@ -83,7 +87,7 @@ export default function Home() {
                     <p className="text-sm text-[#e4002b]">{founder.title}</p>
                   </div>
                 </div>
-              </div>
+              </TiltCard>
             </StaggerItem>
           ))}
         </Stagger>

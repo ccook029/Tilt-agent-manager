@@ -65,6 +65,21 @@
   100% { background-position: 250% 0; }
 }
 
+/* Animated aurora — slowly drifting red glow behind the whole app */
+.aurora {
+  background:
+    radial-gradient(40% 50% at 18% 28%, rgba(228, 0, 43, 0.16), transparent 60%),
+    radial-gradient(38% 46% at 82% 18%, rgba(228, 0, 43, 0.10), transparent 60%),
+    radial-gradient(46% 56% at 62% 82%, rgba(150, 0, 25, 0.14), transparent 60%);
+  filter: blur(36px);
+  animation: auroraDrift 26s ease-in-out infinite alternate;
+}
+@keyframes auroraDrift {
+  0%   { transform: translate3d(-3%, -2%, 0) scale(1.05); }
+  50%  { transform: translate3d(2%, 3%, 0) scale(1.14); }
+  100% { transform: translate3d(3%, -3%, 0) scale(1.06); }
+}
+
 /* Respect users who ask for less motion — kill all decorative animation. */
 @media (prefers-reduced-motion: reduce) {
   *,

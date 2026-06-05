@@ -6,6 +6,7 @@ import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { getPersonaByAgentId } from "@/lib/personas";
 import { useToast } from "@/components/toast";
+import { fireConfetti } from "@/components/confetti";
 import { EASE_OUT } from "@/lib/motion";
 import MayaChat from "@/components/maya-chat";
 import ReportFiles from "@/components/report-files";
@@ -77,11 +78,12 @@ export default function AgentDetailPage() {
         body: JSON.stringify({}),
       });
       await fetchLogs();
-      toast(
-        res.ok
-          ? { title: "Report ready", description: `${persona.name} just delivered.`, kind: "success" }
-          : { title: "Run failed", description: `${persona.name} hit an error.`, kind: "error" }
-      );
+      if (res.ok) {
+        fireConfetti();
+        toast({ title: "Report ready", description: `${persona.name} just delivered.`, kind: "success" });
+      } else {
+        toast({ title: "Run failed", description: `${persona.name} hit an error.`, kind: "error" });
+      }
     } catch {
       toast({ title: "Run failed", kind: "error" });
     } finally {
@@ -104,11 +106,12 @@ export default function AgentDetailPage() {
         body: JSON.stringify({ task }),
       });
       await fetchLogs();
-      toast(
-        res.ok
-          ? { title: `${label} complete`, kind: "success" }
-          : { title: `${label} failed`, kind: "error" }
-      );
+      if (res.ok) {
+        fireConfetti();
+        toast({ title: `${label} complete`, kind: "success" });
+      } else {
+        toast({ title: `${label} failed`, kind: "error" });
+      }
     } catch {
       toast({ title: `${label} failed`, kind: "error" });
     } finally {
@@ -122,11 +125,12 @@ export default function AgentDetailPage() {
     try {
       const res = await fetch("/api/product-design/innovate", { method: "POST" });
       await fetchLogs();
-      toast(
-        res.ok
-          ? { title: "New concept generated", kind: "success" }
-          : { title: "Concept generation failed", kind: "error" }
-      );
+      if (res.ok) {
+        fireConfetti();
+        toast({ title: "New concept generated", kind: "success" });
+      } else {
+        toast({ title: "Concept generation failed", kind: "error" });
+      }
     } catch {
       toast({ title: "Concept generation failed", kind: "error" });
     } finally {

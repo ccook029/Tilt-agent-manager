@@ -4,6 +4,7 @@ import Image from "next/image";
 import "./globals.css";
 import { ToastProvider } from "@/components/toast";
 import { CommandPalette, CommandButton } from "@/components/command-palette";
+import { Confetti } from "@/components/confetti";
 
 export const metadata: Metadata = {
   title: "Tilt Corporate Headquarters",
@@ -18,6 +19,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-[#0a0a0a] text-gray-100 min-h-screen carbon-texture">
+        {/* Animated aurora backdrop */}
+        <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+          <div className="aurora absolute inset-[-12%]" />
+        </div>
         <ToastProvider>
         <header className="border-b border-gray-800/60 px-6 py-6 bg-[#0a0a0a]/90 backdrop-blur-sm sticky top-0 z-50">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
@@ -47,7 +52,7 @@ export default function RootLayout({
             </div>
           </div>
         </header>
-        <main className="max-w-6xl mx-auto px-6 py-8 relative">
+        <main className="max-w-6xl mx-auto px-6 py-8 relative z-10">
           {children}
         </main>
         <CommandPalette />

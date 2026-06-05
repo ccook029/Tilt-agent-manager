@@ -10,6 +10,7 @@ import {
 } from "framer-motion";
 import { getAllPersonas } from "@/lib/personas";
 import { useToast } from "@/components/toast";
+import { fireConfetti } from "@/components/confetti";
 import { EASE_OUT } from "@/lib/motion";
 import ActivityRail from "@/components/activity-rail";
 import {
@@ -142,11 +143,12 @@ export default function DashboardPage() {
     try {
       const res = await fetch("/api/agents/run", { method: "POST" });
       await fetchLogs();
-      toast(
-        res.ok
-          ? { title: "Agents dispatched", kind: "success" }
-          : { title: "Some agents failed to start", kind: "error" }
-      );
+      if (res.ok) {
+        fireConfetti();
+        toast({ title: "Agents dispatched", kind: "success" });
+      } else {
+        toast({ title: "Some agents failed to start", kind: "error" });
+      }
     } catch {
       toast({ title: "Failed to trigger agents", kind: "error" });
     } finally {
