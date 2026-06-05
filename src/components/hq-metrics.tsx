@@ -75,7 +75,7 @@ export default function HqMetrics() {
           <ChangeBadge value={data.sticksSold.change} />
         </div>
         <div className="flex items-baseline gap-3">
-          <span className="text-5xl font-bold text-[#e4002b] tabular-nums tracking-tight">
+          <span className="font-display text-6xl font-bold text-[#e4002b] tabular-nums tracking-tight">
             <CountUp value={data.sticksSold.currentMonth.total} />
           </span>
           <span className="text-sm text-gray-500">
@@ -95,7 +95,7 @@ export default function HqMetrics() {
             <span className="text-xs text-gray-500 uppercase tracking-wider">Revenue</span>
             <ChangeBadge value={data.changes.revenue} />
           </div>
-          <p className="text-2xl font-bold text-white tabular-nums">
+          <p className="font-display text-3xl font-bold text-white tabular-nums">
             <CountUp
               value={data.currentMonth.revenue}
               format={(n) => `$${Math.round(n).toLocaleString()}`}
@@ -110,7 +110,7 @@ export default function HqMetrics() {
             <span className="text-xs text-gray-500 uppercase tracking-wider">Site Visits</span>
             <ChangeBadge value={data.changes.siteVisits} />
           </div>
-          <p className="text-2xl font-bold text-white tabular-nums">
+          <p className="font-display text-3xl font-bold text-white tabular-nums">
             <CountUp value={data.currentMonth.siteVisits} />
           </p>
           <p className="text-xs text-gray-600 mt-1">{data.currentMonth.label}</p>
@@ -122,7 +122,7 @@ export default function HqMetrics() {
             <span className="text-xs text-gray-500 uppercase tracking-wider">Inquiries</span>
             <ChangeBadge value={data.changes.inquiries} />
           </div>
-          <p className="text-2xl font-bold text-white tabular-nums">
+          <p className="font-display text-3xl font-bold text-white tabular-nums">
             <CountUp value={data.currentMonth.inquiries} />
           </p>
           <p className="text-xs text-gray-600 mt-1">{data.currentMonth.label}</p>

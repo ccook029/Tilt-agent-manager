@@ -4,14 +4,27 @@ import { getAllPersonas, getLeadership } from "@/lib/personas";
 import HqMetrics from "@/components/hq-metrics";
 import TeamGrid from "@/components/team-grid";
 import TiltCard from "@/components/tilt-card";
+import Hero from "@/components/hero";
+import ScrollReveal from "@/components/scroll-reveal";
 import { Stagger, StaggerItem } from "@/components/motion-primitives";
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 mb-6">
+      <span className="h-6 w-1 rounded-full bg-[#e4002b]" />
+      <h2 className="font-display text-2xl font-semibold uppercase tracking-wide text-gray-200">
+        {children}
+      </h2>
+    </div>
+  );
+}
 
 export default function Home() {
   const team = getAllPersonas();
   const founders = getLeadership();
 
   return (
-    <div className="space-y-12 relative">
+    <div className="space-y-16 relative">
       {/* Background: stick product photo */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <Image
@@ -25,47 +38,20 @@ export default function Home() {
 
       {/* T-Shield watermark */}
       <div className="fixed bottom-8 right-8 pointer-events-none z-0 opacity-[0.04]">
-        <Image
-          src="/images/tilt-shield.png"
-          alt=""
-          width={300}
-          height={360}
-        />
+        <Image src="/images/tilt-shield.png" alt="" width={300} height={360} />
       </div>
 
-      {/* Hero */}
-      <div className="text-center py-16 relative">
-        <div className="flex items-center justify-center mb-8">
-          <Image
-            src="/images/tilt-shield.png"
-            alt="Tilt Hockey"
-            width={140}
-            height={175}
-            className="drop-shadow-[0_0_40px_rgba(228,0,43,0.15)]"
-            priority
-          />
-        </div>
-        <h1 className="text-4xl font-bold tracking-tight mb-3">
-          Corporate <span className="text-[#e4002b]">Headquarters</span>
-        </h1>
-        <p className="text-gray-500 max-w-xl mx-auto leading-relaxed">
-          The team behind Tilt. Each department is powered by an AI agent
-          that works autonomously — delivering analytics, scanning competitors,
-          and designing the next generation of hockey equipment.
-        </p>
-      </div>
+      {/* Cinematic hero */}
+      <Hero />
 
       {/* Key Metrics */}
-      <HqMetrics />
+      <ScrollReveal>
+        <HqMetrics />
+      </ScrollReveal>
 
       {/* Leadership — Co-Founders */}
-      <div>
-        <div className="flex items-center gap-2 mb-5">
-          <Image src="/images/tilt-shield.png" alt="" width={20} height={24} className="opacity-70" />
-          <h2 className="font-semibold text-gray-300 uppercase tracking-wider text-sm">
-            Leadership
-          </h2>
-        </div>
+      <ScrollReveal>
+        <SectionLabel>Leadership</SectionLabel>
         <Stagger className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-2">
           {founders.map((founder) => (
             <StaggerItem key={founder.name}>
@@ -83,7 +69,9 @@ export default function Home() {
                     {founder.avatarInitials}
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white">{founder.name}</h3>
+                    <h3 className="text-lg font-bold text-white">
+                      {founder.name}
+                    </h3>
                     <p className="text-sm text-[#e4002b]">{founder.title}</p>
                   </div>
                 </div>
@@ -96,41 +84,40 @@ export default function Home() {
         <div className="flex justify-center py-3">
           <div className="w-px h-8 bg-gradient-to-b from-[#e4002b]/40 to-gray-800/40" />
         </div>
-      </div>
+      </ScrollReveal>
 
       {/* Team Grid */}
-      <div>
-        <div className="flex items-center gap-2 mb-5">
-          <Image src="/images/tilt-shield.png" alt="" width={20} height={24} className="opacity-70" />
-          <h2 className="font-semibold text-gray-300 uppercase tracking-wider text-sm">
-            The Team
-          </h2>
+      <ScrollReveal>
+        <div id="team" className="scroll-mt-24">
+          <SectionLabel>The Team</SectionLabel>
+          <TeamGrid team={team} />
         </div>
-        <TeamGrid team={team} />
-      </div>
+      </ScrollReveal>
 
       {/* Quick Links */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Link
-          href="/dashboard"
-          className="lift block rounded-lg border border-gray-800/60 p-5 hover:border-[#e4002b]/30 bg-[#111]/30"
-        >
-          <h3 className="font-semibold mb-1">Operations Dashboard</h3>
-          <p className="text-sm text-gray-500">
-            View agent run history, reports, and performance metrics.
-          </p>
-        </Link>
-        <div className="rounded-lg border border-gray-800/60 p-5 bg-[#111]/30">
-          <h3 className="font-semibold mb-1">API Access</h3>
-          <p className="text-sm text-gray-500">
-            Trigger agents via{" "}
-            <code className="text-xs bg-gray-800 px-1 rounded text-[#e4002b]/80">
-              POST /api/agents/run
-            </code>{" "}
-            or individual endpoints.
-          </p>
+      <ScrollReveal>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Link
+            href="/dashboard"
+            className="lift block rounded-lg border border-gray-800/60 p-5 hover:border-[#e4002b]/30 bg-[#111]/30"
+          >
+            <h3 className="font-semibold mb-1">Operations Dashboard</h3>
+            <p className="text-sm text-gray-500">
+              View agent run history, reports, and performance metrics.
+            </p>
+          </Link>
+          <div className="rounded-lg border border-gray-800/60 p-5 bg-[#111]/30">
+            <h3 className="font-semibold mb-1">API Access</h3>
+            <p className="text-sm text-gray-500">
+              Trigger agents via{" "}
+              <code className="text-xs bg-gray-800 px-1 rounded text-[#e4002b]/80">
+                POST /api/agents/run
+              </code>{" "}
+              or individual endpoints.
+            </p>
+          </div>
         </div>
-      </div>
+      </ScrollReveal>
     </div>
   );
 }
