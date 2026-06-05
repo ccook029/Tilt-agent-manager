@@ -207,7 +207,7 @@ export function CommandPalette() {
                     onMouseEnter={() => setActive(i)}
                     onClick={() => run(c)}
                     className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors ${
-                      i === active ? "bg-[#e4002b]/15" : "hover:bg-white/5"
+                      i === active ? "bg-[#00d6ff]/15" : "hover:bg-white/5"
                     }`}
                   >
                     <span className="min-w-0">

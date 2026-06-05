@@ -2,8 +2,8 @@
 
 /* ── Tilt Hockey brand tokens ── */
 :root {
-  --tilt-red: #e4002b;
-  --tilt-red-dark: #b8001f;
+  --tilt-red: #00d6ff;
+  --tilt-red-dark: #00a6c9;
   --tilt-black: #0a0a0a;
   --tilt-charcoal: #141414;
   --tilt-gray: #1e1e1e;
@@ -21,7 +21,7 @@ body {
 
 /* Animated red shimmer for headline accents */
 .text-shimmer {
-  background: linear-gradient(100deg, #e4002b 28%, #ff7b93 50%, #e4002b 72%);
+  background: linear-gradient(100deg, #00d6ff 28%, #7be9ff 50%, #00d6ff 72%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;

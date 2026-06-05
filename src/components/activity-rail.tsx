@@ -40,7 +40,7 @@ export default function ActivityRail({
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "linear-gradient(100deg, transparent 35%, rgba(228,0,43,0.08) 50%, transparent 65%)",
+              "linear-gradient(100deg, transparent 35%, rgba(0,214,255,0.08) 50%, transparent 65%)",
             backgroundSize: "250% 100%",
             animation: "tiltSheen 7s linear infinite",
           }}

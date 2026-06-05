@@ -104,10 +104,10 @@ function EmberField() {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         ctx.fillStyle = near
-          ? `rgba(255,200,210,${alpha})`
-          : `rgba(228,0,43,${alpha})`;
+          ? `rgba(210,248,255,${alpha})`
+          : `rgba(0,214,255,${alpha})`;
         ctx.shadowBlur = 8;
-        ctx.shadowColor = "rgba(228,0,43,0.6)";
+        ctx.shadowColor = "rgba(0,214,255,0.6)";
         ctx.fill();
       }
       ctx.shadowBlur = 0;
@@ -151,7 +151,7 @@ export default function Hero() {
         {!reduce && <EmberField />}
       </div>
       {/* Radial floor glow */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-[radial-gradient(ellipse_at_50%_120%,rgba(228,0,43,0.12),transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-[radial-gradient(ellipse_at_50%_120%,rgba(0,214,255,0.12),transparent_70%)]" />
 
       <div className="relative flex flex-col items-center text-center">
         {/* Shield */}
@@ -161,7 +161,7 @@ export default function Hero() {
           transition={{ duration: 0.9, ease: EASE_OUT }}
           className="relative mb-8"
         >
-          <div className="absolute inset-0 -z-10 blur-3xl bg-[radial-gradient(circle,rgba(228,0,43,0.45),transparent_65%)]" />
+          <div className="absolute inset-0 -z-10 blur-3xl bg-[radial-gradient(circle,rgba(0,214,255,0.45),transparent_65%)]" />
           <motion.div
             animate={reduce ? undefined : { y: [0, -10, 0] }}
             transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
@@ -172,7 +172,7 @@ export default function Hero() {
               width={150}
               height={188}
               priority
-              className="drop-shadow-[0_0_45px_rgba(228,0,43,0.35)]"
+              className="drop-shadow-[0_0_45px_rgba(0,214,255,0.35)]"
             />
           </motion.div>
         </motion.div>
@@ -182,9 +182,9 @@ export default function Hero() {
           initial={reduce ? false : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: EASE_OUT, delay: 0.05 }}
-          className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#e4002b]/30 bg-[#e4002b]/5 px-3.5 py-1.5"
+          className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#00d6ff]/30 bg-[#00d6ff]/5 px-3.5 py-1.5"
         >
-          <span className="h-1.5 w-1.5 rounded-full bg-[#e4002b] tilt-pulse" />
+          <span className="h-1.5 w-1.5 rounded-full bg-[#00d6ff] tilt-pulse" />
           <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-300">
             AI-Powered Operations
           </span>
@@ -227,7 +227,7 @@ export default function Hero() {
           <Magnetic>
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-2 rounded-lg bg-[#e4002b] px-6 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_-10px_rgba(228,0,43,0.7)] transition-colors hover:bg-[#b8001f]"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#00d6ff] px-6 py-3 text-sm font-semibold text-[#06232b] shadow-[0_10px_30px_-10px_rgba(0,214,255,0.7)] transition-colors hover:bg-[#00a6c9]"
             >
               Enter the Dashboard
               <span aria-hidden>→</span>

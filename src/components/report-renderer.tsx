@@ -166,9 +166,9 @@ export default function ReportRenderer({ text, agentName, date }: ReportRenderer
     <div className="space-y-1">
       {/* Report header bar */}
       {(agentName || date) && (
-        <div className="flex items-center justify-between border-b border-[#e4002b]/30 pb-3 mb-4">
+        <div className="flex items-center justify-between border-b border-[#00d6ff]/30 pb-3 mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-1 h-6 bg-[#e4002b] rounded-full" />
+            <div className="w-1 h-6 bg-[#00d6ff] rounded-full" />
             {agentName && (
               <span className="text-sm font-semibold text-gray-200">{agentName}</span>
             )}
@@ -194,7 +194,7 @@ export default function ReportRenderer({ text, agentName, date }: ReportRenderer
             return (
               <h2
                 key={idx}
-                className="text-base font-bold text-white mt-5 mb-2 pb-1.5 border-b-2 border-[#e4002b]/50"
+                className="text-base font-bold text-white mt-5 mb-2 pb-1.5 border-b-2 border-[#00d6ff]/50"
               >
                 {block.content}
               </h2>
@@ -218,7 +218,7 @@ export default function ReportRenderer({ text, agentName, date }: ReportRenderer
             return (
               <div
                 key={idx}
-                className="border-l-4 border-[#e4002b]/60 bg-[#e4002b]/5 px-4 py-2.5 mb-2 rounded-r"
+                className="border-l-4 border-[#00d6ff]/60 bg-[#00d6ff]/5 px-4 py-2.5 mb-2 rounded-r"
               >
                 <div className="flex items-start gap-2">
                   <PriorityBadge priority={block.priority} />
@@ -244,7 +244,7 @@ export default function ReportRenderer({ text, agentName, date }: ReportRenderer
           case "bullet":
             return (
               <div key={idx} className="flex items-start gap-2.5 pl-2 mb-1">
-                <span className="text-[#e4002b] mt-1.5 text-xs leading-none select-none shrink-0">
+                <span className="text-[#00d6ff] mt-1.5 text-xs leading-none select-none shrink-0">
                   {"\u25CF"}
                 </span>
                 <div className="flex items-start gap-1 flex-1 min-w-0">
@@ -259,7 +259,7 @@ export default function ReportRenderer({ text, agentName, date }: ReportRenderer
           case "numbered":
             return (
               <div key={idx} className="flex items-start gap-2.5 pl-2 mb-1">
-                <span className="text-[#e4002b] text-xs font-bold mt-0.5 w-5 text-right shrink-0">
+                <span className="text-[#00d6ff] text-xs font-bold mt-0.5 w-5 text-right shrink-0">
                   {block.number}.
                 </span>
                 <div className="flex items-start gap-1 flex-1 min-w-0">

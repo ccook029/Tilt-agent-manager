@@ -23,9 +23,9 @@ export default function TeamGrid({ team }: { team: AgentPersona[] }) {
       {team.map((person) => (
         <motion.div key={person.agentId} variants={reduce ? undefined : fadeRise}>
         <Link href={`/dashboard/${person.agentId}`} className="block">
-        <TiltCard className="group block h-full rounded-xl border border-gray-800/60 p-6 hover:border-[#e4002b]/40 bg-[#111]/50 hover:bg-[#111]/80 transition-[background-color,border-color,box-shadow] duration-300 hover:shadow-[0_16px_44px_-16px_rgba(228,0,43,0.45)] relative overflow-hidden">
+        <TiltCard className="group block h-full rounded-xl border border-gray-800/60 p-6 hover:border-[#00d6ff]/40 bg-[#111]/50 hover:bg-[#111]/80 transition-[background-color,border-color,box-shadow] duration-300 hover:shadow-[0_16px_44px_-16px_rgba(0,214,255,0.45)] relative overflow-hidden">
           {/* Red glow on hover */}
-          <div className="absolute inset-0 bg-gradient-to-br from-[#e4002b]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="absolute inset-0 bg-gradient-to-br from-[#00d6ff]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
           <div className="relative">
             {/* Avatar + Name */}
@@ -36,7 +36,7 @@ export default function TeamGrid({ team }: { team: AgentPersona[] }) {
                 {person.avatarInitials}
               </div>
               <div>
-                <h3 className="font-semibold text-white group-hover:text-[#e4002b] transition-colors">
+                <h3 className="font-semibold text-white group-hover:text-[#00d6ff] transition-colors">
                   {person.name}
                 </h3>
                 <p className="text-xs text-gray-500">{person.title}</p>

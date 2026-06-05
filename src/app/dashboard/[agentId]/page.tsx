@@ -147,7 +147,7 @@ export default function AgentDetailPage() {
         <div className="flex items-start gap-5">
           <Link
             href="/dashboard"
-            className="text-gray-500 hover:text-[#e4002b] transition-colors mt-2"
+            className="text-gray-500 hover:text-[#00d6ff] transition-colors mt-2"
           >
             &larr;
           </Link>
@@ -241,7 +241,7 @@ export default function AgentDetailPage() {
             <button
               onClick={triggerRun}
               disabled={running}
-              className="px-4 py-2 bg-[#e4002b] hover:bg-[#b8001f] disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+              className="px-4 py-2 bg-[#00d6ff] hover:bg-[#00a6c9] text-[#06232b] disabled:opacity-50 rounded-lg text-sm font-semibold transition-colors"
             >
               {running ? "Running..." : "Run Now"}
             </button>
@@ -295,7 +295,7 @@ export default function AgentDetailPage() {
                 key={task}
                 onClick={() => triggerTask(task)}
                 disabled={runningTask !== null}
-                className="px-4 py-2 bg-gray-800/80 hover:bg-gray-700 border border-gray-700/60 hover:border-[#e4002b]/40 disabled:opacity-50 rounded-lg text-sm font-medium transition-all"
+                className="px-4 py-2 bg-gray-800/80 hover:bg-gray-700 border border-gray-700/60 hover:border-[#00d6ff]/40 disabled:opacity-50 rounded-lg text-sm font-medium transition-all"
               >
                 {runningTask === task ? (
                   <span className="flex items-center gap-2">
@@ -347,11 +347,11 @@ export default function AgentDetailPage() {
               {tab.label}
               {active &&
                 (reduce ? (
-                  <span className="absolute left-2 right-2 -bottom-px h-0.5 rounded-full bg-[#e4002b]" />
+                  <span className="absolute left-2 right-2 -bottom-px h-0.5 rounded-full bg-[#00d6ff]" />
                 ) : (
                   <motion.span
                     layoutId="tabUnderline"
-                    className="absolute left-2 right-2 -bottom-px h-0.5 rounded-full bg-[#e4002b]"
+                    className="absolute left-2 right-2 -bottom-px h-0.5 rounded-full bg-[#00d6ff]"
                     transition={{ duration: 0.3, ease: EASE_OUT }}
                   />
                 ))}

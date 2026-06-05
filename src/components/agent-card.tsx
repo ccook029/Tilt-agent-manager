@@ -35,7 +35,7 @@ export function AgentCardBody({
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-3 mb-1">
-          <h3 className="text-lg font-semibold text-white group-hover:text-[#e4002b] transition-colors">
+          <h3 className="text-lg font-semibold text-white group-hover:text-[#00d6ff] transition-colors">
             {person.name}
           </h3>
           <span
@@ -85,7 +85,7 @@ export function AgentCardBody({
       </div>
 
       {/* Arrow */}
-      <div className="text-gray-700 group-hover:text-[#e4002b] group-hover:translate-x-1 transition-all text-lg shrink-0 pt-2">
+      <div className="text-gray-700 group-hover:text-[#00d6ff] group-hover:translate-x-1 transition-all text-lg shrink-0 pt-2">
         &rarr;
       </div>
     </div>
@@ -117,14 +117,14 @@ export function DraggableAgentCard({
           ? undefined
           : {
               scale: 1.02,
-              boxShadow: "0 22px 55px -22px rgba(228,0,43,0.55)",
+              boxShadow: "0 22px 55px -22px rgba(0,214,255,0.55)",
               cursor: "grabbing",
             }
       }
     >
-      <div className="group relative rounded-xl border border-gray-800/60 hover:border-[#e4002b]/30 bg-[#111]/40 hover:bg-[#111]/70 transition-[background-color,border-color] duration-300 overflow-hidden">
+      <div className="group relative rounded-xl border border-gray-800/60 hover:border-[#00d6ff]/30 bg-[#111]/40 hover:bg-[#111]/70 transition-[background-color,border-color] duration-300 overflow-hidden">
         {/* Red left accent */}
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#e4002b]/0 group-hover:bg-[#e4002b]/60 transition-colors" />
+        <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#00d6ff]/0 group-hover:bg-[#00d6ff]/60 transition-colors" />
 
         {/* Drag handle */}
         <button
@@ -141,7 +141,7 @@ export function DraggableAgentCard({
           onClick={() => onTogglePin(person.agentId)}
           className={`absolute right-3 top-3 z-10 text-sm transition-colors ${
             pinned
-              ? "text-[#e4002b] hover:text-[#ff5577]"
+              ? "text-[#00d6ff] hover:text-[#7be9ff]"
               : "text-gray-700 hover:text-gray-400"
           }`}
           aria-label={pinned ? `Unpin ${person.name}` : `Pin ${person.name}`}
