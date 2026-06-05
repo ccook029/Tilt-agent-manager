@@ -11,7 +11,7 @@ import { Stagger, StaggerItem } from "@/components/motion-primitives";
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 mb-6">
-      <span className="h-6 w-1 rounded-full bg-[#e4002b]" />
+      <span className="h-6 w-1 rounded-full bg-[#00d6ff]" />
       <h2 className="font-display text-2xl font-semibold uppercase tracking-wide text-gray-200">
         {children}
       </h2>
@@ -57,10 +57,10 @@ export default function Home() {
             <StaggerItem key={founder.name}>
               <TiltCard
                 max={6}
-                className="group rounded-xl border border-[#e4002b]/20 hover:border-[#e4002b]/40 p-6 bg-[#111]/60 relative overflow-hidden"
+                className="group rounded-xl border border-[#00d6ff]/20 hover:border-[#00d6ff]/40 p-6 bg-[#111]/60 relative overflow-hidden"
               >
                 {/* Subtle red gradient top edge */}
-                <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#e4002b]/60 to-transparent" />
+                <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#00d6ff]/60 to-transparent" />
 
                 <div className="flex items-center gap-5">
                   <div
@@ -72,7 +72,7 @@ export default function Home() {
                     <h3 className="text-lg font-bold text-white">
                       {founder.name}
                     </h3>
-                    <p className="text-sm text-[#e4002b]">{founder.title}</p>
+                    <p className="text-sm text-[#00d6ff]">{founder.title}</p>
                   </div>
                 </div>
               </TiltCard>
@@ -82,7 +82,7 @@ export default function Home() {
 
         {/* Connector line from leadership to team */}
         <div className="flex justify-center py-3">
-          <div className="w-px h-8 bg-gradient-to-b from-[#e4002b]/40 to-gray-800/40" />
+          <div className="w-px h-8 bg-gradient-to-b from-[#00d6ff]/40 to-gray-800/40" />
         </div>
       </ScrollReveal>
 
@@ -99,7 +99,7 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Link
             href="/dashboard"
-            className="lift block rounded-lg border border-gray-800/60 p-5 hover:border-[#e4002b]/30 bg-[#111]/30"
+            className="lift block rounded-lg border border-gray-800/60 p-5 hover:border-[#00d6ff]/30 bg-[#111]/30"
           >
             <h3 className="font-semibold mb-1">Operations Dashboard</h3>
             <p className="text-sm text-gray-500">
@@ -110,7 +110,7 @@ export default function Home() {
             <h3 className="font-semibold mb-1">API Access</h3>
             <p className="text-sm text-gray-500">
               Trigger agents via{" "}
-              <code className="text-xs bg-gray-800 px-1 rounded text-[#e4002b]/80">
+              <code className="text-xs bg-gray-800 px-1 rounded text-[#00d6ff]/80">
                 POST /api/agents/run
               </code>{" "}
               or individual endpoints.

@@ -62,9 +62,9 @@ export default function HqMetrics() {
   if (!data) return null;
 
   return (
-    <div className="rounded-xl border border-[#e4002b]/20 bg-[#111]/60 relative overflow-hidden">
+    <div className="rounded-xl border border-[#00d6ff]/20 bg-[#111]/60 relative overflow-hidden">
       {/* Top red accent */}
-      <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#e4002b]/60 to-transparent" />
+      <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#00d6ff]/60 to-transparent" />
 
       {/* Sticks Sold — Hero metric */}
       <div className="px-8 pt-8 pb-6 border-b border-gray-800/40">
@@ -75,7 +75,7 @@ export default function HqMetrics() {
           <ChangeBadge value={data.sticksSold.change} />
         </div>
         <div className="flex items-baseline gap-3">
-          <span className="font-display text-6xl font-bold text-[#e4002b] tabular-nums tracking-tight">
+          <span className="font-display text-6xl font-bold text-[#00d6ff] tabular-nums tracking-tight">
             <CountUp value={data.sticksSold.currentMonth.total} />
           </span>
           <span className="text-sm text-gray-500">

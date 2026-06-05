@@ -41,17 +41,17 @@ export function IceRinkPattern() {
     <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-[0.03]">
       <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
         {/* Center line */}
-        <line x1="50%" y1="0" x2="50%" y2="100%" stroke="#e4002b" strokeWidth="2" />
+        <line x1="50%" y1="0" x2="50%" y2="100%" stroke="#00d6ff" strokeWidth="2" />
         {/* Center circle */}
-        <circle cx="50%" cy="50%" r="80" fill="none" stroke="#e4002b" strokeWidth="1.5" />
+        <circle cx="50%" cy="50%" r="80" fill="none" stroke="#00d6ff" strokeWidth="1.5" />
         {/* Blue lines */}
         <line x1="33%" y1="0" x2="33%" y2="100%" stroke="#0066cc" strokeWidth="1.5" />
         <line x1="67%" y1="0" x2="67%" y2="100%" stroke="#0066cc" strokeWidth="1.5" />
         {/* Face-off circles */}
-        <circle cx="25%" cy="30%" r="40" fill="none" stroke="#e4002b" strokeWidth="1" />
-        <circle cx="75%" cy="30%" r="40" fill="none" stroke="#e4002b" strokeWidth="1" />
-        <circle cx="25%" cy="70%" r="40" fill="none" stroke="#e4002b" strokeWidth="1" />
-        <circle cx="75%" cy="70%" r="40" fill="none" stroke="#e4002b" strokeWidth="1" />
+        <circle cx="25%" cy="30%" r="40" fill="none" stroke="#00d6ff" strokeWidth="1" />
+        <circle cx="75%" cy="30%" r="40" fill="none" stroke="#00d6ff" strokeWidth="1" />
+        <circle cx="25%" cy="70%" r="40" fill="none" stroke="#00d6ff" strokeWidth="1" />
+        <circle cx="75%" cy="70%" r="40" fill="none" stroke="#00d6ff" strokeWidth="1" />
       </svg>
     </div>
   );

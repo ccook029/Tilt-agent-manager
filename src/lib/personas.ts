@@ -42,15 +42,15 @@ const leadership: LeaderPersona[] = [
     name: "Chris Cook",
     title: "Co-Founder",
     avatarInitials: "CC",
-    avatarColor: "bg-[#e4002b]",
-    avatarAccent: "ring-red-400",
+    avatarColor: "bg-[#0094b8]",
+    avatarAccent: "ring-[#00d6ff]",
   },
   {
     name: "Jeremy Elliott",
     title: "Co-Founder",
     avatarInitials: "JE",
-    avatarColor: "bg-[#e4002b]",
-    avatarAccent: "ring-red-400",
+    avatarColor: "bg-[#0094b8]",
+    avatarAccent: "ring-[#00d6ff]",
   },
 ];
 

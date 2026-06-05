@@ -33,8 +33,8 @@ export function useToast(): PushToast {
 
 const ACCENT: Record<ToastKind, string> = {
   success: "bg-green-500",
-  error: "bg-[#e4002b]",
-  info: "bg-sky-500",
+  error: "bg-red-500",
+  info: "bg-[#00d6ff]",
 };
 
 const ICON: Record<ToastKind, string> = {

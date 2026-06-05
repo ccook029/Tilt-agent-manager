@@ -104,7 +104,7 @@ export default function MayaChat() {
         <select
           value={taskType}
           onChange={(e) => setTaskType(e.target.value)}
-          className="text-xs bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-gray-300 focus:outline-none focus:border-[#e4002b]"
+          className="text-xs bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-gray-300 focus:outline-none focus:border-[#00d6ff]"
         >
           {Object.entries(TASK_LABELS).map(([value, label]) => (
             <option key={value} value={value}>
@@ -127,7 +127,7 @@ export default function MayaChat() {
             <div
               className={`max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed ${
                 msg.role === "user"
-                  ? "bg-[#e4002b]/20 text-gray-200 border border-[#e4002b]/30"
+                  ? "bg-[#00d6ff]/20 text-gray-200 border border-[#00d6ff]/30"
                   : "bg-gray-800/60 text-gray-300 border border-gray-700/50"
               }`}
             >
@@ -161,13 +161,13 @@ export default function MayaChat() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
             placeholder="Describe a product, ask for specs, or request an RFQ..."
-            className="flex-1 bg-gray-800/50 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-[#e4002b] transition-colors"
+            className="flex-1 bg-gray-800/50 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-[#00d6ff] transition-colors"
             disabled={loading}
           />
           <button
             onClick={send}
             disabled={loading || !input.trim()}
-            className="px-5 py-2.5 bg-[#e4002b] hover:bg-[#b8001f] disabled:opacity-40 rounded-lg text-sm font-medium transition-colors text-white"
+            className="px-5 py-2.5 bg-[#00d6ff] hover:bg-[#00a6c9] disabled:opacity-40 rounded-lg text-sm font-semibold transition-colors text-[#06232b]"
           >
             Send
           </button>

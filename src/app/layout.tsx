@@ -51,7 +51,7 @@ export default function RootLayout({
                 className="invert brightness-200"
                 priority
               />
-              <span className="text-base text-gray-500 border-l border-gray-700 pl-5 group-hover:text-[#e4002b] transition-colors">
+              <span className="text-base text-gray-500 border-l border-gray-700 pl-5 group-hover:text-[#00d6ff] transition-colors">
                 Corporate HQ
               </span>
             </Link>

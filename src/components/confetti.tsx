@@ -36,7 +36,7 @@ export function Confetti() {
     if (!ctx) return;
 
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const colors = ["#e4002b", "#ffffff", "#ff5577", "#b8001f", "#9aa0a6"];
+    const colors = ["#00d6ff", "#ffffff", "#7be9ff", "#00a6c9", "#9aa0a6"];
     let particles: Particle[] = [];
     let raf = 0;
 

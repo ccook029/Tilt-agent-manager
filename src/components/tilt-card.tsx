@@ -38,7 +38,7 @@ export default function TiltCard({ children, className, max = 9 }: TiltCardProps
   const rotateY = useTransform(sx, [0, 1], [-max, max]);
   const glareX = useTransform(px, (v) => `${v * 100}%`);
   const glareY = useTransform(py, (v) => `${v * 100}%`);
-  const spotlight = useMotionTemplate`radial-gradient(circle at ${glareX} ${glareY}, rgba(228,0,43,0.22), transparent 45%)`;
+  const spotlight = useMotionTemplate`radial-gradient(circle at ${glareX} ${glareY}, rgba(0,214,255,0.22), transparent 45%)`;
 
   if (reduce) return <div className={className}>{children}</div>;
 

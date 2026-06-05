@@ -81,8 +81,8 @@ export default function ReportFiles({ agentId }: { agentId: string }) {
         >
           <div className="flex items-center gap-3 min-w-0 flex-1">
             {/* PDF icon */}
-            <div className="w-9 h-9 rounded bg-[#e4002b]/10 border border-[#e4002b]/20 flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4 text-[#e4002b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <div className="w-9 h-9 rounded bg-[#00d6ff]/10 border border-[#00d6ff]/20 flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 text-[#00d6ff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
                 <line x1="16" y1="13" x2="8" y2="13" />

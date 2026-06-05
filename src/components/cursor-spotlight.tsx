@@ -61,7 +61,7 @@ export default function CursorSpotlight() {
         className="-ml-[300px] -mt-[300px] h-[600px] w-[600px] rounded-full"
         style={{
           background:
-            "radial-gradient(circle, rgba(228,0,43,0.12), rgba(228,0,43,0.04) 35%, transparent 62%)",
+            "radial-gradient(circle, rgba(0,214,255,0.12), rgba(0,214,255,0.04) 35%, transparent 62%)",
         }}
       />
     </div>
