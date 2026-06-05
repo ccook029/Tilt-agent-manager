@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CountUp } from "@/components/count-up";
 
 interface HqMetricsData {
   generatedAt: string;
@@ -75,7 +76,7 @@ export default function HqMetrics() {
         </div>
         <div className="flex items-baseline gap-3">
           <span className="text-5xl font-bold text-[#e4002b] tabular-nums tracking-tight">
-            {data.sticksSold.currentMonth.total}
+            <CountUp value={data.sticksSold.currentMonth.total} />
           </span>
           <span className="text-sm text-gray-500">
             vs {data.sticksSold.previousMonth.total} last month
@@ -95,7 +96,10 @@ export default function HqMetrics() {
             <ChangeBadge value={data.changes.revenue} />
           </div>
           <p className="text-2xl font-bold text-white tabular-nums">
-            ${data.currentMonth.revenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            <CountUp
+              value={data.currentMonth.revenue}
+              format={(n) => `$${Math.round(n).toLocaleString()}`}
+            />
           </p>
           <p className="text-xs text-gray-600 mt-1">{data.currentMonth.label}</p>
         </div>
@@ -107,7 +111,7 @@ export default function HqMetrics() {
             <ChangeBadge value={data.changes.siteVisits} />
           </div>
           <p className="text-2xl font-bold text-white tabular-nums">
-            {data.currentMonth.siteVisits.toLocaleString()}
+            <CountUp value={data.currentMonth.siteVisits} />
           </p>
           <p className="text-xs text-gray-600 mt-1">{data.currentMonth.label}</p>
         </div>
@@ -119,7 +123,7 @@ export default function HqMetrics() {
             <ChangeBadge value={data.changes.inquiries} />
           </div>
           <p className="text-2xl font-bold text-white tabular-nums">
-            {data.currentMonth.inquiries.toLocaleString()}
+            <CountUp value={data.currentMonth.inquiries} />
           </p>
           <p className="text-xs text-gray-600 mt-1">{data.currentMonth.label}</p>
         </div>

@@ -3,7 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { getPersonaByAgentId } from "@/lib/personas";
+import { useToast } from "@/components/toast";
+import { EASE_OUT } from "@/lib/motion";
 import MayaChat from "@/components/maya-chat";
 import ReportFiles from "@/components/report-files";
 import ReportRenderer from "@/components/report-renderer";
@@ -37,6 +40,8 @@ export default function AgentDetailPage() {
   const [activeTab, setActiveTab] = useState<"history" | "files" | "chat">(
     isMaya ? "chat" : "history"
   );
+  const toast = useToast();
+  const reduce = useReducedMotion();
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -57,18 +62,28 @@ export default function AgentDetailPage() {
   const triggerRun = async () => {
     if (!persona) return;
     setRunning(true);
+    toast({
+      title: `${persona.name} is on it…`,
+      description: "Generating a fresh report.",
+      kind: "info",
+    });
     try {
       // For agents with task-based endpoints, default to the weekly report
       const isInventory = agentId === "inventory";
       const endpoint = isInventory ? "/api/inventory/weekly" : persona.runEndpoint;
-      await fetch(endpoint, {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
       await fetchLogs();
+      toast(
+        res.ok
+          ? { title: "Report ready", description: `${persona.name} just delivered.`, kind: "success" }
+          : { title: "Run failed", description: `${persona.name} hit an error.`, kind: "error" }
+      );
     } catch {
-      console.error("Failed to trigger run");
+      toast({ title: "Run failed", kind: "error" });
     } finally {
       setRunning(false);
     }
@@ -77,15 +92,25 @@ export default function AgentDetailPage() {
   const triggerTask = async (task: string) => {
     if (!persona) return;
     setRunningTask(task);
+    const label = task
+      .split("-")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+    toast({ title: `Running: ${label}…`, kind: "info" });
     try {
-      await fetch(persona.runEndpoint, {
+      const res = await fetch(persona.runEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ task }),
       });
       await fetchLogs();
+      toast(
+        res.ok
+          ? { title: `${label} complete`, kind: "success" }
+          : { title: `${label} failed`, kind: "error" }
+      );
     } catch {
-      console.error(`Failed to trigger task: ${task}`);
+      toast({ title: `${label} failed`, kind: "error" });
     } finally {
       setRunningTask(null);
     }
@@ -93,11 +118,17 @@ export default function AgentDetailPage() {
 
   const triggerInnovation = async () => {
     setInnovating(true);
+    toast({ title: "Maya is dreaming up a concept…", kind: "info" });
     try {
-      await fetch("/api/product-design/innovate", { method: "POST" });
+      const res = await fetch("/api/product-design/innovate", { method: "POST" });
       await fetchLogs();
+      toast(
+        res.ok
+          ? { title: "New concept generated", kind: "success" }
+          : { title: "Concept generation failed", kind: "error" }
+      );
     } catch {
-      console.error("Failed to trigger innovation");
+      toast({ title: "Concept generation failed", kind: "error" });
     } finally {
       setInnovating(false);
     }
@@ -291,40 +322,36 @@ export default function AgentDetailPage() {
         </div>
       ) : (
         <>
-      {/* Tab navigation */}
+      {/* Tab navigation — sliding red underline */}
       <div className="flex gap-1 border-b border-gray-800/60">
-        {isMaya && (
-          <button
-            onClick={() => setActiveTab("chat")}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === "chat"
-                ? "border-[#e4002b] text-white"
-                : "border-transparent text-gray-500 hover:text-gray-300"
-            }`}
-          >
-            Talk to Maya
-          </button>
-        )}
-        <button
-          onClick={() => setActiveTab("history")}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "history"
-              ? "border-[#e4002b] text-white"
-              : "border-transparent text-gray-500 hover:text-gray-300"
-          }`}
-        >
-          Report History
-        </button>
-        <button
-          onClick={() => setActiveTab("files")}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "files"
-              ? "border-[#e4002b] text-white"
-              : "border-transparent text-gray-500 hover:text-gray-300"
-          }`}
-        >
-          Files
-        </button>
+        {([
+          ...(isMaya ? [{ id: "chat" as const, label: "Talk to Maya" }] : []),
+          { id: "history" as const, label: "Report History" },
+          { id: "files" as const, label: "Files" },
+        ]).map((tab) => {
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
+                active ? "text-white" : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              {tab.label}
+              {active &&
+                (reduce ? (
+                  <span className="absolute left-2 right-2 -bottom-px h-0.5 rounded-full bg-[#e4002b]" />
+                ) : (
+                  <motion.span
+                    layoutId="tabUnderline"
+                    className="absolute left-2 right-2 -bottom-px h-0.5 rounded-full bg-[#e4002b]"
+                    transition={{ duration: 0.3, ease: EASE_OUT }}
+                  />
+                ))}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab content */}
@@ -361,56 +388,78 @@ export default function AgentDetailPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {logs.map((log) => (
-                <div
-                  key={log.id}
-                  className="border border-gray-800/60 rounded-lg overflow-hidden"
-                >
-                  <button
-                    onClick={() =>
-                      setExpanded(expanded === log.id ? null : log.id)
-                    }
-                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#111] transition-colors text-left"
+            <motion.div layout={!reduce} className="space-y-2">
+              <AnimatePresence initial={false}>
+                {logs.map((log) => (
+                  <motion.div
+                    key={log.id}
+                    layout={!reduce}
+                    initial={reduce ? false : { opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={reduce ? {} : { opacity: 0, scale: 0.98 }}
+                    transition={{ duration: 0.35, ease: EASE_OUT }}
+                    className="border border-gray-800/60 hover:border-gray-700 rounded-lg overflow-hidden transition-colors"
                   >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`inline-block w-2 h-2 rounded-full ${
-                          log.status === "success"
-                            ? "bg-green-500"
-                            : "bg-red-500"
-                        }`}
-                      />
-                      <span className="font-medium">{log.agentName}</span>
-                      <span className="text-xs text-gray-600">{log.model}</span>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
-                      <span>{(log.durationMs / 1000).toFixed(1)}s</span>
-                      {log.tokensUsed != null && (
+                    <button
+                      onClick={() =>
+                        setExpanded(expanded === log.id ? null : log.id)
+                      }
+                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#111] transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`inline-block w-2 h-2 rounded-full ${
+                            log.status === "success"
+                              ? "bg-green-500"
+                              : "bg-red-500"
+                          }`}
+                        />
+                        <span className="font-medium">{log.agentName}</span>
+                        <span className="text-xs text-gray-600">{log.model}</span>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-gray-500">
+                        <span>{(log.durationMs / 1000).toFixed(1)}s</span>
+                        {log.tokensUsed != null && (
+                          <span>
+                            {log.tokensUsed.toLocaleString()} tokens
+                          </span>
+                        )}
                         <span>
-                          {log.tokensUsed.toLocaleString()} tokens
+                          {new Date(log.startedAt).toLocaleString()}
                         </span>
+                        <motion.span
+                          animate={{ rotate: expanded === log.id ? 180 : 0 }}
+                          transition={{ duration: 0.25, ease: EASE_OUT }}
+                          className="text-gray-700 inline-block"
+                        >
+                          ▾
+                        </motion.span>
+                      </div>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {expanded === log.id && (
+                        <motion.div
+                          key="body"
+                          initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+                          animate={reduce ? { opacity: 1 } : { height: "auto", opacity: 1 }}
+                          exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+                          transition={{ duration: 0.32, ease: EASE_OUT }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-6 py-5 border-t border-gray-800/60 bg-[#0d0d0d] max-h-[700px] overflow-y-auto chat-scroll">
+                            <ReportRenderer
+                              text={log.output}
+                              agentName={log.agentName}
+                              date={log.startedAt}
+                            />
+                          </div>
+                        </motion.div>
                       )}
-                      <span>
-                        {new Date(log.startedAt).toLocaleString()}
-                      </span>
-                      <span className="text-gray-700">
-                        {expanded === log.id ? "▲" : "▼"}
-                      </span>
-                    </div>
-                  </button>
-                  {expanded === log.id && (
-                    <div className="px-6 py-5 border-t border-gray-800/60 bg-[#0d0d0d] max-h-[700px] overflow-y-auto chat-scroll">
-                      <ReportRenderer
-                        text={log.output}
-                        agentName={log.agentName}
-                        date={log.startedAt}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                    </AnimatePresence>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </motion.div>
           )}
         </div>
       )}

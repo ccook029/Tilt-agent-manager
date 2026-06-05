@@ -2,6 +2,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { getAllPersonas, getLeadership } from "@/lib/personas";
 import HqMetrics from "@/components/hq-metrics";
+import TeamGrid from "@/components/team-grid";
+import { Stagger, StaggerItem } from "@/components/motion-primitives";
 
 export default function Home() {
   const team = getAllPersonas();
@@ -63,29 +65,28 @@ export default function Home() {
             Leadership
           </h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-2">
+        <Stagger className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-2">
           {founders.map((founder) => (
-            <div
-              key={founder.name}
-              className="rounded-xl border border-[#e4002b]/20 p-6 bg-[#111]/60 relative overflow-hidden"
-            >
-              {/* Subtle red gradient top edge */}
-              <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#e4002b]/60 to-transparent" />
+            <StaggerItem key={founder.name}>
+              <div className="lift rounded-xl border border-[#e4002b]/20 hover:border-[#e4002b]/40 p-6 bg-[#111]/60 relative overflow-hidden">
+                {/* Subtle red gradient top edge */}
+                <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#e4002b]/60 to-transparent" />
 
-              <div className="flex items-center gap-5">
-                <div
-                  className={`w-16 h-16 rounded-full ${founder.avatarColor} ring-2 ${founder.avatarAccent} flex items-center justify-center text-xl font-bold text-white shadow-lg`}
-                >
-                  {founder.avatarInitials}
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">{founder.name}</h3>
-                  <p className="text-sm text-[#e4002b]">{founder.title}</p>
+                <div className="flex items-center gap-5">
+                  <div
+                    className={`w-16 h-16 rounded-full ${founder.avatarColor} ring-2 ${founder.avatarAccent} flex items-center justify-center text-xl font-bold text-white shadow-lg`}
+                  >
+                    {founder.avatarInitials}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">{founder.name}</h3>
+                    <p className="text-sm text-[#e4002b]">{founder.title}</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
 
         {/* Connector line from leadership to team */}
         <div className="flex justify-center py-3">
@@ -101,75 +102,14 @@ export default function Home() {
             The Team
           </h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {team.map((person) => (
-            <Link
-              key={person.agentId}
-              href={`/dashboard/${person.agentId}`}
-              className="group block rounded-xl border border-gray-800/60 p-6 hover:border-[#e4002b]/40 bg-[#111]/50 hover:bg-[#111]/80 transition-all relative overflow-hidden"
-            >
-              {/* Red glow on hover */}
-              <div className="absolute inset-0 bg-gradient-to-br from-[#e4002b]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-
-              <div className="relative">
-                {/* Avatar + Name */}
-                <div className="flex items-center gap-4 mb-4">
-                  <div
-                    className={`w-14 h-14 rounded-full ${person.avatarColor} ring-2 ${person.avatarAccent} flex items-center justify-center text-lg font-bold text-white shadow-lg`}
-                  >
-                    {person.avatarInitials}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white group-hover:text-[#e4002b] transition-colors">
-                      {person.name}
-                    </h3>
-                    <p className="text-xs text-gray-500">{person.title}</p>
-                  </div>
-                </div>
-
-                {/* Department badge */}
-                <div className="mb-3">
-                  <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-gray-800/60 text-gray-400 border border-gray-700/50">
-                    {person.department}
-                  </span>
-                </div>
-
-                {/* Bio */}
-                <p className="text-sm text-gray-400 leading-relaxed mb-4">
-                  {person.bio}
-                </p>
-
-                {/* Footer */}
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-600">{person.schedule}</span>
-                  <span
-                    className={`flex items-center gap-1.5 ${
-                      person.status === "active"
-                        ? "text-green-400"
-                        : "text-gray-500"
-                    }`}
-                  >
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        person.status === "active"
-                          ? "bg-green-500 tilt-pulse"
-                          : "bg-gray-600"
-                      }`}
-                    />
-                    {person.status === "active" ? "Active" : "Standby"}
-                  </span>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+        <TeamGrid team={team} />
       </div>
 
       {/* Quick Links */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Link
           href="/dashboard"
-          className="block rounded-lg border border-gray-800/60 p-5 hover:border-[#e4002b]/30 bg-[#111]/30 transition-colors"
+          className="lift block rounded-lg border border-gray-800/60 p-5 hover:border-[#e4002b]/30 bg-[#111]/30"
         >
           <h3 className="font-semibold mb-1">Operations Dashboard</h3>
           <p className="text-sm text-gray-500">

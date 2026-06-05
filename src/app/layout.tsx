@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import "./globals.css";
+import { ToastProvider } from "@/components/toast";
 
 export const metadata: Metadata = {
   title: "Tilt Corporate Headquarters",
@@ -16,6 +17,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-[#0a0a0a] text-gray-100 min-h-screen carbon-texture">
+        <ToastProvider>
         <header className="border-b border-gray-800/60 px-6 py-6 bg-[#0a0a0a]/90 backdrop-blur-sm sticky top-0 z-50">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <Link href="/" className="flex items-center gap-5 group">
@@ -46,6 +48,7 @@ export default function RootLayout({
         <main className="max-w-6xl mx-auto px-6 py-8 relative">
           {children}
         </main>
+        </ToastProvider>
       </body>
     </html>
   );
