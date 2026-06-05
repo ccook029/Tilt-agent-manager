@@ -26,6 +26,7 @@ export default function AgentDetailPage() {
   const agentId = params.agentId as string;
   const persona = getPersonaByAgentId(agentId);
   const isMaya = agentId === "product-design";
+  const isExternal = persona?.external === true;
 
   const [logs, setLogs] = useState<RunLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,13 +175,40 @@ export default function AgentDetailPage() {
               {innovating ? "Thinking..." : "Generate Concept"}
             </button>
           )}
-          <button
-            onClick={triggerRun}
-            disabled={running}
-            className="px-4 py-2 bg-[#e4002b] hover:bg-[#b8001f] disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
-          >
-            {running ? "Running..." : "Run Now"}
-          </button>
+          {/* External tools (e.g. Catalog Builder) open in a new tab via a
+              server-side launch route that injects the access key. */}
+          {isExternal && persona?.launchUrl && (
+            <a
+              href={persona.launchUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 bg-sky-600 hover:bg-sky-500 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+            >
+              Open {persona.name}
+              <svg
+                className="w-3.5 h-3.5 opacity-70"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+                />
+              </svg>
+            </a>
+          )}
+          {!isExternal && (
+            <button
+              onClick={triggerRun}
+              disabled={running}
+              className="px-4 py-2 bg-[#e4002b] hover:bg-[#b8001f] disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+            >
+              {running ? "Running..." : "Run Now"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -249,6 +277,20 @@ export default function AgentDetailPage() {
         </div>
       )}
 
+      {/* External tools have no run history / files — show a launch note. */}
+      {isExternal ? (
+        <div className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-6">
+          <p className="text-sm text-gray-400 leading-relaxed">
+            {persona?.name} is a live, on-demand tool — it doesn&apos;t run on a
+            schedule or post reports here. Use the{" "}
+            <span className="text-sky-400 font-medium">
+              Open {persona?.name}
+            </span>{" "}
+            button above to launch it in a new tab.
+          </p>
+        </div>
+      ) : (
+        <>
       {/* Tab navigation */}
       <div className="flex gap-1 border-b border-gray-800/60">
         {isMaya && (
@@ -371,6 +413,8 @@ export default function AgentDetailPage() {
             </div>
           )}
         </div>
+      )}
+        </>
       )}
     </div>
   );
