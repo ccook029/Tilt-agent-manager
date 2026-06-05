@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import "./globals.css";
@@ -6,10 +6,45 @@ import { ToastProvider } from "@/components/toast";
 import { CommandPalette, CommandButton } from "@/components/command-palette";
 import { Confetti } from "@/components/confetti";
 import CursorSpotlight from "@/components/cursor-spotlight";
+import { RunPipelineProvider } from "@/components/run-pipeline";
+import IntroOverlay from "@/components/intro-overlay";
+
+const SITE_URL = "https://tilt-agent-manager-i3tk.vercel.app";
+const OG_DESCRIPTION =
+  "AI-powered corporate headquarters for Tilt Hockey — autonomous agents running analytics, competitive intel, inventory, and product design.";
 
 export const metadata: Metadata = {
-  title: "Tilt Corporate Headquarters",
-  description: "AI-powered corporate headquarters for Tilt Hockey Inc.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Tilt Corporate Headquarters",
+    template: "%s · Tilt HQ",
+  },
+  description: OG_DESCRIPTION,
+  applicationName: "Tilt HQ",
+  icons: {
+    icon: "/images/tilt-shield.png",
+    apple: "/images/tilt-shield.png",
+  },
+  openGraph: {
+    title: "Tilt Corporate Headquarters",
+    description: OG_DESCRIPTION,
+    url: SITE_URL,
+    siteName: "Tilt HQ",
+    type: "website",
+    images: [
+      { url: "/images/tilt-shield.png", width: 300, height: 360, alt: "Tilt Hockey" },
+    ],
+  },
+  twitter: {
+    card: "summary",
+    title: "Tilt Corporate Headquarters",
+    description: OG_DESCRIPTION,
+    images: ["/images/tilt-shield.png"],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a0a0a",
 };
 
 export default function RootLayout({
@@ -39,7 +74,9 @@ export default function RootLayout({
         {/* Film grain + cursor spotlight atmosphere */}
         <div className="grain pointer-events-none fixed inset-0 z-[45]" />
         <CursorSpotlight />
+        <IntroOverlay />
         <ToastProvider>
+        <RunPipelineProvider>
         <header className="border-b border-gray-800/60 px-6 py-6 bg-[#0a0a0a]/90 backdrop-blur-sm sticky top-0 z-50">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <Link href="/" className="flex items-center gap-5 group">
@@ -73,6 +110,7 @@ export default function RootLayout({
         </main>
         <CommandPalette />
         <Confetti />
+        </RunPipelineProvider>
         </ToastProvider>
       </body>
     </html>

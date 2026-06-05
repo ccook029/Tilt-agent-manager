@@ -9,6 +9,7 @@
 import Link from "next/link";
 import { Reorder, useDragControls, useReducedMotion } from "framer-motion";
 import type { AgentPersona } from "@/lib/personas";
+import { GripIcon, StarIcon, ArrowRightIcon } from "@/components/icons";
 
 export interface AgentCardData {
   lastRun: string;
@@ -86,7 +87,7 @@ export function AgentCardBody({
 
       {/* Arrow */}
       <div className="text-gray-700 group-hover:text-[#00d6ff] group-hover:translate-x-1 transition-all text-lg shrink-0 pt-2">
-        &rarr;
+        <ArrowRightIcon />
       </div>
     </div>
   );
@@ -129,11 +130,11 @@ export function DraggableAgentCard({
         {/* Drag handle */}
         <button
           onPointerDown={(e) => controls.start(e)}
-          className="absolute left-1.5 top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing px-1 text-lg leading-none text-gray-700 hover:text-gray-400 transition-colors touch-none"
+          className="absolute left-1.5 top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing px-1 text-[17px] leading-none text-gray-700 hover:text-gray-400 transition-colors touch-none"
           aria-label={`Drag to reorder ${person.name}`}
           title="Drag to reorder"
         >
-          ⠿
+          <GripIcon />
         </button>
 
         {/* Pin toggle */}
@@ -147,7 +148,7 @@ export function DraggableAgentCard({
           aria-label={pinned ? `Unpin ${person.name}` : `Pin ${person.name}`}
           title={pinned ? "Unpin" : "Pin to top"}
         >
-          {pinned ? "★" : "☆"}
+          <StarIcon filled={pinned} className="text-[15px]" />
         </button>
 
         <Link href={`/dashboard/${person.agentId}`} className="block p-6 pl-9">
