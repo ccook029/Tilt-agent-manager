@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { getAllPersonas } from "@/lib/personas";
 import { useToast } from "@/components/toast";
+import { SearchIcon } from "@/components/icons";
 import { EASE_OUT } from "@/lib/motion";
 
 const OPEN_EVENT = "tilt:open-command";
@@ -182,7 +183,9 @@ export function CommandPalette() {
             onKeyDown={onKeyDown}
           >
             <div className="flex items-center gap-2 border-b border-gray-800 px-4">
-              <span className="text-gray-600">⌕</span>
+              <span className="text-gray-600">
+                <SearchIcon />
+              </span>
               <input
                 ref={inputRef}
                 value={query}

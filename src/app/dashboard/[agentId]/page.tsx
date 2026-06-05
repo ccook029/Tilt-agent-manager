@@ -5,9 +5,10 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { getPersonaByAgentId } from "@/lib/personas";
-import { useToast } from "@/components/toast";
-import { fireConfetti } from "@/components/confetti";
+import { useRunPipeline } from "@/components/run-pipeline";
 import { EASE_OUT } from "@/lib/motion";
+import { ChevronDownIcon } from "@/components/icons";
+import RunStats from "@/components/run-stats";
 import MayaChat from "@/components/maya-chat";
 import ReportFiles from "@/components/report-files";
 import ReportRenderer from "@/components/report-renderer";
@@ -41,7 +42,7 @@ export default function AgentDetailPage() {
   const [activeTab, setActiveTab] = useState<"history" | "files" | "chat">(
     isMaya ? "chat" : "history"
   );
-  const toast = useToast();
+  const { run } = useRunPipeline();
   const reduce = useReducedMotion();
 
   const fetchLogs = useCallback(async () => {
@@ -60,15 +61,10 @@ export default function AgentDetailPage() {
     fetchLogs();
   }, [fetchLogs]);
 
-  const triggerRun = async () => {
+  const triggerRun = () => {
     if (!persona) return;
     setRunning(true);
-    toast({
-      title: `${persona.name} is on it…`,
-      description: "Generating a fresh report.",
-      kind: "info",
-    });
-    try {
+    run(persona.name, async () => {
       // For agents with task-based endpoints, default to the weekly report
       const isInventory = agentId === "inventory";
       const endpoint = isInventory ? "/api/inventory/weekly" : persona.runEndpoint;
@@ -78,64 +74,35 @@ export default function AgentDetailPage() {
         body: JSON.stringify({}),
       });
       await fetchLogs();
-      if (res.ok) {
-        fireConfetti();
-        toast({ title: "Report ready", description: `${persona.name} just delivered.`, kind: "success" });
-      } else {
-        toast({ title: "Run failed", description: `${persona.name} hit an error.`, kind: "error" });
-      }
-    } catch {
-      toast({ title: "Run failed", kind: "error" });
-    } finally {
-      setRunning(false);
-    }
+      return { ok: res.ok };
+    }).finally(() => setRunning(false));
   };
 
-  const triggerTask = async (task: string) => {
+  const triggerTask = (task: string) => {
     if (!persona) return;
     setRunningTask(task);
     const label = task
       .split("-")
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
       .join(" ");
-    toast({ title: `Running: ${label}…`, kind: "info" });
-    try {
+    run(label, async () => {
       const res = await fetch(persona.runEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ task }),
       });
       await fetchLogs();
-      if (res.ok) {
-        fireConfetti();
-        toast({ title: `${label} complete`, kind: "success" });
-      } else {
-        toast({ title: `${label} failed`, kind: "error" });
-      }
-    } catch {
-      toast({ title: `${label} failed`, kind: "error" });
-    } finally {
-      setRunningTask(null);
-    }
+      return { ok: res.ok };
+    }).finally(() => setRunningTask(null));
   };
 
-  const triggerInnovation = async () => {
+  const triggerInnovation = () => {
     setInnovating(true);
-    toast({ title: "Maya is dreaming up a concept…", kind: "info" });
-    try {
+    run("New Concept", async () => {
       const res = await fetch("/api/product-design/innovate", { method: "POST" });
       await fetchLogs();
-      if (res.ok) {
-        fireConfetti();
-        toast({ title: "New concept generated", kind: "success" });
-      } else {
-        toast({ title: "Concept generation failed", kind: "error" });
-      }
-    } catch {
-      toast({ title: "Concept generation failed", kind: "error" });
-    } finally {
-      setInnovating(false);
-    }
+      return { ok: res.ok };
+    }).finally(() => setInnovating(false));
   };
 
   const displayName = persona?.name ?? logs[0]?.agentName ?? agentId;
@@ -143,7 +110,7 @@ export default function AgentDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header with persona */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-5">
           <Link
             href="/dashboard"
@@ -378,6 +345,8 @@ export default function AgentDetailPage() {
 
       {activeTab === "history" && (
         <div>
+          {!loading && logs.length > 0 && <RunStats logs={logs} />}
+
           <h3 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">
             Report History
           </h3>
@@ -436,9 +405,9 @@ export default function AgentDetailPage() {
                         <motion.span
                           animate={{ rotate: expanded === log.id ? 180 : 0 }}
                           transition={{ duration: 0.25, ease: EASE_OUT }}
-                          className="text-gray-700 inline-block"
+                          className="text-gray-600 inline-flex text-base"
                         >
-                          ▾
+                          <ChevronDownIcon />
                         </motion.span>
                       </div>
                     </button>

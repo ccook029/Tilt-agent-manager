@@ -222,7 +222,7 @@ export default function Hero() {
           initial={reduce ? false : { opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: EASE_OUT, delay: 0.6 }}
-          className="mt-9 flex items-center gap-4"
+          className="mt-9 flex flex-wrap items-center justify-center gap-4"
         >
           <Magnetic>
             <Link

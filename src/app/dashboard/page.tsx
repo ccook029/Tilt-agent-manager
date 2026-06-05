@@ -9,11 +9,12 @@ import {
   useReducedMotion,
 } from "framer-motion";
 import { getAllPersonas } from "@/lib/personas";
-import { useToast } from "@/components/toast";
-import { fireConfetti } from "@/components/confetti";
 import { EASE_OUT } from "@/lib/motion";
 import ActivityRail from "@/components/activity-rail";
 import Magnetic from "@/components/magnetic";
+import { useRunPipeline } from "@/components/run-pipeline";
+import NeedsAttention, { type Failure } from "@/components/needs-attention";
+import { SearchIcon } from "@/components/icons";
 import {
   AgentCardBody,
   DraggableAgentCard,
@@ -47,7 +48,7 @@ type StatusFilter = "all" | "active" | "standby";
 
 export default function DashboardPage() {
   const personas = getAllPersonas();
-  const toast = useToast();
+  const { run } = useRunPipeline();
   const reduce = useReducedMotion();
 
   const [agents, setAgents] = useState<AgentSummary[]>([]);
@@ -134,27 +135,13 @@ export default function DashboardPage() {
     fetchLogs();
   }, [fetchLogs]);
 
-  const triggerAll = async () => {
+  const triggerAll = () => {
     setRunning(true);
-    toast({
-      title: "Dispatching all agents…",
-      description: "Kicking off every active agent.",
-      kind: "info",
-    });
-    try {
+    run("All Agents", async () => {
       const res = await fetch("/api/agents/run", { method: "POST" });
       await fetchLogs();
-      if (res.ok) {
-        fireConfetti();
-        toast({ title: "Agents dispatched", kind: "success" });
-      } else {
-        toast({ title: "Some agents failed to start", kind: "error" });
-      }
-    } catch {
-      toast({ title: "Failed to trigger agents", kind: "error" });
-    } finally {
-      setRunning(false);
-    }
+      return { ok: res.ok };
+    }).finally(() => setRunning(false));
   };
 
   const personaById = useMemo(
@@ -164,6 +151,19 @@ export default function DashboardPage() {
   const dataById = useMemo(
     () => new Map(agents.map((a) => [a.agentId, a])),
     [agents]
+  );
+
+  // Agents whose most recent run failed.
+  const failures = useMemo<Failure[]>(
+    () =>
+      agents
+        .filter((a) => a.lastStatus === "error")
+        .map((a) => ({
+          agentId: a.agentId,
+          name: personaById.get(a.agentId)?.name ?? a.name,
+          when: a.lastRun,
+        })),
+    [agents, personaById]
   );
 
   const isReorderable = query.trim() === "" && statusFilter === "all";
@@ -197,7 +197,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
           <Link
             href="/"
@@ -223,6 +223,9 @@ export default function DashboardPage() {
         </Magnetic>
       </div>
 
+      {/* Needs attention — recent failures */}
+      <NeedsAttention failures={failures} />
+
       {/* Live activity rail */}
       <ActivityRail
         personas={personas}
@@ -233,7 +236,7 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="relative flex-1">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 text-sm">
-            ⌕
+            <SearchIcon />
           </span>
           <input
             value={query}
