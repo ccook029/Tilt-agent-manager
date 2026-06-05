@@ -45,6 +45,59 @@
   50% { opacity: 0.5; }
 }
 
+/* Hover lift — soft rise on cards/buttons, matched to the motion easing.
+   Applied to an inner element so it never fights framer's reveal transform. */
+.lift {
+  transition:
+    transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.28s ease,
+    border-color 0.28s ease,
+    background-color 0.28s ease;
+  will-change: transform;
+}
+.lift:hover {
+  transform: translateY(-4px);
+}
+
+/* Sheen sweep for the hero shield / accent surfaces */
+@keyframes tiltSheen {
+  0% { background-position: -150% 0; }
+  100% { background-position: 250% 0; }
+}
+
+/* Animated aurora — slowly drifting red glow behind the whole app */
+.aurora {
+  background:
+    radial-gradient(40% 50% at 18% 28%, rgba(228, 0, 43, 0.16), transparent 60%),
+    radial-gradient(38% 46% at 82% 18%, rgba(228, 0, 43, 0.10), transparent 60%),
+    radial-gradient(46% 56% at 62% 82%, rgba(150, 0, 25, 0.14), transparent 60%);
+  filter: blur(36px);
+  animation: auroraDrift 26s ease-in-out infinite alternate;
+}
+@keyframes auroraDrift {
+  0%   { transform: translate3d(-3%, -2%, 0) scale(1.05); }
+  50%  { transform: translate3d(2%, 3%, 0) scale(1.14); }
+  100% { transform: translate3d(3%, -3%, 0) scale(1.06); }
+}
+
+/* Respect users who ask for less motion — kill all decorative animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .lift:hover {
+    transform: none;
+  }
+  .tilt-pulse {
+    animation: none;
+  }
+}
+
+
 /* Chat messages */
 .chat-scroll {
   scrollbar-width: thin;
