@@ -18,6 +18,14 @@ export interface AgentPersona {
   avatarAccent: string; // tailwind ring/border class
   runEndpoint: string;
   taskTypes?: string[];
+  /**
+   * Standalone deployed tool launched in a new tab (rather than a Claude
+   * pipeline that produces emailed reports). When set, the dashboard shows an
+   * "open" button pointing at this server-side route instead of a "Run Now"
+   * trigger, and never expects run history.
+   */
+  external?: boolean;
+  launchUrl?: string;
 }
 
 // Leadership — Co-Founders (not AI agents, real humans at the top)
@@ -131,6 +139,21 @@ const personas: AgentPersona[] = [
     avatarColor: "bg-pink-600",
     avatarAccent: "ring-pink-400",
     runEndpoint: "/api/competitor-social/run",
+  },
+  {
+    agentId: "catalog-builder",
+    name: "Catalog Builder",
+    title: "Catalog Image Studio",
+    department: "Product Design",
+    bio: "Catalog Builder turns a team name, colors, and an uploaded jersey or logo into rendered Tilt catalog product images. Powered by Gemini, it generates on-brand catalog imagery on demand — open it, feed it a team, and get catalog-ready shots back in seconds.",
+    status: "active",
+    schedule: "On-demand",
+    avatarInitials: "CB",
+    avatarColor: "bg-sky-600",
+    avatarAccent: "ring-[#00D6FF]",
+    runEndpoint: "/api/catalog/launch",
+    external: true,
+    launchUrl: "/api/catalog/launch",
   },
 ];
 

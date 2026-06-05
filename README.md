@@ -101,6 +101,8 @@ cp .env.example .env.local
 | `CRON_SECRET` | Auto | Vercel sets this for cron auth |
 | `EMAIL_FROM` | No | Default sender for general orchestrator emails |
 | `EMAIL_TO` | No | Default recipient for general orchestrator emails |
+| `NEXT_PUBLIC_CATALOG_URL` | No | Base URL of the Catalog Builder tool (public, safe to commit) |
+| `CATALOG_ACCESS_KEY` | No | Shared secret for the Catalog Builder tool. **Server-only** — set in Vercel only, must match the `tilt-catalog-agent` project's value |
 
 ### 5. Deploy to Vercel
 
@@ -111,6 +113,26 @@ vercel deploy
 Set all environment variables in the Vercel dashboard under Settings → Environment Variables.
 
 The cron job is configured in `vercel.json` and will activate automatically after deployment.
+
+## Catalog Builder (external tool)
+
+**Catalog Builder** is registered as an agent but, unlike the others, it isn't a
+Claude pipeline — it's a standalone deployed app
+([`tilt-catalog-agent`](https://tilt-catalog-agent.vercel.app/)) that turns a
+team name, colors, and an uploaded jersey/logo into rendered catalog product
+images via Gemini. It appears as a persona on the home page and dashboard and
+opens in a new tab.
+
+Its endpoints are gated by a shared secret. The dashboard hands that secret to
+the tool via `GET /api/catalog/launch`, which builds the target URL
+**server-side** (`${NEXT_PUBLIC_CATALOG_URL}?key=${CATALOG_ACCESS_KEY}`) and
+redirects — so the key never ships in the client bundle. The tool reads the key
+once, stores it in `sessionStorage`, scrubs it from the visible URL, and sends
+it on every request as `X-Catalog-Key`.
+
+Set both `NEXT_PUBLIC_CATALOG_URL` and `CATALOG_ACCESS_KEY` in Vercel (see the
+environment-variables table). `CATALOG_ACCESS_KEY` must match the
+`tilt-catalog-agent` project's value exactly and must never be committed.
 
 ## Adding new agents
 
