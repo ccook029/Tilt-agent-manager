@@ -161,7 +161,9 @@ export default function AgentDetailPage() {
           )}
 
           <div>
-            <h2 className="text-2xl font-bold tracking-tight">{displayName}</h2>
+            <h2 className="font-display text-4xl font-bold uppercase tracking-wide">
+              {displayName}
+            </h2>
             {persona && (
               <p className="text-sm text-gray-500 mt-0.5">
                 {persona.title} &middot; {persona.department}

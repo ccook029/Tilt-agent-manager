@@ -5,6 +5,7 @@ import "./globals.css";
 import { ToastProvider } from "@/components/toast";
 import { CommandPalette, CommandButton } from "@/components/command-palette";
 import { Confetti } from "@/components/confetti";
+import CursorSpotlight from "@/components/cursor-spotlight";
 
 export const metadata: Metadata = {
   title: "Tilt Corporate Headquarters",
@@ -18,11 +19,26 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="bg-[#0a0a0a] text-gray-100 min-h-screen carbon-texture">
         {/* Animated aurora backdrop */}
         <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
           <div className="aurora absolute inset-[-12%]" />
         </div>
+        {/* Film grain + cursor spotlight atmosphere */}
+        <div className="grain pointer-events-none fixed inset-0 z-[45]" />
+        <CursorSpotlight />
         <ToastProvider>
         <header className="border-b border-gray-800/60 px-6 py-6 bg-[#0a0a0a]/90 backdrop-blur-sm sticky top-0 z-50">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
@@ -56,6 +72,7 @@ export default function RootLayout({
           {children}
         </main>
         <CommandPalette />
+        <Confetti />
         </ToastProvider>
       </body>
     </html>

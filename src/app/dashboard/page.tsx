@@ -13,6 +13,7 @@ import { useToast } from "@/components/toast";
 import { fireConfetti } from "@/components/confetti";
 import { EASE_OUT } from "@/lib/motion";
 import ActivityRail from "@/components/activity-rail";
+import Magnetic from "@/components/magnetic";
 import {
   AgentCardBody,
   DraggableAgentCard,
@@ -204,20 +205,22 @@ export default function DashboardPage() {
           >
             &larr; HQ
           </Link>
-          <h2 className="text-2xl font-bold tracking-tight">
+          <h2 className="font-display text-3xl font-bold uppercase tracking-wide">
             Operations <span className="text-[#e4002b]">Dashboard</span>
           </h2>
         </div>
-        <button
-          onClick={triggerAll}
-          disabled={running}
-          className="px-4 py-2 bg-[#e4002b] hover:bg-[#b8001f] disabled:opacity-50 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-        >
-          {running && (
-            <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-          )}
-          {running ? "Running…" : "Run All Agents"}
-        </button>
+        <Magnetic>
+          <button
+            onClick={triggerAll}
+            disabled={running}
+            className="px-4 py-2 bg-[#e4002b] hover:bg-[#b8001f] disabled:opacity-50 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-[0_10px_30px_-12px_rgba(228,0,43,0.7)]"
+          >
+            {running && (
+              <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+            )}
+            {running ? "Running…" : "Run All Agents"}
+          </button>
+        </Magnetic>
       </div>
 
       {/* Live activity rail */}
