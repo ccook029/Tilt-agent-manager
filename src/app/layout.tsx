@@ -3,6 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import "./globals.css";
 import { ToastProvider } from "@/components/toast";
+import { CommandPalette, CommandButton } from "@/components/command-palette";
 
 export const metadata: Metadata = {
   title: "Tilt Corporate Headquarters",
@@ -34,6 +35,7 @@ export default function RootLayout({
               </span>
             </Link>
             <div className="flex items-center gap-4">
+              <CommandButton />
               <Link
                 href="/dashboard"
                 className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
@@ -48,6 +50,7 @@ export default function RootLayout({
         <main className="max-w-6xl mx-auto px-6 py-8 relative">
           {children}
         </main>
+        <CommandPalette />
         </ToastProvider>
       </body>
     </html>
