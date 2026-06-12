@@ -26,6 +26,11 @@ export interface AgentPersona {
    */
   external?: boolean;
   launchUrl?: string;
+  /**
+   * Companion app deployed elsewhere (e.g. on Vercel) linked from the agent's
+   * detail page. Opens in a new tab alongside the normal run/report flow.
+   */
+  linkedApp?: { label: string; url: string };
 }
 
 // Leadership — Co-Founders (not AI agents, real humans at the top)
@@ -126,19 +131,27 @@ const personas: AgentPersona[] = [
     avatarAccent: "ring-cyan-400",
     runEndpoint: "/api/inventory/run",
     taskTypes: ["stock-alert", "po-recommendation", "sku-audit", "shipment-tracker", "inventory-reconciliation", "sheet-reconciliation", "sheet-sync"],
+    linkedApp: {
+      label: "Inventory App",
+      url: "https://tiltinventory.vercel.app/",
+    },
   },
   {
     agentId: "competitor-social",
     name: "Sloane Signal",
     title: "Director of Social Intelligence",
     department: "Marketing Intelligence",
-    bio: "Sloane monitors every post, reel, and TikTok from Bauer, CCM, True, and Warrior. Every Monday she delivers a competitive social media intelligence report — what's working, what's trending, and exactly what Tilt should do about it. Data-driven, zero fluff.",
+    bio: "Sloane monitors every post, reel, and TikTok from Bauer, CCM, True, and Warrior. Every Monday she delivers a competitive social media intelligence report — what's working, what's trending, and exactly what Tilt should do about it. Data-driven, zero fluff. She works hand-in-hand with the Tilt Social Media Builder for creating and managing Tilt's own content.",
     status: "active",
     schedule: "Mondays at 6:00 AM ET",
     avatarInitials: "SS",
     avatarColor: "bg-pink-600",
     avatarAccent: "ring-pink-400",
     runEndpoint: "/api/competitor-social/run",
+    linkedApp: {
+      label: "Social Media Builder",
+      url: "https://tilt-social-media-manager.vercel.app/",
+    },
   },
   {
     agentId: "catalog-builder",

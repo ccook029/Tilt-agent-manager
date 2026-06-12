@@ -145,15 +145,16 @@ export default function AgentDetailPage() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {/* Stockton gets a link to the Tilt Inventory app */}
-          {agentId === "inventory" && (
+          {/* Companion apps (e.g. Stockton's Inventory App, Sloane's Social
+              Media Builder) open in a new tab. */}
+          {persona?.linkedApp && (
             <a
-              href="https://tiltinventory.vercel.app/"
+              href={persona.linkedApp.url}
               target="_blank"
               rel="noopener noreferrer"
               className="px-4 py-2 bg-cyan-700 hover:bg-cyan-600 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
             >
-              Inventory App
+              {persona.linkedApp.label}
               <svg
                 className="w-3.5 h-3.5 opacity-70"
                 fill="none"
