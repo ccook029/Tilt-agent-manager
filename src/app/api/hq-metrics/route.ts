@@ -105,6 +105,28 @@ export async function GET() {
     revenueError = revenueError ?? previousInvoicesResult.reason?.message ?? "Failed to fetch invoices";
   }
 
+  // --- Daily trend for the current month (zero-filled through today) ---
+  // Derived from the invoices already fetched above — no extra API calls.
+  let dailyTrend: { day: number; revenue: number; sticks: number }[] | null = null;
+  if (currentInvoicesResult.status === "fulfilled") {
+    const dayCount = now.getDate();
+    dailyTrend = Array.from({ length: dayCount }, (_, i) => ({
+      day: i + 1,
+      revenue: 0,
+      sticks: 0,
+    }));
+    for (const inv of currentInvoicesResult.value) {
+      const day = Number(inv.date?.slice(8, 10));
+      if (!Number.isInteger(day) || day < 1 || day > dayCount) continue;
+      const row = dailyTrend[day - 1];
+      row.revenue += inv.total;
+      for (const li of inv.line_items ?? []) {
+        if (isStickSku(li.sku)) row.sticks += li.quantity;
+      }
+    }
+    for (const row of dailyTrend) row.revenue = Math.round(row.revenue * 100) / 100;
+  }
+
   // --- Site visits from GA4 ---
   let currentVisits = 0;
   let previousVisits = 0;
@@ -169,6 +191,7 @@ export async function GET() {
         ? Math.round(((currentMonthSticks - previousMonthSticks) / previousMonthSticks) * 1000) / 10
         : null,
     },
+    dailyTrend,
     tiltWeb,
     changes: {
       revenue: previousRevenue > 0
