@@ -9,7 +9,7 @@
 //
 // Env:
 //   TILT_WEB_METRICS_URL — full URL of the staff metrics endpoint on tiltweb,
-//                          e.g. https://tiltsports.com/api/staff/metrics
+//                          e.g. https://tilthockey.com/api/staff/metrics
 //   TILT_WEB_METRICS_KEY — server-only shared secret (NO NEXT_PUBLIC_ prefix),
 //                          sent as the X-Tilt-Metrics-Key header. Must match
 //                          the value set in the tiltweb project exactly.
