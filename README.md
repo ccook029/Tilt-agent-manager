@@ -103,6 +103,8 @@ cp .env.example .env.local
 | `EMAIL_TO` | No | Default recipient for general orchestrator emails |
 | `NEXT_PUBLIC_CATALOG_URL` | No | Base URL of the Catalog Builder tool (public, safe to commit) |
 | `CATALOG_ACCESS_KEY` | No | Shared secret for the Catalog Builder tool. **Server-only** — set in Vercel only, must match the `tilt-catalog-agent` project's value |
+| `TILT_WEB_METRICS_URL` | No | Full URL of the staff metrics endpoint on the Tilt website (`tiltweb`) |
+| `TILT_WEB_METRICS_KEY` | No | Shared secret for the Tilt Web staff metrics endpoint. **Server-only** — set in Vercel only, must match the `tiltweb` project's value |
 
 ### 5. Deploy to Vercel
 
@@ -133,6 +135,42 @@ it on every request as `X-Catalog-Key`.
 Set both `NEXT_PUBLIC_CATALOG_URL` and `CATALOG_ACCESS_KEY` in Vercel (see the
 environment-variables table). `CATALOG_ACCESS_KEY` must match the
 `tilt-catalog-agent` project's value exactly and must never be committed.
+
+## Tilt Web staff metrics (external site)
+
+The Tilt website ([`tiltweb`](https://github.com/ccook029/tiltweb)) has a staff
+portal with sales metrics that don't exist in Zoho or GA4 — sales broken down
+by product category and by channel (website checkout vs retailer portal). The
+HQ dashboard pulls these in through `GET /api/hq-metrics`, which calls the
+tiltweb endpoint server-side with a shared secret so the key never ships to
+the browser (same pattern as Catalog Builder).
+
+For this to light up, the `tiltweb` project must expose an endpoint that:
+
+1. Requires the shared secret in the `X-Tilt-Metrics-Key` request header and
+   returns `401` otherwise.
+2. Returns JSON in this shape (`previousMonth` mirrors `currentMonth`):
+
+```json
+{
+  "currentMonth": {
+    "label": "June 2026",
+    "categories": [
+      { "name": "Senior Sticks", "units": 42, "revenue": 8400 }
+    ],
+    "channels": [
+      { "name": "Website", "units": 30, "revenue": 6000 },
+      { "name": "Retailer Portal", "units": 12, "revenue": 2400 }
+    ]
+  },
+  "previousMonth": { "label": "May 2026", "categories": [], "channels": [] }
+}
+```
+
+Then set `TILT_WEB_METRICS_URL` and `TILT_WEB_METRICS_KEY` in this project's
+Vercel env vars (and the same key in tiltweb's env vars). Until both are set,
+the dashboard simply hides the Tilt Web section — nothing breaks. Extra fields
+in the payload are ignored, so tiltweb can add metrics over time.
 
 ## Adding new agents
 

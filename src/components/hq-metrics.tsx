@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CountUp } from "@/components/count-up";
+import type { TiltWebBreakdownRow, TiltWebMetrics } from "@/lib/tilt-web";
 
 interface HqMetricsData {
   generatedAt: string;
@@ -12,8 +13,49 @@ interface HqMetricsData {
     previousMonth: { label: string; total: number };
     change: number | null;
   };
+  tiltWeb: TiltWebMetrics | null;
   changes: { revenue: number | null; siteVisits: number | null; inquiries: number | null };
   errors: { source: string; message: string }[];
+}
+
+/** Revenue change vs the matching row (by name) in the previous month. */
+function rowChange(row: TiltWebBreakdownRow, previousRows: TiltWebBreakdownRow[]): number | null {
+  const prev = previousRows.find((r) => r.name === row.name);
+  if (!prev || prev.revenue <= 0) return null;
+  return Math.round(((row.revenue - prev.revenue) / prev.revenue) * 1000) / 10;
+}
+
+function BreakdownList({
+  title,
+  rows,
+  previousRows,
+}: {
+  title: string;
+  rows: TiltWebBreakdownRow[];
+  previousRows: TiltWebBreakdownRow[];
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="px-8 py-5">
+      <p className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-3">{title}</p>
+      <div className="space-y-2.5">
+        {rows.map((row) => (
+          <div key={row.name} className="flex items-baseline justify-between gap-4">
+            <span className="text-sm text-gray-300 truncate">{row.name}</span>
+            <span className="flex items-baseline gap-3 shrink-0">
+              <span className="text-xs text-gray-600 tabular-nums">
+                {row.units.toLocaleString()} units
+              </span>
+              <span className="font-display text-sm font-bold text-white tabular-nums">
+                ${Math.round(row.revenue).toLocaleString()}
+              </span>
+              <ChangeBadge value={rowChange(row, previousRows)} />
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ChangeBadge({ value }: { value: number | null }) {
@@ -128,6 +170,34 @@ export default function HqMetrics() {
           <p className="text-xs text-gray-600 mt-1">{data.currentMonth.label}</p>
         </div>
       </div>
+
+      {/* Tilt Web staff-portal metrics — only shown once tiltweb is wired up */}
+      {data.tiltWeb &&
+        (data.tiltWeb.currentMonth.categories.length > 0 ||
+          data.tiltWeb.currentMonth.channels.length > 0) && (
+          <div className="border-t border-gray-800/40">
+            <div className="px-8 pt-5 flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-wider text-[#00d6ff]/80">
+                Tilt Web — Staff Portal
+              </span>
+              <span className="text-xs text-gray-600">
+                {data.tiltWeb.currentMonth.label || data.currentMonth.label}
+              </span>
+            </div>
+            <div className="grid md:grid-cols-2 md:divide-x divide-gray-800/40">
+              <BreakdownList
+                title="Sales by Category"
+                rows={data.tiltWeb.currentMonth.categories}
+                previousRows={data.tiltWeb.previousMonth.categories}
+              />
+              <BreakdownList
+                title="Sales by Channel"
+                rows={data.tiltWeb.currentMonth.channels}
+                previousRows={data.tiltWeb.previousMonth.channels}
+              />
+            </div>
+          </div>
+        )}
     </div>
   );
 }

@@ -5,12 +5,18 @@
 //   - site visits (GA4 sessions)
 //   - inquiries (0 until a real source is wired up)
 //   - sticks sold this month vs last month (TILT- SKUs from invoice line items)
+//   - Tilt Web staff-portal sales by category/channel (when configured)
 //
 // Publicly accessible, no auth required.
 
 import { NextResponse } from "next/server";
 import { fetchInvoices } from "@/lib/zoho";
 import { fetchGA4Metrics, type GA4DateRange } from "@/lib/ga4";
+import {
+  fetchTiltWebMetrics,
+  isTiltWebConfigured,
+  type TiltWebMetrics,
+} from "@/lib/tilt-web";
 
 export const maxDuration = 60;
 
@@ -61,11 +67,13 @@ export async function GET() {
     previousInvoicesResult,
     ga4CurrentResult,
     ga4PreviousResult,
+    tiltWebResult,
   ] = await Promise.allSettled([
     fetchInvoices(currentRange.startDate, currentRange.endDate),
     fetchInvoices(previousRange.startDate, previousRange.endDate),
     fetchGA4Metrics(currentRange),
     fetchGA4Metrics(previousRange),
+    isTiltWebConfigured() ? fetchTiltWebMetrics() : Promise.resolve(null),
   ]);
 
   // --- Revenue & sticks sold from invoices ---
@@ -118,6 +126,16 @@ export async function GET() {
   const currentInquiries = 0;
   const previousInquiries = 0;
 
+  // --- Tilt Web staff-portal metrics (category/channel sales) ---
+  let tiltWeb: TiltWebMetrics | null = null;
+  let tiltWebError: string | undefined;
+
+  if (tiltWebResult.status === "fulfilled") {
+    tiltWeb = tiltWebResult.value;
+  } else {
+    tiltWebError = tiltWebResult.reason?.message ?? "Failed to fetch Tilt Web metrics";
+  }
+
   // --- Build response ---
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
@@ -151,6 +169,7 @@ export async function GET() {
         ? Math.round(((currentMonthSticks - previousMonthSticks) / previousMonthSticks) * 1000) / 10
         : null,
     },
+    tiltWeb,
     changes: {
       revenue: previousRevenue > 0
         ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 1000) / 10
@@ -163,6 +182,7 @@ export async function GET() {
     errors: [
       ...(revenueError ? [{ source: "zoho", message: revenueError }] : []),
       ...(ga4Error ? [{ source: "ga4", message: ga4Error }] : []),
+      ...(tiltWebError ? [{ source: "tilt-web", message: tiltWebError }] : []),
     ],
   };
 
