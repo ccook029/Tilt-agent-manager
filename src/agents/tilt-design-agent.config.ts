@@ -8,19 +8,20 @@
 // catalog. Where Maya answers "is it manufacturable?", the Design Agent answers
 // "does it look unmistakably Tilt?".
 //
-// It is built to hand work off to Tilt's design tools — Canva (templates, brand
-// kit, generation/export), the Catalog Builder (tilt-catalog-agent, Gemini
-// team-colorway catalog images), and the product-render stack (Vizcom/KeyShot).
-// Every deliverable ends with a "Tool Handoff" block describing exactly which
-// tool to use and the precise inputs to feed it.
+// Tilt designs everything in-house — no third-party design SaaS (e.g. Canva).
+// It hands work off to Tilt's OWN tooling: the in-house design studio, the
+// Catalog Builder (tilt-catalog-agent, Gemini team-colorway catalog images),
+// and the product-render stack (Vizcom/KeyShot). Every deliverable ends with a
+// "Tool Handoff" block describing exactly which tool/workflow to use and the
+// precise inputs to feed it.
 //
 // Triggered manually — not on a schedule.
 // ---------------------------------------------------------------------------
 
 export interface DesignTool {
-  /** Short id, e.g. "canva" */
+  /** Short id, e.g. "catalog-builder" */
   id: string;
-  /** Display label, e.g. "Canva" */
+  /** Display label, e.g. "Catalog Builder" */
   label: string;
   /** What it's for — surfaced to the agent as knowledge and to the UI as help text. */
   description: string;
@@ -59,12 +60,10 @@ export interface TiltDesignAgentConfig {
 // -------------------------------------------------------
 const DESIGN_TOOLS: DesignTool[] = [
   {
-    id: "canva",
-    label: "Canva",
+    id: "design-studio",
+    label: "Tilt Design Studio",
     description:
-      "Brand kit, templates, layout, and design generation/export. Use for catalog spreads, social creative, sell-sheet layouts, and quick on-brand graphics.",
-    href: "https://www.canva.com/",
-    external: true,
+      "Tilt's in-house design workflow. Our own designers and templates execute layouts, social creative, sell-sheets, and catalog spreads from your production-ready specs. No third-party design SaaS.",
   },
   {
     id: "catalog-builder",
@@ -134,12 +133,12 @@ DELIVERABLE TYPES YOU PRODUCE:
 - Mockup & render direction (angles, lighting, environment, branding placement).
 - Brand consistency reviews (does this hold the Tilt system?).
 
-TOOL HANDOFF (you are wired to these — direct work to the right one):
-- Canva — brand kit, templates, layouts, generation/export. Best for catalog spreads, social creative, sell-sheet layouts, quick on-brand graphics.
-- Catalog Builder (tilt-catalog-agent) — give it a team name, colors, and a jersey/logo; it renders Tilt catalog product images via Gemini. Best for fast team-colorway catalog shots.
+IN-HOUSE TOOLING (Tilt designs everything itself — NO third-party design SaaS like Canva):
+- Tilt Design Studio (in-house) — our own designers and templates execute layouts, social creative, sell-sheets, and catalog spreads. You produce production-ready specs they build from directly.
+- Catalog Builder (tilt-catalog-agent) — our own app: give it a team name, colors, and a jersey/logo; it renders Tilt catalog product images via Gemini. Best for fast team-colorway catalog shots.
 - Vizcom — AI render from sketches; early concept renders of hardgoods.
 - KeyShot — photoreal final hero product renders.
-EVERY deliverable must END with a "Tool Handoff" section: which tool to use, and the EXACT inputs to feed it (prompts, asset list, dimensions, colors as hex/Pantone, copy). If multiple tools apply, sequence them.
+EVERY deliverable must END with a "Tool Handoff" section: which in-house tool/workflow builds it, and the EXACT inputs to feed it (prompts, asset list, dimensions, colors as hex/Pantone, copy). If multiple apply, sequence them. NEVER route work to Canva or any external design SaaS — Tilt builds its own.
 
 Be specific, production-ready, and unmistakably Tilt. No filler.`,
 
@@ -152,7 +151,7 @@ Make it concrete:
 - The concept and the hook (why it's unmistakably Tilt)
 - Color system (hex + Pantone), type treatment, key imagery
 - The exact deliverables and platform dimensions
-- A "Tool Handoff" — which tool builds it (Canva / Catalog Builder / Vizcom / KeyShot) and the inputs to feed it
+- A "Tool Handoff" — which in-house tool/workflow builds it (Tilt Design Studio / Catalog Builder / Vizcom / KeyShot) and the inputs to feed it
 - 3 concrete next steps to make it real
 
 Hockey-authentic, no buzzwords, never reference manufacturing origin.`,
@@ -199,21 +198,21 @@ Include:
 5. Color & Accent usage (where Tilt Blue lands; contrast/legibility check)
 6. Specs / callout content to display per product
 7. Output specs (print: CMYK/300dpi/bleed; web: px dimensions/RGB)
-8. Tool Handoff (Canva layout + Catalog Builder / render inputs)`,
+8. Tool Handoff (in-house layout build + Catalog Builder / render inputs)`,
 
-    "canva-brief": `Produce a Canva-ready creative brief that can be executed directly in Canva:
+    "production-spec": `Produce a production-ready build spec our in-house design team can execute directly (no third-party design SaaS):
 
 {{context}}
 
 Include:
-1. Design type & exact canvas size(s) in px
-2. Brand kit values to apply (colors as hex: Tilt Blue #00D6FF + neutrals; fonts: Barlow Condensed / Barlow)
+1. Design type & exact artboard/canvas size(s) in px (plus print size + bleed if applicable)
+2. Brand values to apply (colors as hex AND Pantone: Tilt Blue #00D6FF + neutrals; fonts: Barlow Condensed / Barlow)
 3. Layout map (element-by-element: position, size, layer order)
-4. Exact copy (headline, subhead, body, CTA) — final, ready to paste
+4. Exact copy (headline, subhead, body, CTA) — final, ready to set
 5. Asset list (logos, product images, icons — and where to source them)
-6. Variants to generate (sizes/platforms)
-7. Export settings (format, color space, transparency)
-8. Tool Handoff: a single paste-ready Canva generation prompt summarizing the above`,
+6. Variants to produce (sizes/platforms)
+7. Export settings (format, color space, transparency, resolution)
+8. Tool Handoff: which in-house tool/workflow builds it and the exact inputs to feed it`,
 
     "social-creative": `Develop social creative concepts for the following:
 
@@ -225,7 +224,7 @@ Include:
 3. Visual direction (color, type, imagery, motion notes if video)
 4. On-image copy + caption + hashtags
 5. How it ladders to Tilt's brand and ties to anything the Social Intelligence Agent flagged
-6. Tool Handoff (Canva templates/generation inputs, or render needs)`,
+6. Tool Handoff (in-house design studio inputs, or render needs)`,
 
     "mockup-spec": `Write a mockup / render direction for the following:
 

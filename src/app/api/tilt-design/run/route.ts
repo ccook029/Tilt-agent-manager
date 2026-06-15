@@ -4,7 +4,7 @@
 // Body:
 //   {
 //     "task": "design-brief" | "blanket-design" | "catalog-layout"
-//           | "canva-brief" | "social-creative" | "mockup-spec",
+//           | "production-spec" | "social-creative" | "mockup-spec",
 //     "context": "Description of the design or task details",
 //     "project_name": "Optional project name for email subject",
 //     "email": true | false  // whether to email the result (default: true)
@@ -23,7 +23,7 @@ const TASK_LABELS: Record<string, string> = {
   "design-brief": "Design Brief",
   "blanket-design": "Blanket Design",
   "catalog-layout": "Catalog Layout",
-  "canva-brief": "Canva Brief",
+  "production-spec": "Production Spec",
   "social-creative": "Social Creative",
   "mockup-spec": "Mockup Spec",
 };

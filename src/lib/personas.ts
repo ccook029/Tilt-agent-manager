@@ -118,18 +118,12 @@ const personas: AgentPersona[] = [
     avatarColor: "bg-indigo-600",
     avatarAccent: "ring-indigo-400",
     runEndpoint: "/api/tilt-design/run",
-    taskTypes: ["design-brief", "blanket-design", "catalog-layout", "canva-brief", "social-creative", "mockup-spec"],
+    taskTypes: ["design-brief", "blanket-design", "catalog-layout", "production-spec", "social-creative", "mockup-spec"],
     tools: [
-      {
-        label: "Canva",
-        href: "https://www.canva.com/",
-        description: "Brand kit, templates, layout & generation",
-        external: true,
-      },
       {
         label: "Catalog Builder",
         href: "/api/catalog/launch",
-        description: "Team-colorway catalog images via Gemini",
+        description: "Team-colorway catalog images via Gemini (in-house)",
         external: true,
       },
     ],

@@ -281,7 +281,7 @@ export default function AgentDetailPage() {
         </div>
       )}
 
-      {/* Linked design tools — handoff targets (e.g. Canva, Catalog Builder) */}
+      {/* Linked design tools — in-house handoff targets (e.g. Catalog Builder) */}
       {persona?.tools && persona.tools.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
