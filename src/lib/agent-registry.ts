@@ -17,6 +17,7 @@ import competitorIntel from "@/agents/competitor-intel-agent.config";
 import competitorSocial from "@/agents/competitor-social-agent.config";
 import materialsRd from "@/agents/materials-rd-agent.config";
 import productDesign from "@/agents/product-design-agent.config";
+import tiltDesign from "@/agents/tilt-design-agent.config";
 import inventory from "@/agents/inventory-agent.config";
 
 const registry: AgentConfig[] = [
@@ -25,6 +26,7 @@ const registry: AgentConfig[] = [
   competitorSocial as unknown as AgentConfig,
   materialsRd as unknown as AgentConfig,
   productDesign as unknown as AgentConfig,
+  tiltDesign as unknown as AgentConfig,
   inventory as unknown as AgentConfig,
 ];
 

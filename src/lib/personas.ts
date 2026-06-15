@@ -26,6 +26,13 @@ export interface AgentPersona {
    */
   external?: boolean;
   launchUrl?: string;
+  /**
+   * Design / creative tools this agent hands work off to. Rendered as a
+   * "Design Tools" panel on the agent's detail page. Internal hrefs (e.g.
+   * /api/catalog/launch) inject access keys server-side; external links open
+   * the vendor app in a new tab.
+   */
+  tools?: { label: string; href: string; description?: string; external?: boolean }[];
 }
 
 // Leadership — Co-Founders (not AI agents, real humans at the top)
@@ -98,6 +105,34 @@ const personas: AgentPersona[] = [
     avatarAccent: "ring-emerald-400",
     runEndpoint: "/api/product-design/run",
     taskTypes: ["product-spec", "rfq-package", "catalog-update", "rendering-brief", "sell-sheet"],
+  },
+  {
+    agentId: "tilt-design",
+    name: "Remy Vector",
+    title: "Creative Director",
+    department: "Brand & Design Studio",
+    bio: "Remy makes everything Tilt look unmistakably Tilt. Catalog spreads, social creative, blanket and merch drops, mockup direction — Remy turns a brief into production-ready art direction and hands it straight to the right tool. Where Maya answers 'can we build it?', Remy answers 'does it look like us?'. Tilt Blue, athletic type, zero buzzwords.",
+    status: "active",
+    schedule: "On-demand",
+    avatarInitials: "RV",
+    avatarColor: "bg-indigo-600",
+    avatarAccent: "ring-indigo-400",
+    runEndpoint: "/api/tilt-design/run",
+    taskTypes: ["design-brief", "blanket-design", "catalog-layout", "canva-brief", "social-creative", "mockup-spec"],
+    tools: [
+      {
+        label: "Canva",
+        href: "https://www.canva.com/",
+        description: "Brand kit, templates, layout & generation",
+        external: true,
+      },
+      {
+        label: "Catalog Builder",
+        href: "/api/catalog/launch",
+        description: "Team-colorway catalog images via Gemini",
+        external: true,
+      },
+    ],
   },
   {
     agentId: "materials-rd",
