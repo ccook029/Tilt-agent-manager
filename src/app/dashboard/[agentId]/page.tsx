@@ -281,6 +281,42 @@ export default function AgentDetailPage() {
         </div>
       )}
 
+      {/* Linked design tools — in-house handoff targets (e.g. Catalog Builder) */}
+      {persona?.tools && persona.tools.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Design Tools
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {persona.tools.map((tool) => (
+              <a
+                key={tool.label}
+                href={tool.href}
+                target={tool.external ? "_blank" : undefined}
+                rel={tool.external ? "noopener noreferrer" : undefined}
+                title={tool.description}
+                className="group px-4 py-2 bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-800/50 hover:border-indigo-500/50 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5"
+              >
+                {tool.label}
+                <svg
+                  className="w-3.5 h-3.5 opacity-50 group-hover:opacity-80"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+                  />
+                </svg>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* External tools have no run history / files — show a launch note. */}
       {isExternal ? (
         <div className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-6">
