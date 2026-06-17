@@ -91,7 +91,8 @@ Please analyze this data and produce the {{period_label}} analytics report.`,
       "averageSessionDuration",
       "screenPageViews",
       "conversions",
-      "purchaseRevenue",
+      // purchaseRevenue is sourced from Zoho Books, not GA4 — requesting it
+      // from GA4 triggers an INVALID_ARGUMENT error (missing CAD→USD rates).
     ],
     dimensions: [
       "sessionSource",

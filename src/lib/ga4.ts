@@ -114,6 +114,11 @@ export async function fetchGA4Metrics(
 
 // ---- Internal helpers -----------------------------------------------------
 
+// Note: purchaseRevenue is intentionally NOT requested. GA4 must convert
+// transaction currency (CAD) to the property's reporting currency (USD), and
+// the exchange rate for the most recent day often isn't published yet at the
+// 8 AM ET run time, which makes GA4 return INVALID_ARGUMENT and fails the whole
+// pipeline. Revenue is sourced from Zoho Books instead (see hq-metrics route).
 const METRICS = [
   "sessions",
   "totalUsers",
@@ -122,7 +127,6 @@ const METRICS = [
   "averageSessionDuration",
   "screenPageViews",
   "conversions",
-  "purchaseRevenue",
 ];
 
 async function fetchOverview(
@@ -164,7 +168,6 @@ async function fetchByDimension(
       { name: "totalUsers" },
       { name: "engagementRate" },
       { name: "conversions" },
-      { name: "purchaseRevenue" },
     ],
     orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
     limit: 15,
@@ -181,7 +184,6 @@ async function fetchByDimension(
     "Users",
     "Engagement",
     "Conversions",
-    "Revenue",
   ];
 
   const rows = response.rows.map((row) => [
@@ -190,7 +192,6 @@ async function fetchByDimension(
     row.metricValues![1]?.value ?? "0",
     formatPercent(row.metricValues![2]?.value ?? "0"),
     row.metricValues![3]?.value ?? "0",
-    formatCurrency(row.metricValues![4]?.value ?? "0"),
   ]);
 
   return formatTable(header, rows);
@@ -209,16 +210,11 @@ function formatMetricName(name: string): string {
 function formatMetricValue(metric: string, value: string): string {
   if (metric === "engagementRate") return formatPercent(value);
   if (metric === "averageSessionDuration") return `${parseFloat(value).toFixed(1)}s`;
-  if (metric === "purchaseRevenue") return formatCurrency(value);
   return parseFloat(value).toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
 function formatPercent(value: string): string {
   return `${(parseFloat(value) * 100).toFixed(1)}%`;
-}
-
-function formatCurrency(value: string): string {
-  return `$${parseFloat(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatTable(header: string[], rows: string[][]): string {
