@@ -22,7 +22,7 @@ Be concise and actionable in your output.`,
 a string, e.g. to inject today's date.]`,
 
   // Optional overrides:
-  // model: "claude-sonnet-4-20250514",
+  // model: "claude-sonnet-4-6",
   // maxTokens: 2048,
   // temperature: 0.7,
   // tags: ["category"],

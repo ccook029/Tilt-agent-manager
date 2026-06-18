@@ -37,7 +37,7 @@ const config: AnalyticsAgentConfig = {
   id: "website-analytics",
   name: "Website Analytics Agent",
   schedule: "0 12 * * 1-5", // Mon–Fri at 12:00 UTC (8 AM ET)
-  model: "claude-sonnet-4-20250514",
+  model: "claude-sonnet-4-6",
   maxTokens: 4096,
   temperature: 0.4,
 
@@ -91,7 +91,8 @@ Please analyze this data and produce the {{period_label}} analytics report.`,
       "averageSessionDuration",
       "screenPageViews",
       "conversions",
-      "purchaseRevenue",
+      // purchaseRevenue is sourced from Zoho Books, not GA4 — requesting it
+      // from GA4 triggers an INVALID_ARGUMENT error (missing CAD→USD rates).
     ],
     dimensions: [
       "sessionSource",
