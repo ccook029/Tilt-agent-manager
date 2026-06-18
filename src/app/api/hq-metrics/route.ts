@@ -5,12 +5,18 @@
 //   - site visits (GA4 sessions)
 //   - inquiries (0 until a real source is wired up)
 //   - sticks sold this month vs last month (TILT- SKUs from invoice line items)
+//   - Tilt Web staff-portal sales by category/channel (when configured)
 //
 // Publicly accessible, no auth required.
 
 import { NextResponse } from "next/server";
 import { fetchInvoices } from "@/lib/zoho";
 import { fetchGA4Metrics, type GA4DateRange } from "@/lib/ga4";
+import {
+  fetchTiltWebMetrics,
+  isTiltWebConfigured,
+  type TiltWebMetrics,
+} from "@/lib/tilt-web";
 
 export const maxDuration = 60;
 
@@ -61,11 +67,13 @@ export async function GET() {
     previousInvoicesResult,
     ga4CurrentResult,
     ga4PreviousResult,
+    tiltWebResult,
   ] = await Promise.allSettled([
     fetchInvoices(currentRange.startDate, currentRange.endDate),
     fetchInvoices(previousRange.startDate, previousRange.endDate),
     fetchGA4Metrics(currentRange),
     fetchGA4Metrics(previousRange),
+    isTiltWebConfigured() ? fetchTiltWebMetrics() : Promise.resolve(null),
   ]);
 
   // --- Revenue & sticks sold from invoices ---
@@ -97,6 +105,28 @@ export async function GET() {
     revenueError = revenueError ?? previousInvoicesResult.reason?.message ?? "Failed to fetch invoices";
   }
 
+  // --- Daily trend for the current month (zero-filled through today) ---
+  // Derived from the invoices already fetched above — no extra API calls.
+  let dailyTrend: { day: number; revenue: number; sticks: number }[] | null = null;
+  if (currentInvoicesResult.status === "fulfilled") {
+    const dayCount = now.getDate();
+    dailyTrend = Array.from({ length: dayCount }, (_, i) => ({
+      day: i + 1,
+      revenue: 0,
+      sticks: 0,
+    }));
+    for (const inv of currentInvoicesResult.value) {
+      const day = Number(inv.date?.slice(8, 10));
+      if (!Number.isInteger(day) || day < 1 || day > dayCount) continue;
+      const row = dailyTrend[day - 1];
+      row.revenue += inv.total;
+      for (const li of inv.line_items ?? []) {
+        if (isStickSku(li.sku)) row.sticks += li.quantity;
+      }
+    }
+    for (const row of dailyTrend) row.revenue = Math.round(row.revenue * 100) / 100;
+  }
+
   // --- Site visits from GA4 ---
   let currentVisits = 0;
   let previousVisits = 0;
@@ -117,6 +147,16 @@ export async function GET() {
   // --- Inquiries: no real source yet, return 0 ---
   const currentInquiries = 0;
   const previousInquiries = 0;
+
+  // --- Tilt Web staff-portal metrics (category/channel sales) ---
+  let tiltWeb: TiltWebMetrics | null = null;
+  let tiltWebError: string | undefined;
+
+  if (tiltWebResult.status === "fulfilled") {
+    tiltWeb = tiltWebResult.value;
+  } else {
+    tiltWebError = tiltWebResult.reason?.message ?? "Failed to fetch Tilt Web metrics";
+  }
 
   // --- Build response ---
   const monthNames = [
@@ -151,6 +191,8 @@ export async function GET() {
         ? Math.round(((currentMonthSticks - previousMonthSticks) / previousMonthSticks) * 1000) / 10
         : null,
     },
+    dailyTrend,
+    tiltWeb,
     changes: {
       revenue: previousRevenue > 0
         ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 1000) / 10
@@ -163,6 +205,7 @@ export async function GET() {
     errors: [
       ...(revenueError ? [{ source: "zoho", message: revenueError }] : []),
       ...(ga4Error ? [{ source: "ga4", message: ga4Error }] : []),
+      ...(tiltWebError ? [{ source: "tilt-web", message: tiltWebError }] : []),
     ],
   };
 
