@@ -59,8 +59,11 @@ export async function callClaude(
   };
 
   // When MCP servers are supplied, use the beta mcp_servers connector so Claude
-  // can call Zoho Books tools server-side. We cast loosely because the typed
-  // surface for this beta varies across SDK minor versions.
+  // can call Zoho Books tools server-side. Each server must be referenced by an
+  // mcp_toolset entry in the tools array (mcp-client-2025-11-20 spec). We rely
+  // on the Zoho admin to expose READ tools only, so propose-only is enforced at
+  // the source; you can additionally denylist write tools here via `configs`.
+  // We cast loosely because the typed beta surface varies across SDK versions.
   let response: Anthropic.Messages.Message;
   if (opts.mcpServers && opts.mcpServers.length > 0) {
     const beta = client as unknown as {
@@ -69,7 +72,11 @@ export async function callClaude(
     response = await beta.beta.messages.create({
       ...basePayload,
       mcp_servers: opts.mcpServers,
-      betas: ["mcp-client-2025-04-04"],
+      tools: opts.mcpServers.map((s) => ({
+        type: "mcp_toolset",
+        mcp_server_name: s.name,
+      })),
+      betas: ["mcp-client-2025-11-20"],
     });
   } else {
     response = (await client.messages.create(basePayload)) as Anthropic.Messages.Message;
