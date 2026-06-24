@@ -14,6 +14,8 @@
 import { callClaude, substituteVariables, type McpServer } from "./anthropic";
 import { fetchBooksSnapshot, getZohoBooksMcpConfig } from "./zoho-books";
 import { fetchInventorySnapshot } from "./zoho";
+import { fetchSheetSnapshot } from "./zoho-sheet";
+import { fetchSyncReport } from "./zoho-sync";
 import { sendAnalyticsReport } from "./email";
 import { saveRunLogs } from "./store";
 import {
@@ -66,11 +68,20 @@ export async function runWorkerTask(
     );
   }
 
-  // Ground with a read-only books snapshot (REST). For the tie-out task, add
-  // the inventory snapshot too.
+  // Ground with a read-only books snapshot (REST). The tie-out task also needs
+  // Stockton's world: the master Sheet (SOURCE OF TRUTH for stick counts), his
+  // Sheet↔Inventory reconciliation, and the Inventory snapshot (stock + costs
+  // for dollar valuation).
   const parts = [await fetchBooksSnapshot()];
   if (task === "inventory-tieout") {
-    parts.push(await fetchInventorySnapshot().catch((e) => `## ⚠️ Inventory snapshot unavailable\n${e}`));
+    const safe = (label: string, p: Promise<string>) =>
+      p.catch((e) => `## ⚠️ ${label} unavailable\n${e instanceof Error ? e.message : String(e)}`);
+    const [sheet, sync, inventory] = await Promise.all([
+      safe("Master Sheet snapshot (source of truth)", fetchSheetSnapshot()),
+      safe("Stockton's Sheet↔Inventory reconciliation", fetchSyncReport()),
+      safe("Zoho Inventory snapshot (for valuation)", fetchInventorySnapshot()),
+    ]);
+    parts.push(sheet, sync, inventory);
   }
   if (extraContext.trim()) parts.push(`## Additional Context\n${extraContext}`);
 

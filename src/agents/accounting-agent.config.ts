@@ -126,14 +126,32 @@ Produce:
 4. RECOMMENDED ACTIONS
 Then the json block.`,
 
-    "inventory-tieout": `Reconcile the books to inventory using the data below. Tilt's master Zoho Sheet is the source of truth for stick stock; Zoho Inventory holds SKU stock; Zoho Books holds the Inventory Asset and COGS balances.
+    "inventory-tieout": `Reconcile Zoho Books to physical inventory using the data below.
+
+DATA SOURCE HIERARCHY (most authoritative first):
+1. MASTER ZOHO SHEET — the SOURCE OF TRUTH for stick stock. It counts individual available sticks by Level + Carbon. Stockton Ledger (Inventory) owns it.
+2. STOCKTON'S SHEET↔INVENTORY RECONCILIATION — shows where Zoho Inventory's stock_on_hand already agrees or disagrees with the Sheet. Where they disagree, THE SHEET WINS and Inventory is the one that's wrong.
+3. ZOHO INVENTORY — per-SKU stock_on_hand and unit costs (purchase_rate). Use it for DOLLAR VALUATION, but treat its counts as suspect wherever the reconciliation flags a discrepancy.
+4. ZOHO BOOKS — the Inventory Asset account balance and COGS. This is what you're checking.
 
 {{context}}
 
+METHOD:
+- Establish the TRUE physical stock from the Sheet (adjusting Inventory counts per Stockton's reconciliation where they differ).
+- Value that true stock in dollars using Zoho Inventory unit costs (purchase_rate × true count).
+- Compare that true inventory value to the Inventory Asset balance in Zoho Books.
+
 Produce:
-1. INVENTORY ASSET (Books) vs INVENTORY VALUE (Inventory/Sheet) — variance and likely cause
-2. COGS SANITY CHECK against sales
-3. PROPOSED ADJUSTING ENTRIES (for human approval — do not post)
+1. EXECUTIVE SUMMARY (3-5 bullets — is the Books Inventory Asset over- or under-stated, and by roughly how much)
+2. TRUE STOCK VALUATION
+   | Level/Carbon (or SKU) | Sheet Available (truth) | Inventory On-Hand | Count Variance | Unit Cost | True Value |
+   Note any rows where the Sheet and Inventory disagree (from Stockton's reconciliation).
+3. BOOKS vs PHYSICAL VARIANCE
+   | Books Inventory Asset | True Inventory Value (from above) | Variance $ | Variance % | Likely cause |
+   Likely causes: unrecorded COGS on sales, missing/duplicated adjusting entries, Inventory counts not synced to the Sheet, timing.
+4. COGS SANITY CHECK against sales activity in the Books snapshot.
+5. PROPOSED ADJUSTING ENTRIES (for human approval — DO NOT post): account, debit/credit, amount, rationale.
+6. UPSTREAM FIXES — where the real problem is a count out of sync (a Stockton/Inventory issue, not a Books issue), say so explicitly so it's fixed at the source rather than papered over with a journal entry.
 Then the json block.`,
 
     "sales-tax-review": `Review sales tax handling from the data below.
