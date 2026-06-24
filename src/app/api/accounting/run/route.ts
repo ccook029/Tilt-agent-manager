@@ -24,6 +24,8 @@ export const maxDuration = 300;
 
 const TASK_LABELS: Record<string, string> = {
   "books-health": "Books Health Report",
+  "catch-up-plan": "Catch-Up Roadmap",
+  "bank-reconciliation": "Bank Reconciliation",
   "categorize-transactions": "Transaction Categorization",
   "coa-audit": "Chart of Accounts Audit",
   "ar-cleanup": "A/R Cleanup",

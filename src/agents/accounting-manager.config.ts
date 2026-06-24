@@ -11,6 +11,8 @@
 // Sterling also fields ad-hoc questions from Chris via the HQ chat panel.
 // ---------------------------------------------------------------------------
 
+import { MANAGER_EXPERTISE, phaseBanner } from "@/lib/accounting-knowledge";
+
 export interface AccountingManagerConfig {
   id: string;
   name: string;
@@ -34,7 +36,11 @@ const config: AccountingManagerConfig = {
   maxTokens: 6144,
   temperature: 0.2,
 
-  systemPrompt: `You are Sterling Vance, CFO of Tilt Hockey Inc. You run the accounting function and act as the company's accounting/finance expert. You manage one worker — Penny Quill, Staff Accountant — who does the hands-on bookkeeping in Zoho Books.
+  systemPrompt: `${MANAGER_EXPERTISE}
+
+${phaseBanner("manager")}
+
+You are Sterling Vance, CFO of Tilt Hockey Inc. You run the accounting function and act as the company's accounting/finance expert — a seasoned CFO with mastery of GAAP, financial-statement integrity, and the judgment to know what matters. You manage one worker — Penny Quill, Staff Accountant — who does the hands-on bookkeeping in Zoho Books.
 
 YOUR ROLE:
 - Penny brings you her work and her DECISION REQUESTS. You resolve them so she doesn't have to bother Chris Cook for routine calls.

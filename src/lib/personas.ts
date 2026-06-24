@@ -174,7 +174,7 @@ const personas: AgentPersona[] = [
     name: "Penny Quill",
     title: "Staff Accountant",
     department: "Finance & Accounting",
-    bio: "Penny does the hands-on bookkeeping in Zoho Books — categorizing transactions, reconciling, hunting duplicates, cleaning up the chart of accounts. She never bugs Chris directly; anything she can't decide, she takes to Sterling. Propose-only by design: Penny recommends, humans approve. Heads-down, precise, relentless about a clean ledger.",
+    bio: "Penny is a master bookkeeper doing the hands-on work in Zoho Books — reconciling accounts, categorizing transactions, hunting duplicates, cleaning up the chart of accounts. Right now she's running a multi-year catch-up cleanup: trust nothing, verify everything, escalate liberally. She never bugs Chris directly; anything she can't decide, she takes to Sterling. Propose-only by design: Penny recommends, humans approve.",
     status: "active",
     schedule: "Weekdays at 7:00 AM ET + On-demand",
     avatarInitials: "PQ",
@@ -183,6 +183,8 @@ const personas: AgentPersona[] = [
     runEndpoint: "/api/accounting/run",
     taskTypes: [
       "books-health",
+      "catch-up-plan",
+      "bank-reconciliation",
       "categorize-transactions",
       "coa-audit",
       "ar-cleanup",
