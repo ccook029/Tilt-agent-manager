@@ -22,6 +22,7 @@ import { runAutoReconciliation } from "@/lib/pipelines/reconciliation";
 import { runFactoryReorder } from "@/lib/pipelines/factory-reorder";
 import { runResearchScan } from "@/lib/pipelines/materials-rd";
 import { runInnovation } from "@/lib/pipelines/product-design";
+import { sendCfoDigestEmail } from "@/lib/accounting-loop";
 
 export const maxDuration = 300;
 
@@ -52,6 +53,10 @@ function getScheduledTasks(now: Date): PipelineTask[] {
     }
     return tasks; // Don't run daily agents on the Sunday-night cron
   }
+
+  // CFO Daily Digest: every day — Sterling batches open questions for Chris.
+  // Runs on the main daytime cron, not the Sunday-night factory-only run.
+  tasks.push({ name: "CFO Daily Digest", run: () => sendCfoDigestEmail() });
 
   // Inventory Reconciliation: Mon–Fri — runs first to keep Zoho Inventory in sync with the Sheet
   if (day >= 1 && day <= 5) {
