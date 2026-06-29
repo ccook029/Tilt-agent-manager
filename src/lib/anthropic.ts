@@ -34,7 +34,7 @@ export async function callClaude(
   opts: CallClaudeOptions
 ): Promise<ClaudeResponse> {
   const client = getClient();
-  const model = opts.model ?? "claude-sonnet-4-20250514";
+  const model = opts.model ?? "claude-sonnet-4-6";
 
   const response = await client.messages.create({
     model,
