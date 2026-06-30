@@ -37,7 +37,7 @@ const config: AnalyticsAgentConfig = {
   id: "website-analytics",
   name: "Website Analytics Agent",
   schedule: "0 12 * * 1-5", // Mon–Fri at 12:00 UTC (8 AM ET)
-  model: "claude-sonnet-4-20250514",
+  model: "claude-sonnet-5",
   maxTokens: 4096,
   temperature: 0.4,
 

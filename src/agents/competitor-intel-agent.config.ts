@@ -30,7 +30,7 @@ const config: CompetitorIntelAgentConfig = {
   id: "competitor-intel",
   name: "Competitor Intelligence Agent",
   schedule: "0 12 * * 3", // Wednesday at 12:00 UTC (8 AM ET)
-  model: "claude-sonnet-4-20250514",
+  model: "claude-sonnet-5",
   maxTokens: 8192,
   temperature: 0.1,
 

@@ -31,7 +31,7 @@ export interface ProductDesignAgentConfig {
 const config: ProductDesignAgentConfig = {
   id: "product-design",
   name: "Product Design Agent",
-  model: "claude-sonnet-4-20250514",
+  model: "claude-sonnet-5",
   maxTokens: 8192,
   temperature: 0.2,
 

@@ -32,7 +32,7 @@ const config: AccountingManagerConfig = {
   id: "accounting-manager",
   name: "Accounting Manager",
   schedule: "0 12 * * *", // daily 12:00 UTC — drives the daily escalation digest
-  model: "claude-sonnet-4-20250514",
+  model: "claude-sonnet-5",
   maxTokens: 6144,
   temperature: 0.2,
 
