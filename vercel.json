@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/run-agents",
       "schedule": "0 3 * * 1"
+    },
+    {
+      "path": "/api/cron/run-agents",
+      "schedule": "0 12 * * 6,0"
     }
   ],
   "headers": [

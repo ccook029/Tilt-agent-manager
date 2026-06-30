@@ -19,6 +19,8 @@ import materialsRd from "@/agents/materials-rd-agent.config";
 import productDesign from "@/agents/product-design-agent.config";
 import tiltDesign from "@/agents/tilt-design-agent.config";
 import inventory from "@/agents/inventory-agent.config";
+import accounting from "@/agents/accounting-agent.config";
+import accountingManager from "@/agents/accounting-manager.config";
 
 const registry: AgentConfig[] = [
   websiteAnalytics as unknown as AgentConfig,
@@ -28,6 +30,8 @@ const registry: AgentConfig[] = [
   productDesign as unknown as AgentConfig,
   tiltDesign as unknown as AgentConfig,
   inventory as unknown as AgentConfig,
+  accounting as unknown as AgentConfig,
+  accountingManager as unknown as AgentConfig,
 ];
 
 export function getAllAgents(): AgentConfig[] {

@@ -12,12 +12,26 @@ function getClient(): Anthropic {
   return _client;
 }
 
+export interface McpServer {
+  type: "url";
+  url: string;
+  name: string;
+  authorization_token?: string;
+}
+
 export interface CallClaudeOptions {
   systemPrompt: string;
   userMessage: string;
   model?: string;
   maxTokens?: number;
   temperature?: number;
+  /**
+   * Remote MCP servers to expose to Claude via Anthropic's mcp_servers
+   * connector (server-side tool discovery + execution). Used by the Accounting
+   * team to drive the Zoho Books MCP. When omitted, a plain text completion
+   * runs — so callers that pre-fetch data via REST keep working unchanged.
+   */
+  mcpServers?: McpServer[];
 }
 
 export interface ClaudeResponse {
@@ -36,13 +50,37 @@ export async function callClaude(
   const client = getClient();
   const model = opts.model ?? "claude-sonnet-4-6";
 
-  const response = await client.messages.create({
+  const basePayload = {
     model,
     max_tokens: opts.maxTokens ?? 4096,
     temperature: opts.temperature ?? 0.4,
     system: opts.systemPrompt,
-    messages: [{ role: "user", content: opts.userMessage }],
-  });
+    messages: [{ role: "user" as const, content: opts.userMessage }],
+  };
+
+  // When MCP servers are supplied, use the beta mcp_servers connector so Claude
+  // can call Zoho Books tools server-side. Each server must be referenced by an
+  // mcp_toolset entry in the tools array (mcp-client-2025-11-20 spec). We rely
+  // on the Zoho admin to expose READ tools only, so propose-only is enforced at
+  // the source; you can additionally denylist write tools here via `configs`.
+  // We cast loosely because the typed beta surface varies across SDK versions.
+  let response: Anthropic.Messages.Message;
+  if (opts.mcpServers && opts.mcpServers.length > 0) {
+    const beta = client as unknown as {
+      beta: { messages: { create: (p: unknown) => Promise<Anthropic.Messages.Message> } };
+    };
+    response = await beta.beta.messages.create({
+      ...basePayload,
+      mcp_servers: opts.mcpServers,
+      tools: opts.mcpServers.map((s) => ({
+        type: "mcp_toolset",
+        mcp_server_name: s.name,
+      })),
+      betas: ["mcp-client-2025-11-20"],
+    });
+  } else {
+    response = (await client.messages.create(basePayload)) as Anthropic.Messages.Message;
+  }
 
   const text = response.content
     .filter((block) => block.type === "text")
