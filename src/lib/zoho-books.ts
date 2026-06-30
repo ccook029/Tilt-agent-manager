@@ -146,6 +146,27 @@ async function getAllPages<T>(
   return out;
 }
 
+/**
+ * Fetch ONLY the first page plus Zoho's reported total count. Used by the
+ * read-only health snapshot so a multi-year backlog of thousands of rows
+ * doesn't trigger deep pagination (and a serverless timeout) — we get the true
+ * count from page_context.total and a 200-row sample for context.
+ */
+async function fetchPageWithTotal<T>(
+  path: string,
+  listKey: string,
+  params: Record<string, string> = {}
+): Promise<{ items: T[]; total: number }> {
+  const res = await booksGet<Record<string, unknown>>(path, {
+    ...params,
+    page: "1",
+    per_page: "200",
+  });
+  const items = (res[listKey] as T[]) ?? [];
+  const ctx = res.page_context as { total?: number } | undefined;
+  return { items, total: ctx?.total ?? items.length };
+}
+
 export const fetchChartOfAccounts = () =>
   getAllPages<BooksAccount>("/chartofaccounts", "chartofaccounts");
 
@@ -181,19 +202,20 @@ export async function fetchBooksSnapshot(): Promise<string> {
     }
   };
 
+  const empty = { items: [], total: 0 };
   const [accounts, uncategorized, invoices, bills] = await Promise.all([
-    safe("Chart of Accounts", fetchChartOfAccounts, [] as BooksAccount[]),
-    safe("Uncategorized transactions", fetchUncategorizedBankTxns, [] as BooksBankTxn[]),
-    safe("Open invoices (A/R)", fetchOpenInvoices, [] as BooksInvoice[]),
-    safe("Open bills (A/P)", fetchOpenBills, [] as BooksBill[]),
+    safe("Chart of Accounts", () => fetchPageWithTotal<BooksAccount>("/chartofaccounts", "chartofaccounts"), empty as { items: BooksAccount[]; total: number }),
+    safe("Uncategorized transactions", () => fetchPageWithTotal<BooksBankTxn>("/banktransactions", "banktransactions", { status: "uncategorized" }), empty as { items: BooksBankTxn[]; total: number }),
+    safe("Open invoices (A/R)", () => fetchPageWithTotal<BooksInvoice>("/invoices", "invoices", { status: "unpaid" }), empty as { items: BooksInvoice[]; total: number }),
+    safe("Open bills (A/P)", () => fetchPageWithTotal<BooksBill>("/bills", "bills", { status: "unpaid" }), empty as { items: BooksBill[]; total: number }),
   ]);
 
   // If everything failed, surface a clear diagnostic rather than crashing.
   if (
-    accounts.length === 0 &&
-    uncategorized.length === 0 &&
-    invoices.length === 0 &&
-    bills.length === 0 &&
+    accounts.total === 0 &&
+    uncategorized.total === 0 &&
+    invoices.total === 0 &&
+    bills.total === 0 &&
     errors.length > 0
   ) {
     return [
@@ -212,31 +234,27 @@ export async function fetchBooksSnapshot(): Promise<string> {
     ].join("\n");
   }
 
-  // Aggregate quick stats
-  const arTotal = invoices.reduce((s, i) => s + (i.balance || 0), 0);
-  const apTotal = bills.reduce((s, b) => s + (b.balance || 0), 0);
-  const overdueAR = invoices.filter((i) => i.status === "overdue").length;
-  const inactiveAccounts = accounts.filter((a) => !a.is_active).length;
-
-  // Duplicate-vendor heuristic on bills (case-insensitive name collisions)
-  const vendorNames = bills.map((b) => b.vendor_name?.trim().toLowerCase()).filter(Boolean);
-  const vendorCounts = new Map<string, number>();
-  for (const v of vendorNames) vendorCounts.set(v, (vendorCounts.get(v) ?? 0) + 1);
+  // Aggregate quick stats. Counts come from Zoho's reported total; dollar
+  // figures are summed over the first-page sample (≤200 rows).
+  const arTotal = invoices.items.reduce((s, i) => s + (i.balance || 0), 0);
+  const apTotal = bills.items.reduce((s, b) => s + (b.balance || 0), 0);
+  const overdueAR = invoices.items.filter((i) => i.status === "overdue").length;
+  const inactiveAccounts = accounts.items.filter((a) => !a.is_active).length;
 
   const lines = [
     "## Zoho Books Snapshot (read-only)",
-    `Chart of Accounts: ${accounts.length} accounts (${inactiveAccounts} inactive)`,
-    `Uncategorized bank transactions: ${uncategorized.length}`,
-    `Open invoices (A/R): ${invoices.length} — $${arTotal.toFixed(2)} outstanding, ${overdueAR} overdue`,
-    `Open bills (A/P): ${bills.length} — $${apTotal.toFixed(2)} outstanding`,
+    `Chart of Accounts: ${accounts.total} accounts (${inactiveAccounts}+ inactive in sample)`,
+    `Uncategorized bank transactions: ${uncategorized.total}`,
+    `Open invoices (A/R): ${invoices.total} — $${arTotal.toFixed(2)}+ outstanding (sample), ${overdueAR}+ overdue`,
+    `Open bills (A/P): ${bills.total} — $${apTotal.toFixed(2)}+ outstanding (sample)`,
     "",
   ];
 
-  if (uncategorized.length > 0) {
+  if (uncategorized.items.length > 0) {
     lines.push("### Uncategorized Transactions (sample, up to 40)");
     lines.push("| Date | Payee | Amount | Description |");
     lines.push("|------|-------|--------|-------------|");
-    for (const t of uncategorized.slice(0, 40)) {
+    for (const t of uncategorized.items.slice(0, 40)) {
       lines.push(
         `| ${t.date} | ${t.payee ?? "—"} | $${(t.amount ?? 0).toFixed(2)} | ${(t.description ?? "").slice(0, 60)} |`
       );
