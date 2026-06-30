@@ -14,8 +14,26 @@
 // ---------------------------------------------------------------------------
 
 // ---- OAuth token cache ----------------------------------------------------
+//
+// Zoho rate-limits the token-refresh endpoint hard ("you have made too many
+// requests"). To avoid tripping it we cache the access token in THREE layers:
+//   1. In-memory (fast path within a warm serverless instance).
+//   2. A single in-flight promise so concurrent callers (e.g. 4 parallel Books
+//      fetches on a cold start) share ONE refresh instead of firing four.
+//   3. Vercel KV, so the ~1-hour access token is shared across serverless
+//      invocations and we refresh roughly once per hour for the whole app,
+//      not once per cold start.
+import { kv } from "@vercel/kv";
 
-let cachedToken: { accessToken: string; expiresAt: number } | null = null;
+interface CachedToken {
+  accessToken: string;
+  expiresAt: number;
+}
+
+const TOKEN_CACHE_KEY = "zoho-access-token-cache";
+
+let cachedToken: CachedToken | null = null;
+let inflight: Promise<string> | null = null;
 
 export function getEnvOrThrow(name: string): string {
   const val = process.env[name];
@@ -23,10 +41,40 @@ export function getEnvOrThrow(name: string): string {
   return val;
 }
 
+function isValid(tok: CachedToken | null): tok is CachedToken {
+  return !!tok && Date.now() < tok.expiresAt - 60_000; // 60s safety buffer
+}
+
+/** Clear the cached access token everywhere (call after a 401/403). */
+export async function invalidateTokenCache(): Promise<void> {
+  cachedToken = null;
+  try {
+    await kv.del(TOKEN_CACHE_KEY);
+  } catch {
+    /* KV optional — ignore */
+  }
+}
+
 export async function getAccessToken(): Promise<string> {
-  // Return cached token if still valid (with 60s buffer)
-  if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
-    return cachedToken.accessToken;
+  if (isValid(cachedToken)) return cachedToken.accessToken;
+  // Collapse concurrent callers onto a single refresh.
+  if (inflight) return inflight;
+  inflight = acquireToken().finally(() => {
+    inflight = null;
+  });
+  return inflight;
+}
+
+async function acquireToken(): Promise<string> {
+  // Shared cross-invocation cache (survives serverless cold starts).
+  try {
+    const kvTok = await kv.get<CachedToken>(TOKEN_CACHE_KEY);
+    if (isValid(kvTok)) {
+      cachedToken = kvTok;
+      return kvTok.accessToken;
+    }
+  } catch {
+    /* KV optional — fall through to a live refresh */
   }
 
   const clientId = getEnvOrThrow("ZOHO_CLIENT_ID");
@@ -73,6 +121,11 @@ export async function getAccessToken(): Promise<string> {
     accessToken: data.access_token,
     expiresAt: Date.now() + data.expires_in * 1000,
   };
+  try {
+    await kv.set(TOKEN_CACHE_KEY, cachedToken);
+  } catch {
+    /* KV optional — in-memory cache still applies */
+  }
 
   return cachedToken.accessToken;
 }
@@ -105,7 +158,7 @@ async function zohoGet<T>(
     const body = await res.text();
     // Invalidate token cache on auth failures so next call attempts a fresh token
     if (res.status === 401 || res.status === 403) {
-      cachedToken = null;
+      await invalidateTokenCache();
     }
     throw new Error(`Zoho API ${path} failed (${res.status}): ${body}`);
   }
@@ -137,7 +190,7 @@ async function zohoBooks<T>(
 
   if (!res.ok) {
     const body = await res.text();
-    if (res.status === 401 || res.status === 403) cachedToken = null;
+    if (res.status === 401 || res.status === 403) await invalidateTokenCache();
     throw new Error(`Zoho Books ${path} failed (${res.status}): ${body}`);
   }
 
@@ -567,7 +620,7 @@ async function zohoPost<T>(
 
   if (!res.ok) {
     const text = await res.text();
-    if (res.status === 401 || res.status === 403) cachedToken = null;
+    if (res.status === 401 || res.status === 403) await invalidateTokenCache();
     throw new Error(`Zoho API POST ${path} failed (${res.status}): ${text}`);
   }
 
@@ -602,7 +655,7 @@ async function zohoPut<T>(
 
   if (!res.ok) {
     const text = await res.text();
-    if (res.status === 401 || res.status === 403) cachedToken = null;
+    if (res.status === 401 || res.status === 403) await invalidateTokenCache();
     throw new Error(`Zoho API PUT ${path} failed (${res.status}): ${text}`);
   }
 
