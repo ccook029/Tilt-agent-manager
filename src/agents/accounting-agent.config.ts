@@ -29,7 +29,7 @@ const config: AccountingAgentConfig = {
   id: "accounting",
   name: "Accounting Agent",
   schedule: "0 11 * * 1-5", // weekdays 11:00 UTC (7 AM ET)
-  model: "claude-sonnet-4-20250514",
+  model: "claude-sonnet-4-6",
   maxTokens: 8192,
   temperature: 0.1,
 
