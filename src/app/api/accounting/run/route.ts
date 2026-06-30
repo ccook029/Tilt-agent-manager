@@ -17,10 +17,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendAnalyticsReport, sendErrorNotification } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
-import { runAccountingCycle } from "@/lib/accounting-loop";
+import { runAccountingCycle, runWorkerTask } from "@/lib/accounting-loop";
 import workerConfig from "@/agents/accounting-agent.config";
 
 export const maxDuration = 300;
+
+// Planning/diagnostic tasks run as a SINGLE model call (Penny only) so they
+// finish well within serverless time limits — there are no real decisions for
+// the CFO to resolve on a read-only assessment. The two-call worker→CFO review
+// cycle runs for the action tasks that actually generate decision requests.
+const WORKER_ONLY = new Set(["books-health", "catch-up-plan"]);
 
 const TASK_LABELS: Record<string, string> = {
   "books-health": "Books Health Report",
@@ -66,24 +72,41 @@ export async function POST(request: NextRequest) {
     const startedAt = new Date();
     const taskLabel = TASK_LABELS[task] ?? task;
 
-    const cycle = await runAccountingCycle(task, context);
+    let report: string;
+    let newEscalations: Awaited<ReturnType<typeof runAccountingCycle>>["newEscalations"] = [];
+    let tokensUsed = 0;
 
-    // Combined report = CFO review on top of Penny's work.
-    const report = [
-      `# ${taskLabel}`,
-      "",
-      "## CFO Review — Sterling Vance",
-      cycle.cfoReview,
-      "",
-      "---",
-      "",
-      "## Staff Accountant Work — Penny Quill",
-      cycle.workerOutput,
-      "",
-      cycle.newEscalations.length > 0
-        ? `> ⚠️ ${cycle.newEscalations.length} question(s) escalated to Chris — see the next CFO digest or the HQ chat.`
-        : "> ✅ No questions needed escalating — all handled by the CFO.",
-    ].join("\n");
+    if (WORKER_ONLY.has(task)) {
+      // Single fast call — Penny's diagnostic only.
+      const worker = await runWorkerTask(task, context);
+      report = [
+        `# ${taskLabel}`,
+        "",
+        "## Staff Accountant — Penny Quill",
+        worker.output,
+      ].join("\n");
+      tokensUsed = worker.inputTokens + worker.outputTokens;
+    } else {
+      // Full worker → CFO review cycle.
+      const cycle = await runAccountingCycle(task, context);
+      newEscalations = cycle.newEscalations;
+      tokensUsed = cycle.tokens.input + cycle.tokens.output;
+      report = [
+        `# ${taskLabel}`,
+        "",
+        "## CFO Review — Sterling Vance",
+        cycle.cfoReview,
+        "",
+        "---",
+        "",
+        "## Staff Accountant Work — Penny Quill",
+        cycle.workerOutput,
+        "",
+        cycle.newEscalations.length > 0
+          ? `> ⚠️ ${cycle.newEscalations.length} question(s) escalated to Chris — see the next CFO digest or the HQ chat.`
+          : "> ✅ No questions needed escalating — all handled by the CFO.",
+      ].join("\n");
+    }
 
     const pdfBuffer = await generateReportPDF({
       title: taskLabel,
@@ -121,7 +144,7 @@ export async function POST(request: NextRequest) {
         status: "success",
         output: report,
         model: workerConfig.model,
-        tokensUsed: cycle.tokens.input + cycle.tokens.output,
+        tokensUsed,
       },
     ]);
 
@@ -130,7 +153,7 @@ export async function POST(request: NextRequest) {
       task,
       taskLabel,
       report,
-      escalations: cycle.newEscalations,
+      escalations: newEscalations,
       emailSent: sendEmail,
     });
   } catch (err) {
