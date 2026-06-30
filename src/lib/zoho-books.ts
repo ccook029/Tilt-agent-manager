@@ -20,7 +20,7 @@
 //   ZOHO_REFRESH_TOKEN, ZOHO_ORGANIZATION_ID  (already set for Stockton)
 // Optional env (MCP path): ZOHO_BOOKS_MCP_URL, ZOHO_BOOKS_MCP_TOKEN
 // ---------------------------------------------------------------------------
-import { getAccessToken, getEnvOrThrow } from "./zoho";
+import { getAccessToken, getEnvOrThrow, invalidateTokenCache } from "./zoho";
 
 // ---- MCP connector configuration ------------------------------------------
 
@@ -73,6 +73,7 @@ async function booksGet<T>(
 
   if (!res.ok) {
     const body = await res.text();
+    if (res.status === 401 || res.status === 403) await invalidateTokenCache();
     throw new Error(`Zoho Books ${path} failed (${res.status}): ${body}`);
   }
   return res.json() as Promise<T>;
