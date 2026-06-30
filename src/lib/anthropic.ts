@@ -48,7 +48,7 @@ export async function callClaude(
   opts: CallClaudeOptions
 ): Promise<ClaudeResponse> {
   const client = getClient();
-  const model = opts.model ?? "claude-sonnet-5";
+  const model = opts.model ?? "claude-sonnet-4-6";
 
   const basePayload = {
     model,

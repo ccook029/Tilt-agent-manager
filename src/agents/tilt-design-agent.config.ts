@@ -90,7 +90,7 @@ const DESIGN_TOOLS: DesignTool[] = [
 const config: TiltDesignAgentConfig = {
   id: "tilt-design",
   name: "Tilt Design Agent",
-  model: "claude-sonnet-5",
+  model: "claude-sonnet-4-6",
   maxTokens: 8192,
   temperature: 0.5,
 

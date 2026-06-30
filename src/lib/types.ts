@@ -17,7 +17,7 @@ export type CronSchedule = string;
  *                 that returns a string, e.g. to inject today's date).
  *
  * Optional:
- *  - model:       Claude model to use (defaults to claude-sonnet-5).
+ *  - model:       Claude model to use (defaults to claude-sonnet-4-6).
  *  - maxTokens:   Max response tokens (defaults to 2048).
  *  - temperature: Sampling temperature (defaults to 0.7).
  *  - tags:        Arbitrary labels for filtering / grouping in the dashboard.

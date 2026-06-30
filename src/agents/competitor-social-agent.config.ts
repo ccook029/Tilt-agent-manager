@@ -78,7 +78,7 @@ const config: CompetitorSocialAgentConfig = {
   id: "competitor-social",
   name: "Competitor Social Intelligence Agent",
   schedule: "0 10 * * 1", // Monday at 10:00 UTC (6 AM ET)
-  model: "claude-sonnet-5",
+  model: "claude-sonnet-4-6",
   maxTokens: 8192,
   temperature: 0.4,
 

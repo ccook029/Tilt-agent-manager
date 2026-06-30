@@ -4,7 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentConfig, AgentRunLog } from "./types";
 
-const DEFAULT_MODEL = "claude-sonnet-5";
+const DEFAULT_MODEL = "claude-sonnet-4-6";
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_TEMPERATURE = 0.7;
 

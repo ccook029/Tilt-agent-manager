@@ -33,7 +33,7 @@ const config: MaterialsRdAgentConfig = {
   id: "materials-rd",
   name: "Materials Science R&D Agent",
   schedule: "0 12 * * 5", // Friday at 12:00 UTC (8 AM ET)
-  model: "claude-sonnet-5",
+  model: "claude-sonnet-4-6",
   maxTokens: 8192,
   temperature: 0.3,
 
