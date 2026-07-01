@@ -18,6 +18,7 @@ import { sendAnalyticsReport, sendErrorNotification } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import { runAccountingCycle, runWorkerTask } from "@/lib/accounting-loop";
+import { runCategorizationBatch } from "@/lib/accounting-execute";
 import { addEscalations } from "@/lib/policy-ledger";
 import workerConfig from "@/agents/accounting-agent.config";
 
@@ -30,6 +31,7 @@ export const maxDuration = 300;
 const WORKER_ONLY = new Set(["books-health", "catch-up-plan"]);
 
 const TASK_LABELS: Record<string, string> = {
+  "auto-categorize": "Auto-Categorize (Wave 1)",
   "books-health": "Books Health Report",
   "catch-up-plan": "Catch-Up Roadmap",
   "bank-reconciliation": "Bank Reconciliation",
@@ -60,6 +62,27 @@ export async function POST(request: NextRequest) {
       context = "",
       email: sendEmail = true,
     } = body as { task?: string; context?: string; email?: boolean };
+
+    // Wave 1 execution: autonomous categorization of the uncategorized backlog.
+    // Runs a batch (LIVE if MCP write tools are connected, else a dry run).
+    if (task === "auto-categorize") {
+      const started = new Date();
+      const result = await runCategorizationBatch({ limit: 15 });
+      await saveRunLogs([
+        {
+          id: `accounting-execute-${result.batchId}`,
+          agentId: "accounting",
+          agentName: `Penny Quill (Auto-Categorize${result.mode === "proposed" ? " — Dry Run" : ""})`,
+          startedAt: started.toISOString(),
+          finishedAt: new Date().toISOString(),
+          durationMs: Date.now() - started.getTime(),
+          status: "success",
+          output: result.report,
+          model: "claude-sonnet-4-6",
+        },
+      ]);
+      return NextResponse.json({ ok: true, task, ...result });
+    }
 
     if (!workerConfig.taskPrompts[task]) {
       return NextResponse.json(
