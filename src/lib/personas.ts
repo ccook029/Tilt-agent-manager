@@ -182,6 +182,7 @@ const personas: AgentPersona[] = [
     avatarAccent: "ring-teal-400",
     runEndpoint: "/api/accounting/run",
     taskTypes: [
+      "auto-categorize",
       "books-health",
       "catch-up-plan",
       "bank-reconciliation",
