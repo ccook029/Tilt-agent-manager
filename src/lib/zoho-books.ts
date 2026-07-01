@@ -171,10 +171,50 @@ async function fetchPageWithTotal<T>(
 export const fetchChartOfAccounts = () =>
   getAllPages<BooksAccount>("/chartofaccounts", "chartofaccounts");
 
-export const fetchUncategorizedBankTxns = () =>
-  getAllPages<BooksBankTxn>("/banktransactions", "banktransactions", {
-    status: "uncategorized",
-  });
+export interface BooksBankAccount {
+  account_id: string;
+  account_name: string;
+  account_type: string;
+}
+
+export const fetchBankAccounts = () =>
+  getAllPages<BooksBankAccount>("/bankaccounts", "bankaccounts");
+
+/**
+ * Uncategorized bank/credit-card transactions. Zoho Books' /banktransactions
+ * endpoint REQUIRES an account_id (querying it without one returns
+ * "The account does not exist"), so we enumerate the bank accounts first and
+ * pull each one's uncategorized feed. Returns a sample plus the true total.
+ */
+export async function fetchUncategorizedBankTxns(
+  sampleLimit = 40
+): Promise<{ items: BooksBankTxn[]; total: number }> {
+  const accounts = await fetchBankAccounts();
+  const items: BooksBankTxn[] = [];
+  let total = 0;
+
+  for (const acct of accounts) {
+    try {
+      const res = await booksGet<Record<string, unknown>>("/banktransactions", {
+        account_id: acct.account_id,
+        status: "uncategorized",
+        page: "1",
+        per_page: "200",
+      });
+      const txns = (res.banktransactions as BooksBankTxn[]) ?? [];
+      const ctx = res.page_context as { total?: number } | undefined;
+      total += ctx?.total ?? txns.length;
+      for (const t of txns) {
+        if (items.length >= sampleLimit) break;
+        items.push({ ...t, account_name: acct.account_name });
+      }
+    } catch {
+      // Skip an account we can't read rather than failing the whole snapshot.
+    }
+  }
+
+  return { items, total };
+}
 
 export const fetchOpenInvoices = () =>
   getAllPages<BooksInvoice>("/invoices", "invoices", { status: "unpaid" });
@@ -206,7 +246,7 @@ export async function fetchBooksSnapshot(): Promise<string> {
   const empty = { items: [], total: 0 };
   const [accounts, uncategorized, invoices, bills] = await Promise.all([
     safe("Chart of Accounts", () => fetchPageWithTotal<BooksAccount>("/chartofaccounts", "chartofaccounts"), empty as { items: BooksAccount[]; total: number }),
-    safe("Uncategorized transactions", () => fetchPageWithTotal<BooksBankTxn>("/banktransactions", "banktransactions", { status: "uncategorized" }), empty as { items: BooksBankTxn[]; total: number }),
+    safe("Uncategorized transactions", () => fetchUncategorizedBankTxns(40), empty as { items: BooksBankTxn[]; total: number }),
     safe("Open invoices (A/R)", () => fetchPageWithTotal<BooksInvoice>("/invoices", "invoices", { status: "unpaid" }), empty as { items: BooksInvoice[]; total: number }),
     safe("Open bills (A/P)", () => fetchPageWithTotal<BooksBill>("/bills", "bills", { status: "unpaid" }), empty as { items: BooksBill[]; total: number }),
   ]);
