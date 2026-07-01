@@ -201,13 +201,21 @@ export async function runCfoChat(message: string): Promise<string> {
           .join("\n");
 
   // Give Sterling Penny's most recent findings so he answers from what she
-  // actually knows about the books — not generic CFO boilerplate.
+  // actually knows about the books — not generic CFO boilerplate. Keep only the
+  // FRESHEST report per task (logs are newest-first) so a superseded run doesn't
+  // make him repeat already-resolved issues.
   const pennyLogs = await getRunLogsByAgent("accounting");
+  const seenTasks = new Set<string>();
+  const freshest = pennyLogs.filter((l) => {
+    if (seenTasks.has(l.agentName)) return false;
+    seenTasks.add(l.agentName);
+    return true;
+  });
   const pennyWork =
-    pennyLogs.length === 0
+    freshest.length === 0
       ? "(Penny hasn't produced any reports yet — no live findings to reference.)"
-      : pennyLogs
-          .slice(0, 2)
+      : freshest
+          .slice(0, 3)
           .map(
             (l) =>
               `### ${l.agentName} — ${l.startedAt.slice(0, 10)}\n${l.output.slice(0, 6000)}`
