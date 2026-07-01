@@ -18,6 +18,7 @@ import { sendAnalyticsReport, sendErrorNotification } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import { runAccountingCycle, runWorkerTask } from "@/lib/accounting-loop";
+import { addEscalations } from "@/lib/policy-ledger";
 import workerConfig from "@/agents/accounting-agent.config";
 
 export const maxDuration = 300;
@@ -77,13 +78,29 @@ export async function POST(request: NextRequest) {
     let tokensUsed = 0;
 
     if (WORKER_ONLY.has(task)) {
-      // Single fast call — Penny's diagnostic only.
+      // Single fast call — Penny's diagnostic only. Her decision requests are
+      // routed straight into the escalation queue so they surface for Chris to
+      // answer in Sterling's chat panel + the daily digest (and become policy).
       const worker = await runWorkerTask(task, context);
+      newEscalations = await addEscalations(
+        worker.decisionRequests
+          .map((d) => ({
+            question: String(d.description ?? d.question ?? "").trim(),
+            reason: `Raised by Penny during ${taskLabel}`,
+            recommendation: d.recommendation ? String(d.recommendation) : undefined,
+            dollarAmount: typeof d.dollar_amount === "number" ? d.dollar_amount : undefined,
+          }))
+          .filter((e) => e.question.length > 0)
+      );
       report = [
         `# ${taskLabel}`,
         "",
         "## Staff Accountant — Penny Quill",
         worker.output,
+        "",
+        newEscalations.length > 0
+          ? `> ⚠️ ${newEscalations.length} question(s) sent to your CFO chat for a decision — open Sterling Vance → Talk to Sterling.`
+          : "",
       ].join("\n");
       tokensUsed = worker.inputTokens + worker.outputTokens;
     } else {
