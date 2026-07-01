@@ -17,7 +17,7 @@ import { fetchInventorySnapshot } from "./zoho";
 import { fetchSheetSnapshot } from "./zoho-sheet";
 import { fetchSyncReport } from "./zoho-sync";
 import { sendAnalyticsReport } from "./email";
-import { saveRunLogs } from "./store";
+import { saveRunLogs, getRunLogsByAgent } from "./store";
 import {
   renderPolicyBlock,
   addEscalations,
@@ -200,9 +200,24 @@ export async function runCfoChat(message: string): Promise<string> {
           )
           .join("\n");
 
+  // Give Sterling Penny's most recent findings so he answers from what she
+  // actually knows about the books — not generic CFO boilerplate.
+  const pennyLogs = await getRunLogsByAgent("accounting");
+  const pennyWork =
+    pennyLogs.length === 0
+      ? "(Penny hasn't produced any reports yet — no live findings to reference.)"
+      : pennyLogs
+          .slice(0, 2)
+          .map(
+            (l) =>
+              `### ${l.agentName} — ${l.startedAt.slice(0, 10)}\n${l.output.slice(0, 6000)}`
+          )
+          .join("\n\n---\n\n");
+
   const userMessage = substituteVariables(cfoConfig.chatPrompt, {
     policy_block: await renderPolicyBlock(),
     open_escalations: openBlock,
+    penny_work: pennyWork,
     message,
   });
 

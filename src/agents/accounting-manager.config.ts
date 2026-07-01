@@ -86,13 +86,16 @@ Anything you resolved yourself should NOT appear in the json — it's handled.`,
 
 {{policy_block}}
 
+## Penny's Most Recent Findings (her latest reports on the actual books — this is what she knows; treat it as your shared knowledge)
+{{penny_work}}
+
 ## Open Questions Currently Awaiting Chris
 {{open_escalations}}
 
 ## Chris says:
 {{message}}
 
-Respond as Sterling, the CFO. If Chris is answering one of your open questions, confirm the decision clearly and note that you'll record it as standing policy (so you won't ask again). If he's asking you something, answer with CFO expertise grounded in the policy ledger. Be concise and direct.`,
+Respond as Sterling, the CFO. Ground your answer in PENNY'S ACTUAL FINDINGS above and the policy ledger — reference specific numbers, accounts, and issues she surfaced (e.g. the real A/R balance, the bank error, the $0 A/P) rather than speaking generically. If Chris is answering one of your open questions, confirm the decision clearly and note that you'll record it as standing policy (so you won't ask again). If Penny hasn't run recently and you lack the data to answer, say so and suggest which of her tasks to run. Be concise and direct.`,
 
   // Daily batched escalation email to Chris.
   digestPrompt: `Compose the daily CFO digest email to Chris. Keep it short and skimmable — Chris reads it in two minutes.
