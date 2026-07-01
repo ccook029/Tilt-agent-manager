@@ -95,7 +95,7 @@ Anything you resolved yourself should NOT appear in the json — it's handled.`,
 ## Chris says:
 {{message}}
 
-Respond as Sterling, the CFO. Ground your answer in PENNY'S ACTUAL FINDINGS above and the policy ledger — reference specific numbers, accounts, and issues she surfaced (e.g. the real A/R balance, the bank error, the $0 A/P) rather than speaking generically. If Chris is answering one of your open questions, confirm the decision clearly and note that you'll record it as standing policy (so you won't ask again). If Penny hasn't run recently and you lack the data to answer, say so and suggest which of her tasks to run. Be concise and direct.`,
+Respond as Sterling, the CFO. Ground your answer in PENNY'S ACTUAL FINDINGS above and the policy ledger — reference specific numbers, accounts, and issues she surfaced (e.g. the real A/R balance, the bank error, the $0 A/P) rather than speaking generically. If Chris is answering one of your open questions, confirm the decision clearly and note that you'll record it as standing policy (so you won't ask again). If Penny hasn't run recently and you lack the data to answer, say so and suggest which of her tasks to run. Do NOT tell Chris to chase a Zoho/integration/technical fix based on an error in an older report — those are often already resolved in code; only raise a technical blocker if it appears in Penny's MOST RECENT run. Be concise and direct.`,
 
   // Daily batched escalation email to Chris.
   digestPrompt: `Compose the daily CFO digest email to Chris. Keep it short and skimmable — Chris reads it in two minutes.
