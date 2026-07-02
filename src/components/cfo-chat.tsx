@@ -16,6 +16,14 @@ interface OpenEscalation {
   dollarAmount?: number;
 }
 
+interface AttachedDoc {
+  id: string;
+  filename: string;
+  uploadedAt: string;
+  sheets: number;
+  rows: number;
+}
+
 export default function CfoChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -29,7 +37,10 @@ export default function CfoChat() {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState<OpenEscalation[]>([]);
   const [answering, setAnswering] = useState<string | null>(null);
+  const [docs, setDocs] = useState<AttachedDoc[]>([]);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const loadOpen = useCallback(async () => {
     try {
@@ -45,9 +56,63 @@ export default function CfoChat() {
     }
   }, []);
 
+  const loadDocs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/accounting/documents");
+      const data = await res.json();
+      setDocs(data.documents ?? []);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
     loadOpen();
-  }, [loadOpen]);
+    loadDocs();
+  }, [loadOpen, loadDocs]);
+
+  const uploadFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/accounting/documents", { method: "POST", body: form });
+      const data = await res.json();
+      if (data.ok) {
+        setMessages((p) => [
+          ...p,
+          {
+            role: "assistant",
+            content: `📎 Got it — "${data.document.filename}" attached (${data.document.sheets} sheet(s), ~${data.document.rows} rows${data.document.truncated ? ", large file so I'm working from the first portion" : ""}). Penny and I can now check it against the books — tell me what you want compared.`,
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+        await loadDocs();
+      } else {
+        setMessages((p) => [
+          ...p,
+          {
+            role: "assistant",
+            content: `Couldn't read that file: ${data.error ?? "unknown error"}`,
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+      }
+    } catch {
+      setMessages((p) => [
+        ...p,
+        { role: "assistant", content: "Upload failed — try again.", timestamp: new Date().toISOString() },
+      ]);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const removeDoc = async (id: string) => {
+    await fetch(`/api/accounting/documents?id=${id}`, { method: "DELETE" });
+    await loadDocs();
+  };
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -176,13 +241,56 @@ export default function CfoChat() {
 
       {/* Input */}
       <div className="border-t border-gray-800 p-3 bg-[#111]">
+        {/* Attached reference documents */}
+        {docs.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {docs.map((d) => (
+              <span
+                key={d.id}
+                title={`${d.sheets} sheet(s), ~${d.rows} rows — uploaded ${new Date(d.uploadedAt).toLocaleDateString()}`}
+                className="inline-flex items-center gap-1.5 text-[11px] bg-gray-800/70 border border-gray-700/60 rounded-full px-2.5 py-1 text-gray-300"
+              >
+                📎 {d.filename}
+                <button
+                  onClick={() => removeDoc(d.id)}
+                  className="text-gray-500 hover:text-red-400 transition-colors leading-none"
+                  aria-label={`Remove ${d.filename}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls,.csv,.txt"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) uploadFile(f);
+            }}
+          />
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading || loading}
+            title="Attach a spreadsheet (.xlsx, .xls, .csv) for Sterling & Penny to check against the books"
+            className="px-3 py-2.5 bg-gray-800/50 hover:bg-gray-700 border border-gray-700 hover:border-[#00d6ff]/40 disabled:opacity-40 rounded-lg text-sm text-gray-300 transition-colors"
+          >
+            {uploading ? (
+              <span className="inline-block w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin align-middle" />
+            ) : (
+              "📎"
+            )}
+          </button>
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-            placeholder="Ask the CFO about the books, policy, or cash position..."
+            placeholder="Ask the CFO, give direction, or attach a spreadsheet to verify against Books..."
             className="flex-1 bg-gray-800/50 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-[#00d6ff] transition-colors"
             disabled={loading}
           />
