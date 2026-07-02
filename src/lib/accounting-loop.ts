@@ -24,6 +24,7 @@ import {
   getOpenEscalations,
   type Escalation,
 } from "./policy-ledger";
+import { runCategorizationBatch } from "./accounting-execute";
 import workerConfig from "@/agents/accounting-agent.config";
 import cfoConfig from "@/agents/accounting-manager.config";
 
@@ -188,7 +189,66 @@ export async function runAccountingCycle(
 
 // ---- CFO chat -------------------------------------------------------------
 
-export async function runCfoChat(message: string): Promise<string> {
+/** Tasks Sterling is allowed to dispatch to Penny from the chat. */
+export const DISPATCHABLE_TASKS = new Set([
+  "auto-categorize",
+  ...Object.keys(workerConfig.taskPrompts),
+]);
+
+export interface CfoChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface CfoChatResult {
+  reply: string;
+  /** Task Sterling decided to dispatch to Penny (validated), if any. */
+  dispatch: string | null;
+  /** Escalation answers Sterling extracted from Chris's message. */
+  resolutions: Array<{ id: string; answer: string }>;
+}
+
+/** Parse Sterling's trailing control block: { dispatch, resolutions }. */
+function parseControlBlock(text: string): {
+  reply: string;
+  dispatch: string | null;
+  resolutions: Array<{ id: string; answer: string }>;
+} {
+  const matches = [...text.matchAll(/```json\s*([\s\S]*?)```/gi)];
+  if (matches.length === 0) return { reply: text.trim(), dispatch: null, resolutions: [] };
+  const last = matches[matches.length - 1];
+  try {
+    const parsed = JSON.parse(last[1].trim()) as {
+      dispatch?: unknown;
+      resolutions?: unknown;
+    };
+    if (parsed && typeof parsed === "object" && ("dispatch" in parsed || "resolutions" in parsed)) {
+      const dispatch =
+        typeof parsed.dispatch === "string" && DISPATCHABLE_TASKS.has(parsed.dispatch)
+          ? parsed.dispatch
+          : null;
+      const resolutions = Array.isArray(parsed.resolutions)
+        ? parsed.resolutions
+            .map((r) => ({
+              id: String((r as Record<string, unknown>)?.id ?? ""),
+              answer: String((r as Record<string, unknown>)?.answer ?? "").trim(),
+            }))
+            .filter((r) => r.id.startsWith("esc-") && r.answer.length > 0)
+        : [];
+      // Strip the machine-read block from what Chris sees.
+      const reply = text.replace(last[0], "").trim();
+      return { reply, dispatch, resolutions };
+    }
+  } catch {
+    /* not a control block — leave the reply intact */
+  }
+  return { reply: text.trim(), dispatch: null, resolutions: [] };
+}
+
+export async function runCfoChat(
+  message: string,
+  history: CfoChatMessage[] = []
+): Promise<CfoChatResult> {
   const open = await getOpenEscalations();
   const openBlock =
     open.length === 0
@@ -222,10 +282,19 @@ export async function runCfoChat(message: string): Promise<string> {
           )
           .join("\n\n---\n\n");
 
+  const historyBlock =
+    history.length === 0
+      ? "(no prior messages this session)"
+      : history
+          .slice(-12)
+          .map((m) => `${m.role === "user" ? "Chris" : "Sterling"}: ${m.content.slice(0, 1500)}`)
+          .join("\n\n");
+
   const userMessage = substituteVariables(cfoConfig.chatPrompt, {
     policy_block: await renderPolicyBlock(),
     open_escalations: openBlock,
     penny_work: pennyWork,
+    history: historyBlock,
     message,
   });
 
@@ -236,7 +305,74 @@ export async function runCfoChat(message: string): Promise<string> {
     maxTokens: 2048,
     temperature: 0.3,
   });
-  return res.text;
+  return parseControlBlock(res.text);
+}
+
+/**
+ * Run a task Sterling dispatched from the chat. Executes the fast single-call
+ * variant (Penny only), persists the run log, and routes her decision requests
+ * into the escalation queue — same as clicking the button on her page.
+ */
+export async function runDispatchedTask(task: string): Promise<void> {
+  const startedAt = new Date();
+  try {
+    if (task === "auto-categorize") {
+      const result = await runCategorizationBatch({ limit: 15 });
+      await saveRunLogs([
+        {
+          id: `accounting-execute-${result.batchId}`,
+          agentId: "accounting",
+          agentName: `Penny Quill (Auto-Categorize${result.mode === "proposed" ? " — Dry Run" : ""})`,
+          startedAt: startedAt.toISOString(),
+          finishedAt: new Date().toISOString(),
+          durationMs: Date.now() - startedAt.getTime(),
+          status: "success",
+          output: result.report,
+          model: "claude-sonnet-4-6",
+        },
+      ]);
+      return;
+    }
+
+    const worker = await runWorkerTask(task);
+    await addEscalations(
+      worker.decisionRequests
+        .map((d) => ({
+          question: String(d.description ?? d.question ?? "").trim(),
+          reason: `Raised by Penny during ${task} (dispatched by Sterling)`,
+          recommendation: d.recommendation ? String(d.recommendation) : undefined,
+          dollarAmount: typeof d.dollar_amount === "number" ? d.dollar_amount : undefined,
+        }))
+        .filter((e) => e.question.length > 0)
+    );
+    await saveRunLogs([
+      {
+        id: `accounting-${task}-${startedAt.toISOString()}`,
+        agentId: "accounting",
+        agentName: `Penny Quill (${task} — via Sterling)`,
+        startedAt: startedAt.toISOString(),
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedAt.getTime(),
+        status: "success",
+        output: worker.output,
+        model: workerConfig.model,
+      },
+    ]);
+  } catch (err) {
+    await saveRunLogs([
+      {
+        id: `accounting-${task}-${startedAt.toISOString()}`,
+        agentId: "accounting",
+        agentName: `Penny Quill (${task} — via Sterling)`,
+        startedAt: startedAt.toISOString(),
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedAt.getTime(),
+        status: "error",
+        output: err instanceof Error ? err.message : String(err),
+        model: workerConfig.model,
+      },
+    ]);
+  }
 }
 
 // ---- Daily CFO digest -----------------------------------------------------

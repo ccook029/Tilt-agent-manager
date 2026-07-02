@@ -13,8 +13,13 @@
 // GET → builds + emails the daily digest (used by the cron). The "Run Now"
 // button on the dashboard also lands here (defaults to digest).
 // ---------------------------------------------------------------------------
-import { NextRequest, NextResponse } from "next/server";
-import { runCfoChat, sendCfoDigestEmail } from "@/lib/accounting-loop";
+import { NextRequest, NextResponse, after } from "next/server";
+import {
+  runCfoChat,
+  runDispatchedTask,
+  sendCfoDigestEmail,
+  type CfoChatMessage,
+} from "@/lib/accounting-loop";
 import { resolveEscalation, getOpenEscalations } from "@/lib/policy-ledger";
 
 export const maxDuration = 300;
@@ -33,12 +38,38 @@ export async function POST(request: NextRequest) {
     }
 
     if (mode === "chat") {
-      const { message } = body as { message?: string };
+      const { message, history = [] } = body as {
+        message?: string;
+        history?: CfoChatMessage[];
+      };
       if (!message || !message.trim()) {
         return NextResponse.json({ error: "message is required" }, { status: 400 });
       }
-      const reply = await runCfoChat(message);
-      return NextResponse.json({ ok: true, reply });
+      const result = await runCfoChat(message, Array.isArray(history) ? history : []);
+
+      // Record any decisions Sterling extracted from Chris's message as policy.
+      const recorded: string[] = [];
+      for (const r of result.resolutions) {
+        const policy = await resolveEscalation(r.id, r.answer);
+        if (policy) recorded.push(policy.rule);
+      }
+
+      // Launch a dispatched task in the background — the reply returns
+      // immediately; the run lands in Penny's Report History when done.
+      if (result.dispatch) {
+        const task = result.dispatch;
+        after(async () => {
+          await runDispatchedTask(task);
+        });
+      }
+
+      return NextResponse.json({
+        ok: true,
+        reply: result.reply,
+        dispatched: result.dispatch,
+        recordedPolicies: recorded,
+        open: await getOpenEscalations(),
+      });
     }
 
     if (mode === "answer") {

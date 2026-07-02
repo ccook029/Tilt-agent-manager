@@ -21,7 +21,7 @@ export default function CfoChat() {
     {
       role: "assistant",
       content:
-        "Sterling here — CFO. Ask me anything about the books, or answer the open questions below and I'll record your call as standing policy so I won't ask again.",
+        "Sterling here — CFO. This is your command console: ask me anything about the books, answer my open questions right here in chat (I'll record your call as standing policy), or tell me what you want done — e.g. \"run the books health report\" or \"start categorizing\" — and I'll put Penny on it.",
       timestamp: new Date().toISOString(),
     },
   ]);
@@ -56,6 +56,8 @@ export default function CfoChat() {
   const send = async () => {
     const text = input.trim();
     if (!text || loading) return;
+    // Send the running conversation so Sterling remembers this session.
+    const history = messages.slice(-12).map((m) => ({ role: m.role, content: m.content }));
     setMessages((p) => [...p, { role: "user", content: text, timestamp: new Date().toISOString() }]);
     setInput("");
     setLoading(true);
@@ -63,17 +65,27 @@ export default function CfoChat() {
       const res = await fetch("/api/accounting-manager/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "chat", message: text }),
+        body: JSON.stringify({ mode: "chat", message: text, history }),
       });
       const data = await res.json();
+      const extras: string[] = [];
+      if (Array.isArray(data.recordedPolicies) && data.recordedPolicies.length > 0) {
+        extras.push(`📋 Recorded as standing policy: ${data.recordedPolicies.length} decision(s).`);
+      }
+      if (data.dispatched) {
+        extras.push(`⚙️ Penny is now running "${data.dispatched}" — results will appear in her Report History shortly.`);
+      }
       setMessages((p) => [
         ...p,
         {
           role: "assistant",
-          content: data.reply ?? data.error ?? "Something went wrong.",
+          content: [data.reply ?? data.error ?? "Something went wrong.", ...extras]
+            .filter(Boolean)
+            .join("\n\n"),
           timestamp: new Date().toISOString(),
         },
       ]);
+      if (Array.isArray(data.open)) setOpen(data.open);
     } catch {
       setMessages((p) => [
         ...p,
