@@ -22,7 +22,7 @@ import { runAutoReconciliation } from "@/lib/pipelines/reconciliation";
 import { runFactoryReorder } from "@/lib/pipelines/factory-reorder";
 import { runResearchScan } from "@/lib/pipelines/materials-rd";
 import { runInnovation } from "@/lib/pipelines/product-design";
-import { sendCfoDigestEmail } from "@/lib/accounting-loop";
+import { sendCfoDigestEmail, runDispatchedTask } from "@/lib/accounting-loop";
 
 export const maxDuration = 300;
 
@@ -52,6 +52,16 @@ function getScheduledTasks(now: Date): PipelineTask[] {
       tasks.push({ name: "Factory Reorder", run: () => runFactoryReorder() });
     }
     return tasks; // Don't run daily agents on the Sunday-night cron
+  }
+
+  // Accounting Auto-Categorize: weekdays — Penny works a batch of the
+  // uncategorized backlog (guardrailed writes; unknowns escalate to Chris).
+  // Runs BEFORE the digest so new questions make it into today's email.
+  if (day >= 1 && day <= 5) {
+    tasks.push({
+      name: "Accounting Auto-Categorize",
+      run: () => runDispatchedTask("auto-categorize"),
+    });
   }
 
   // CFO Daily Digest: every day — Sterling batches open questions for Chris.

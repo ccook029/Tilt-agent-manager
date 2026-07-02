@@ -98,6 +98,10 @@ export interface BooksBankTxn {
   description?: string;
   status: string; // categorized | uncategorized | matched ...
   account_name?: string;
+  /** The bank/CC account this feed line belongs to. */
+  account_id?: string;
+  /** "debit" = money out of the bank account, "credit" = money in. */
+  debit_or_credit?: string;
 }
 
 export interface BooksInvoice {
@@ -206,7 +210,11 @@ export async function fetchUncategorizedBankTxns(
       total += ctx?.total ?? txns.length;
       for (const t of txns) {
         if (items.length >= sampleLimit) break;
-        items.push({ ...t, account_name: acct.account_name });
+        items.push({
+          ...t,
+          account_name: acct.account_name,
+          account_id: t.account_id ?? acct.account_id,
+        });
       }
     } catch {
       // Skip an account we can't read rather than failing the whole snapshot.
@@ -221,6 +229,89 @@ export const fetchOpenInvoices = () =>
 
 export const fetchOpenBills = () =>
   getAllPages<BooksBill>("/bills", "bills", { status: "unpaid" });
+
+// ---- Write operations (Wave 1: bank-transaction categorization) -----------
+//
+// These are the Accounting team's "hands". Scope is deliberately narrow:
+// categorize an uncategorized bank feed line, and un-categorize it (the
+// reversal, which is what makes autonomous categorization safe to run).
+
+async function booksPost<T>(
+  path: string,
+  body: Record<string, unknown>
+): Promise<T> {
+  const token = await getAccessToken();
+  const orgId = getEnvOrThrow("ZOHO_ORGANIZATION_ID");
+  const domain = process.env.ZOHO_DOMAIN ?? "https://www.zohoapis.com";
+
+  const url = new URL(`${domain}/books/v3${path}`);
+  url.searchParams.set("organization_id", orgId);
+
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      Authorization: `Zoho-oauthtoken ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) await invalidateTokenCache();
+    throw new Error(`Zoho Books POST ${path} failed (${res.status}): ${text}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+/** Categorize a money-OUT feed line as an expense to the given expense account. */
+export async function categorizeTxnAsExpense(
+  transactionId: string,
+  opts: {
+    account_id: string; // the expense account
+    paid_through_account_id: string; // the bank/CC account the money left
+    date: string;
+    amount: number;
+    description?: string;
+  }
+): Promise<void> {
+  await booksPost(
+    `/banktransactions/uncategorized/${transactionId}/categorize/expenses`,
+    {
+      account_id: opts.account_id,
+      paid_through_account_id: opts.paid_through_account_id,
+      date: opts.date,
+      amount: opts.amount,
+      description: opts.description ?? "",
+    }
+  );
+}
+
+/** Categorize a money-IN feed line as a deposit from the given account. */
+export async function categorizeTxnAsDeposit(
+  transactionId: string,
+  opts: {
+    from_account_id: string; // the income/other account it's categorized to
+    to_account_id: string; // the bank account the money landed in
+    date: string;
+    amount: number;
+    description?: string;
+  }
+): Promise<void> {
+  await booksPost(`/banktransactions/uncategorized/${transactionId}/categorize`, {
+    transaction_type: "deposit",
+    from_account_id: opts.from_account_id,
+    to_account_id: opts.to_account_id,
+    date: opts.date,
+    amount: opts.amount,
+    description: opts.description ?? "",
+  });
+}
+
+/** Reverse a categorization — returns the feed line to Uncategorized. */
+export async function uncategorizeTxn(transactionId: string): Promise<void> {
+  await booksPost(`/banktransactions/${transactionId}/uncategorize`, {});
+}
 
 // ---- Books health snapshot (read-only) ------------------------------------
 
