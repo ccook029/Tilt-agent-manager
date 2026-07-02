@@ -16,10 +16,12 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import {
   runCfoChat,
+  runPennyChat,
   runDispatchedTask,
   sendCfoDigestEmail,
   type CfoChatMessage,
 } from "@/lib/accounting-loop";
+import { loadCfoChat, clearCfoChat, type ChatAgent } from "@/lib/cfo-chat-store";
 import { resolveEscalation, getOpenEscalations } from "@/lib/policy-ledger";
 
 export const maxDuration = 300;
@@ -33,8 +35,27 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const { mode = "digest" } = body as { mode?: string };
 
+    // Which agent's chat this concerns (Sterling by default; Penny has her
+    // own window). They share the escalation queue and policy ledger.
+    const agent: ChatAgent =
+      (body as { agent?: string }).agent === "penny" ? "penny" : "sterling";
+
     if (mode === "list") {
       return NextResponse.json({ ok: true, open: await getOpenEscalations() });
+    }
+
+    if (mode === "history") {
+      const state = await loadCfoChat(agent);
+      return NextResponse.json({
+        ok: true,
+        summary: state.summary,
+        messages: state.messages,
+      });
+    }
+
+    if (mode === "clear-chat") {
+      await clearCfoChat(agent);
+      return NextResponse.json({ ok: true });
     }
 
     if (mode === "chat") {
@@ -45,7 +66,8 @@ export async function POST(request: NextRequest) {
       if (!message || !message.trim()) {
         return NextResponse.json({ error: "message is required" }, { status: 400 });
       }
-      const result = await runCfoChat(message, Array.isArray(history) ? history : []);
+      const chatFn = agent === "penny" ? runPennyChat : runCfoChat;
+      const result = await chatFn(message, Array.isArray(history) ? history : []);
 
       // Record any decisions Sterling extracted from Chris's message as policy.
       const recorded: string[] = [];

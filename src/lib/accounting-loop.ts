@@ -28,6 +28,13 @@ import { runCategorizationBatch } from "./accounting-execute";
 import { buildQuestionsWorkbook } from "./questions-export";
 import { getDocuments, renderDocumentsBlock } from "./documents";
 import {
+  loadCfoChat,
+  saveCfoChat,
+  needsCompaction,
+  splitForCompaction,
+  type ChatAgent,
+} from "./cfo-chat-store";
+import {
   isInboxConfigured,
   fetchInteracNotifications,
   renderInteracBlock,
@@ -272,10 +279,25 @@ function parseControlBlock(text: string): {
   return { reply: text.trim(), dispatch: null, resolutions: [] };
 }
 
-export async function runCfoChat(
+/**
+ * Shared chat runner for both accounting agents (Sterling and Penny). Handles
+ * persistent memory: the KV-stored transcript is the source of truth (the
+ * client-sent history is only a fallback for sessions predating persistence),
+ * each exchange is saved, and long transcripts compact into a rolling summary
+ * instead of being forgotten.
+ */
+async function runAgentChat(
+  agent: ChatAgent,
   message: string,
-  history: CfoChatMessage[] = []
+  clientHistory: CfoChatMessage[] = []
 ): Promise<CfoChatResult> {
+  const speaker = agent === "sterling" ? "Sterling" : "Penny";
+  const stored = await loadCfoChat(agent);
+  const effectiveHistory: CfoChatMessage[] =
+    stored.messages.length > 0
+      ? stored.messages.map((m) => ({ role: m.role, content: m.content }))
+      : clientHistory;
+
   const open = await getOpenEscalations();
   const openBlock =
     open.length === 0
@@ -283,14 +305,13 @@ export async function runCfoChat(
       : open
           .map(
             (e, i) =>
-              `${i + 1}. [${e.id}] ${e.question}${e.recommendation ? ` — your rec: ${e.recommendation}` : ""}`
+              `${i + 1}. [${e.id}] ${e.question}${e.recommendation ? ` — recommendation on file: ${e.recommendation}` : ""}`
           )
           .join("\n");
 
-  // Give Sterling Penny's most recent findings so he answers from what she
-  // actually knows about the books — not generic CFO boilerplate. Keep only the
-  // FRESHEST report per task (logs are newest-first) so a superseded run doesn't
-  // make him repeat already-resolved issues.
+  // Penny's most recent findings — shared knowledge for BOTH agents (it's her
+  // work; Sterling reviews it). Keep only the FRESHEST report per task so a
+  // superseded run doesn't resurface already-resolved issues.
   const pennyLogs = await getRunLogsByAgent("accounting");
   const seenTasks = new Set<string>();
   const freshest = pennyLogs.filter((l) => {
@@ -309,17 +330,24 @@ export async function runCfoChat(
           )
           .join("\n\n---\n\n");
 
-  const historyBlock =
-    history.length === 0
-      ? "(no prior messages this session)"
-      : history
+  const historyBlock = [
+    stored.summary
+      ? `Summary of earlier conversation (compacted):\n${stored.summary}`
+      : "",
+    effectiveHistory.length === 0
+      ? "(no prior messages)"
+      : effectiveHistory
           .slice(-12)
-          .map((m) => `${m.role === "user" ? "Chris" : "Sterling"}: ${m.content.slice(0, 1500)}`)
-          .join("\n\n");
+          .map((m) => `${m.role === "user" ? "Chris" : speaker}: ${m.content.slice(0, 1500)}`)
+          .join("\n\n"),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   const docs = await getDocuments().catch(() => []);
 
-  const userMessage = substituteVariables(cfoConfig.chatPrompt, {
+  const config = agent === "sterling" ? cfoConfig : workerConfig;
+  const userMessage = substituteVariables(config.chatPrompt, {
     policy_block: await renderPolicyBlock(),
     open_escalations: openBlock,
     penny_work: pennyWork,
@@ -329,13 +357,62 @@ export async function runCfoChat(
   });
 
   const res = await callClaude({
-    systemPrompt: cfoConfig.systemPrompt,
+    systemPrompt: config.systemPrompt,
     userMessage,
-    model: cfoConfig.model,
+    model: config.model,
     maxTokens: 2048,
     temperature: 0.3,
   });
-  return parseControlBlock(res.text);
+  const result = parseControlBlock(res.text);
+
+  // Persist the exchange, then compact if the transcript has grown too long.
+  const now = new Date().toISOString();
+  const nextState = {
+    summary: stored.summary,
+    messages: [
+      ...stored.messages,
+      { role: "user" as const, content: message, timestamp: now },
+      { role: "assistant" as const, content: result.reply, timestamp: now },
+    ],
+  };
+  try {
+    if (needsCompaction(nextState)) {
+      const { older, recent } = splitForCompaction(nextState);
+      const olderText = older
+        .map((m) => `${m.role === "user" ? "Chris" : speaker}: ${m.content.slice(0, 1200)}`)
+        .join("\n");
+      const sum = await callClaude({
+        systemPrompt:
+          "You maintain a running summary of an accounting chat between Chris (CEO of Tilt Hockey) and his accounting agent. Fold the new messages into the existing summary. PRESERVE: every decision made, every dollar figure, account names, vendor/customer identities, open threads, and anything Chris said about how Tilt operates. DROP: pleasantries and process chatter. Output only the updated summary, under 400 words.",
+        userMessage: `EXISTING SUMMARY:\n${nextState.summary || "(none)"}\n\nNEW MESSAGES TO FOLD IN:\n${olderText}`,
+        model: config.model,
+        maxTokens: 800,
+        temperature: 0.2,
+      });
+      await saveCfoChat({ summary: sum.text.trim(), messages: recent }, agent);
+    } else {
+      await saveCfoChat(nextState, agent);
+    }
+  } catch (err) {
+    // Memory persistence must never break the chat itself.
+    console.warn(`[accounting-loop] chat persistence failed (${agent}):`, err);
+  }
+
+  return result;
+}
+
+export async function runCfoChat(
+  message: string,
+  history: CfoChatMessage[] = []
+): Promise<CfoChatResult> {
+  return runAgentChat("sterling", message, history);
+}
+
+export async function runPennyChat(
+  message: string,
+  history: CfoChatMessage[] = []
+): Promise<CfoChatResult> {
+  return runAgentChat("penny", message, history);
 }
 
 /**
