@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { fetchBooksSnapshot, isMcpConfigured } from "@/lib/zoho-books";
 import { getAccessToken } from "@/lib/zoho";
+import { isInboxConfigured, fetchInteracNotifications } from "@/lib/email-inbox";
 
 export const dynamic = "force-dynamic";
 
@@ -40,8 +41,42 @@ export async function GET() {
     snapshot = `fetchBooksSnapshot threw: ${err instanceof Error ? err.message : String(err)}`;
   }
 
+  // Step 3: email inbox (Interac e-Transfer notifications) connection test.
+  let inbox: Record<string, unknown>;
+  if (!isInboxConfigured()) {
+    inbox = {
+      configured: false,
+      status:
+        "NOT CONNECTED — set INBOX_USER and INBOX_APP_PASSWORD in Vercel (Zoho Mail: enable IMAP + create an app password), then redeploy.",
+    };
+  } else {
+    try {
+      const notifications = await fetchInteracNotifications({ sinceDays: 365, max: 50 });
+      inbox = {
+        configured: true,
+        status: "ok — connected and searched",
+        interacNotificationsFoundLast12mo: notifications.length,
+        sample: notifications.slice(0, 5).map((n) => ({
+          date: n.date,
+          direction: n.direction,
+          name: n.name ?? "(name not parsed)",
+          amount: n.amount ?? null,
+        })),
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      inbox = {
+        configured: true,
+        status: `FAILED — ${msg}`,
+        hint: /auth|login|credential/i.test(msg)
+          ? "Auth failed: check the app password, confirm IMAP Access is enabled in Zoho Mail settings, and note Zoho Mail IMAP requires a paid Mail plan."
+          : "Connection failed: if your mailbox is a personal @zoho.com address set IMAP_HOST=imap.zoho.com; custom domains use imappro.zoho.com (the default).",
+      };
+    }
+  }
+
   return NextResponse.json(
-    { env, tokenStatus, snapshot },
+    { env, tokenStatus, inbox, snapshot },
     { headers: { "Content-Type": "application/json" } }
   );
 }
