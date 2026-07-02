@@ -25,6 +25,7 @@ import {
   fetchChartOfAccounts,
   categorizeTxnAsExpense,
   categorizeTxnAsDeposit,
+  txnDirection,
   type BooksBankTxn,
   type BooksAccount,
 } from "./zoho-books";
@@ -157,7 +158,7 @@ export async function runCategorizationBatch(opts?: {
   // with the same amount within ±5 days. A unique hit is annotated directly on
   // the transaction so Penny doesn't have to hunt for it.
   const emailMatchFor = (t: BooksBankTxn): InteracNotification | null => {
-    if (t.debit_or_credit !== "credit" || interac.length === 0) return null;
+    if (txnDirection(t) !== "in" || interac.length === 0) return null;
     const txnTime = new Date(t.date).getTime();
     const hits = interac.filter(
       (n) =>
@@ -176,9 +177,10 @@ export async function runCategorizationBatch(opts?: {
       const matchNote = match
         ? ` | EMAIL MATCH: from "${match.name ?? "?"}"${match.message ? ` — message: "${match.message}"` : ""}`
         : "";
-      return `- id=${t.transaction_id} | ${t.date} | $${(t.amount ?? 0).toFixed(2)} | ${
-        t.debit_or_credit === "credit" ? "MONEY IN" : "MONEY OUT"
-      } | ${t.payee ?? "—"} | ${(t.description ?? "").slice(0, 80)} | bank=${t.account_name ?? "?"}${matchNote}`;
+      const dir = txnDirection(t);
+      const dirLabel =
+        dir === "in" ? "MONEY IN" : dir === "out" ? "MONEY OUT" : "DIRECTION UNKNOWN — do not categorize; escalate";
+      return `- id=${t.transaction_id} | ${t.date} | $${(t.amount ?? 0).toFixed(2)} | ${dirLabel} | ${t.payee ?? "—"} | ${(t.description ?? "").slice(0, 80)} | bank=${t.account_name ?? "?"}${matchNote}`;
     })
     .join("\n");
 
@@ -241,14 +243,23 @@ export async function runCategorizationBatch(opts?: {
       skipped.push({ transaction_id: txnId, reason: "missing bank account id on the feed line" });
       continue;
     }
+    const direction = txnDirection(txn);
+    if (direction === "unknown") {
+      // Never guess deposit-vs-expense — a wrong guess writes the wrong entry.
+      skipped.push({
+        transaction_id: txnId,
+        reason: "money direction could not be determined (no debit/credit flag, type, or memo wording) — needs a human look",
+      });
+      continue;
+    }
 
     const summary =
       String(d.summary ?? "") ||
-      `Categorize $${(txn.amount ?? 0).toFixed(2)} ${txn.payee ?? txn.description ?? ""} → ${account.account_name}`;
+      `Categorize $${(txn.amount ?? 0).toFixed(2)} ${direction === "in" ? "in" : "out"} ${txn.payee ?? txn.description ?? ""} → ${account.account_name}`;
 
     if (live) {
       try {
-        if (txn.debit_or_credit === "credit") {
+        if (direction === "in") {
           await categorizeTxnAsDeposit(txnId, {
             from_account_id: account.account_id,
             to_account_id: txn.account_id,
