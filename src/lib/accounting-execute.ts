@@ -1,34 +1,44 @@
 // ---------------------------------------------------------------------------
 // accounting-execute.ts — Wave 1 execution engine: autonomous categorization
 //
-// Penny works through the uncategorized bank-transaction backlog and CATEGORIZES
-// the ones she's confident about — actually writing to Zoho Books via the Zoho
-// MCP write tools. Anything ambiguous or material becomes a question in the CFO
-// chat. Every action is recorded in the audit log for review/reversal.
+// Penny works through the uncategorized bank-transaction backlog. SHE DECIDES,
+// THE CODE EXECUTES: she returns structured categorization decisions, and this
+// module validates each one against hard guardrails and performs the actual
+// Zoho Books write deterministically. That split matters — the model never
+// touches the API directly, so a hallucinated account or id can't reach the
+// books.
 //
-// Modes:
-//   LIVE      — Zoho Books MCP write tools are connected → Penny executes.
-//   PROPOSE   — MCP not yet connected → Penny proposes what she WOULD do (safe
-//               dry run over the real data), so you can watch it work first.
-// The mode is auto-selected from whether the MCP is configured, and can be
-// forced via the `dryRun` option.
+// Guardrails (code-enforced, not just prompted):
+//   - Only transactions from the fetched uncategorized list (by exact id).
+//   - The target account must exactly match the Chart of Accounts.
+//   - Amounts >= $2,500 are never auto-written — they escalate to Chris.
+//   - The FIRST live batch is capped at 5 so Chris can verify in Zoho before
+//     the engine scales to the full backlog.
+//   - Every write is logged (before/after) and reversible via uncategorize.
+//
+// Modes: LIVE (default — writes to Zoho Books) or DRY RUN (dryRun:true —
+// reports what it would do, writes nothing).
 // ---------------------------------------------------------------------------
-import { callClaude, type McpServer } from "./anthropic";
+import { callClaude } from "./anthropic";
 import {
   fetchUncategorizedBankTxns,
   fetchChartOfAccounts,
-  getZohoBooksMcpConfig,
-  isMcpConfigured,
+  categorizeTxnAsExpense,
+  categorizeTxnAsDeposit,
   type BooksBankTxn,
   type BooksAccount,
 } from "./zoho-books";
 import { renderPolicyBlock, addEscalations, type Escalation } from "./policy-ledger";
-import { logActions, makeAction } from "./action-log";
+import { getActions, logActions, makeAction } from "./action-log";
 import { WORKER_EXPERTISE } from "./accounting-knowledge";
 
 // Transactions at or above this amount are ALWAYS escalated for a human eye,
 // even when Penny is confident. Keeps big-dollar moves under review.
 const MATERIALITY_THRESHOLD = 2500;
+
+// The first live batch is small on purpose: verify a handful in Zoho Books,
+// then subsequent runs use the full batch size.
+const FIRST_LIVE_BATCH_CAP = 5;
 
 export interface CategorizationResult {
   mode: "executed" | "proposed";
@@ -36,13 +46,14 @@ export interface CategorizationResult {
   scanned: number;
   totalBacklog: number;
   executed: Array<{ transaction_id: string; summary: string; account: string; amount: number }>;
+  skipped: Array<{ transaction_id: string; reason: string }>;
   escalated: Escalation[];
   remaining: number;
   report: string;
 }
 
 function parseResultObject(text: string): {
-  executed?: Array<Record<string, unknown>>;
+  categorize?: Array<Record<string, unknown>>;
   escalated?: Array<Record<string, unknown>>;
 } {
   const matches = [...text.matchAll(/```json\s*([\s\S]*?)```/gi)];
@@ -55,49 +66,51 @@ function parseResultObject(text: string): {
   }
 }
 
-function mcpServers(): McpServer[] | undefined {
-  const cfg = getZohoBooksMcpConfig();
-  return cfg ? [cfg] : undefined;
-}
-
 const EXECUTION_SYSTEM_PROMPT = `${WORKER_EXPERTISE}
 
 You are Penny Quill, Staff Accountant at Tilt Hockey Inc., running an AUTONOMOUS CATEGORIZATION pass over the uncategorized bank-transaction backlog.
 
-AUTHORITY (Wave 1 — categorization only):
-- You MAY categorize uncategorized bank transactions when you are confident, using ONLY the accounts in the provided Chart of Accounts.
-- If the Zoho Books tools are available to you, USE them to actually categorize each confident transaction. If no tools are available, this is a DRY RUN — do not claim you wrote anything; just report what you WOULD do.
-- You may ONLY categorize bank transactions in this pass. You must NOT create journal entries, write off invoices, merge vendors/accounts, change the Chart of Accounts, or touch anything in a prior closed period. If a transaction implies one of those, escalate it instead.
+HOW THIS WORKS: You DECIDE the categorization for each transaction; the system validates and performs the actual write to Zoho Books. Your decisions are only applied when they pass hard validation (known transaction id, account exactly matching the Chart of Accounts, amount under $${MATERIALITY_THRESHOLD}). So precision matters: use ids and account names EXACTLY as given.
 
-WHEN TO ACT vs ESCALATE:
-- ACT (categorize) only when: an established policy covers it, OR the payee/description makes the correct account unambiguous — AND the amount is under $${MATERIALITY_THRESHOLD}.
-- ESCALATE (ask Chris) when: you don't know who/what the transaction is, more than one account is plausible, it looks like a transfer/owner draw/loan, OR the amount is $${MATERIALITY_THRESHOLD} or more (even if you think you know). Better to ask than to miscategorize.
+WHEN TO CATEGORIZE vs ESCALATE:
+- CATEGORIZE only when: an established policy covers it, OR the payee/description makes the correct account unambiguous — AND the amount is under $${MATERIALITY_THRESHOLD}.
+- ESCALATE (ask Chris) when: you don't know who/what the transaction is, more than one account is plausible, it looks like a transfer between Tilt accounts / an owner draw / a loan movement (these are NOT expenses or income), OR the amount is $${MATERIALITY_THRESHOLD}+ even if you're confident.
+- Money-in lines are revenue ONLY if you're sure — unknown e-Transfers/deposits could be transfers or owner contributions. When unsure, escalate.
 
-Return your work as a fenced json object (and nothing after it):
+Return ONLY your work as a fenced json object (nothing after it):
 \`\`\`json
 {
-  "executed": [
-    { "transaction_id": "...", "amount": 0, "account": "Account Name (code)", "basis": "policy name / why it's unambiguous", "summary": "Categorized $X from PAYEE → ACCOUNT" }
+  "categorize": [
+    { "transaction_id": "exact id from the list", "account": "exact account name from the Chart of Accounts", "basis": "policy name / why it's unambiguous", "summary": "Categorize $X PAYEE → ACCOUNT" }
   ],
   "escalated": [
-    { "transaction_id": "...", "amount": 0, "question": "plain-English question for Chris (who is this / how should we treat it)", "recommendation": "your best guess", "options": ["A", "B"] }
+    { "transaction_id": "exact id", "amount": 0, "question": "plain-English question for Chris (who is this / how should we treat it)", "recommendation": "your best guess", "options": ["A", "B"] }
   ]
 }
 \`\`\`
-In DRY RUN, "executed" means "would categorize as". Be conservative — a smaller number of correct categorizations plus honest escalations beats guessing.`;
+Be conservative — a smaller number of correct categorizations plus honest escalations beats guessing.`;
 
 /**
- * Run one categorization batch/chunk. Designed to be called repeatedly (e.g.
- * from a cron) to work through the whole backlog a chunk at a time, staying
- * within serverless time limits.
+ * Run one categorization batch/chunk. Designed to be called repeatedly (cron,
+ * chat dispatch, or the dashboard button) to work through the whole backlog a
+ * chunk at a time, staying within serverless time limits.
  */
 export async function runCategorizationBatch(opts?: {
   limit?: number;
   dryRun?: boolean;
 }): Promise<CategorizationResult> {
-  const limit = opts?.limit ?? 15;
-  const live = opts?.dryRun === undefined ? isMcpConfigured() : !opts.dryRun;
+  const live = opts?.dryRun !== true;
+  let limit = opts?.limit ?? 15;
   const batchId = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
+
+  // First-live-batch safety cap: until at least one executed write exists in
+  // the audit log, keep the batch tiny so Chris can verify in Zoho first.
+  let firstLiveRun = false;
+  if (live) {
+    const prior = await getActions();
+    firstLiveRun = !prior.some((a) => a.mode === "executed");
+    if (firstLiveRun) limit = Math.min(limit, FIRST_LIVE_BATCH_CAP);
+  }
 
   // Pull a chunk of the real uncategorized backlog + the valid categories.
   const [uncategorized, accounts] = await Promise.all([
@@ -112,16 +125,26 @@ export async function runCategorizationBatch(opts?: {
       scanned: 0,
       totalBacklog: uncategorized.total,
       executed: [],
+      skipped: [],
       escalated: [],
       remaining: uncategorized.total,
-      report: "No uncategorized bank transactions found — nothing to do.",
+      report: "No uncategorized bank transactions found — the backlog is clear. 🎉",
     };
   }
 
+  const txnById = new Map<string, BooksBankTxn>(
+    uncategorized.items.map((t) => [String(t.transaction_id), t])
+  );
+  const accountByName = new Map<string, BooksAccount>(
+    accounts.map((a) => [a.account_name.trim().toLowerCase(), a])
+  );
+
   const txnBlock = uncategorized.items
     .map(
-      (t: BooksBankTxn) =>
-        `- id=${t.transaction_id} | ${t.date} | $${(t.amount ?? 0).toFixed(2)} | ${t.payee ?? "—"} | ${(t.description ?? "").slice(0, 80)} | acct=${t.account_name ?? "?"}`
+      (t) =>
+        `- id=${t.transaction_id} | ${t.date} | $${(t.amount ?? 0).toFixed(2)} | ${
+          t.debit_or_credit === "credit" ? "MONEY IN" : "MONEY OUT"
+        } | ${t.payee ?? "—"} | ${(t.description ?? "").slice(0, 80)} | bank=${t.account_name ?? "?"}`
     )
     .join("\n");
 
@@ -132,15 +155,15 @@ export async function runCategorizationBatch(opts?: {
 
   const userMessage = [
     live
-      ? "LIVE MODE: the Zoho Books tools are connected. Categorize each confident transaction using the tools. This writes to the real books."
-      : "DRY RUN: no write tools are connected. Do NOT claim to have written anything — report what you WOULD categorize.",
+      ? "LIVE MODE: validated decisions will be written to the real books (and are reversible)."
+      : "DRY RUN: nothing will be written — decide exactly as if it were live.",
     "",
     await renderPolicyBlock(),
     "",
-    "## Chart of Accounts (valid categories)",
+    "## Chart of Accounts (the ONLY valid category names)",
     coaBlock || "(unavailable)",
     "",
-    `## Uncategorized Transactions to process (${uncategorized.items.length} of ${uncategorized.total} total)`,
+    `## Uncategorized Transactions to process (${uncategorized.items.length} of ~${uncategorized.total} total)`,
     txnBlock,
   ].join("\n");
 
@@ -150,29 +173,106 @@ export async function runCategorizationBatch(opts?: {
     model: "claude-sonnet-4-6",
     maxTokens: 6000,
     temperature: 0,
-    mcpServers: live ? mcpServers() : undefined,
   });
 
   const parsed = parseResultObject(res.text);
-  const executedRaw = Array.isArray(parsed.executed) ? parsed.executed : [];
+  const decisions = Array.isArray(parsed.categorize) ? parsed.categorize : [];
   const escalatedRaw = Array.isArray(parsed.escalated) ? parsed.escalated : [];
 
-  // Record every action in the audit log.
-  await logActions(
-    executedRaw.map((e, i) =>
+  // ---- Validate + execute each decision (code-enforced guardrails) --------
+  const executed: CategorizationResult["executed"] = [];
+  const skipped: CategorizationResult["skipped"] = [];
+
+  for (const d of decisions) {
+    const txnId = String(d.transaction_id ?? "");
+    const accountName = String(d.account ?? "").trim();
+    const txn = txnById.get(txnId);
+    const account = accountByName.get(accountName.toLowerCase());
+
+    if (!txn) {
+      skipped.push({ transaction_id: txnId, reason: "unknown transaction id (not in this batch)" });
+      continue;
+    }
+    if (!account) {
+      skipped.push({ transaction_id: txnId, reason: `account "${accountName}" not found in Chart of Accounts` });
+      continue;
+    }
+    if ((txn.amount ?? 0) >= MATERIALITY_THRESHOLD) {
+      skipped.push({ transaction_id: txnId, reason: `$${txn.amount} is at/above the $${MATERIALITY_THRESHOLD} materiality gate` });
+      continue;
+    }
+    if (!txn.account_id) {
+      skipped.push({ transaction_id: txnId, reason: "missing bank account id on the feed line" });
+      continue;
+    }
+
+    const summary =
+      String(d.summary ?? "") ||
+      `Categorize $${(txn.amount ?? 0).toFixed(2)} ${txn.payee ?? txn.description ?? ""} → ${account.account_name}`;
+
+    if (live) {
+      try {
+        if (txn.debit_or_credit === "credit") {
+          await categorizeTxnAsDeposit(txnId, {
+            from_account_id: account.account_id,
+            to_account_id: txn.account_id,
+            date: txn.date,
+            amount: txn.amount,
+            description: txn.description,
+          });
+        } else {
+          await categorizeTxnAsExpense(txnId, {
+            account_id: account.account_id,
+            paid_through_account_id: txn.account_id,
+            date: txn.date,
+            amount: txn.amount,
+            description: txn.description,
+          });
+        }
+      } catch (err) {
+        skipped.push({
+          transaction_id: txnId,
+          reason: `Zoho write failed: ${err instanceof Error ? err.message : String(err)}`,
+        });
+        continue;
+      }
+    }
+
+    executed.push({
+      transaction_id: txnId,
+      summary,
+      account: account.account_name,
+      amount: txn.amount ?? 0,
+    });
+  }
+
+  // ---- Audit log -----------------------------------------------------------
+  await logActions([
+    ...executed.map((e, i) =>
       makeAction({
         type: "categorize-transaction",
         mode: live ? "executed" : "proposed",
-        targetId: String(e.transaction_id ?? ""),
-        summary: String(e.summary ?? `Categorized as ${e.account ?? "?"}`),
-        after: { account: e.account, basis: e.basis, amount: e.amount },
+        targetId: e.transaction_id,
+        summary: e.summary,
+        before: { status: "uncategorized" },
+        after: { account: e.account, amount: e.amount },
         batchId,
         index: i,
       })
-    )
-  );
+    ),
+    ...skipped.map((s, i) =>
+      makeAction({
+        type: "categorize-transaction",
+        mode: "proposed",
+        targetId: s.transaction_id,
+        summary: `SKIPPED: ${s.reason}`,
+        batchId,
+        index: executed.length + i,
+      })
+    ),
+  ]);
 
-  // Route the unknowns to the CFO chat / digest.
+  // ---- Route the unknowns to the CFO chat / digest --------------------------
   const newEscalations = await addEscalations(
     escalatedRaw
       .map((e) => ({
@@ -184,26 +284,26 @@ export async function runCategorizationBatch(opts?: {
       .filter((e) => e.question.length > 0)
   );
 
-  const executed = executedRaw.map((e) => ({
-    transaction_id: String(e.transaction_id ?? ""),
-    summary: String(e.summary ?? ""),
-    account: String(e.account ?? ""),
-    amount: typeof e.amount === "number" ? e.amount : 0,
-  }));
-
-  const remaining = Math.max(0, uncategorized.total - executed.length);
+  const remaining = Math.max(0, uncategorized.total - (live ? executed.length : 0));
 
   const report = [
     `# Categorization ${live ? "Run" : "Dry Run"} — ${batchId}`,
     "",
     live
-      ? `✅ Executed **${executed.length}** categorizations in Zoho Books.`
+      ? `✅ Wrote **${executed.length}** categorizations to Zoho Books.`
       : `📝 Proposed **${executed.length}** categorizations (dry run — nothing written).`,
+    skipped.length > 0 ? `⏭️ Skipped **${skipped.length}** (failed a guardrail — see below).` : "",
     `❓ Escalated **${newEscalations.length}** to your CFO chat.`,
-    `📦 Backlog: ~${uncategorized.total} total, ~${remaining} remaining after this batch.`,
+    `📦 Backlog: ~${uncategorized.total} total, ~${remaining} remaining.`,
+    firstLiveRun
+      ? `\n> 🔎 **First live batch — capped at ${FIRST_LIVE_BATCH_CAP}.** Open Zoho Books → Banking and verify these look right, then run again to process the rest at full speed.`
+      : "",
     "",
-    executed.length > 0 ? "## Categorized" : "",
-    ...executed.map((e) => `- ${e.summary || `${e.transaction_id} → ${e.account}`}`),
+    executed.length > 0 ? (live ? "## Written to the books" : "## Would categorize") : "",
+    ...executed.map((e) => `- ${e.summary}`),
+    "",
+    skipped.length > 0 ? "## Skipped (guardrails)" : "",
+    ...skipped.map((s) => `- ${s.transaction_id}: ${s.reason}`),
     "",
     newEscalations.length > 0 ? "## Needs your input (now in Talk to Sterling)" : "",
     ...newEscalations.map((e) => `- ${e.question}`),
@@ -217,6 +317,7 @@ export async function runCategorizationBatch(opts?: {
     scanned: uncategorized.items.length,
     totalBacklog: uncategorized.total,
     executed,
+    skipped,
     escalated: newEscalations,
     remaining,
     report,
