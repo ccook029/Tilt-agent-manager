@@ -31,6 +31,12 @@ import {
 import { renderPolicyBlock, addEscalations, type Escalation } from "./policy-ledger";
 import { getActions, logActions, makeAction } from "./action-log";
 import { WORKER_EXPERTISE } from "./accounting-knowledge";
+import {
+  isInboxConfigured,
+  fetchInteracNotifications,
+  renderInteracBlock,
+  type InteracNotification,
+} from "./email-inbox";
 
 // Transactions at or above this amount are ALWAYS escalated for a human eye,
 // even when Penny is confident. Keeps big-dollar moves under review.
@@ -112,10 +118,18 @@ export async function runCategorizationBatch(opts?: {
     if (firstLiveRun) limit = Math.min(limit, FIRST_LIVE_BATCH_CAP);
   }
 
-  // Pull a chunk of the real uncategorized backlog + the valid categories.
-  const [uncategorized, accounts] = await Promise.all([
+  // Pull a chunk of the real uncategorized backlog + the valid categories +
+  // (when the inbox is connected) Interac notification emails, which carry the
+  // sender names the bank feed strips off e-Transfers.
+  const [uncategorized, accounts, interac] = await Promise.all([
     fetchUncategorizedBankTxns(limit),
     fetchChartOfAccounts().catch(() => [] as BooksAccount[]),
+    isInboxConfigured()
+      ? fetchInteracNotifications().catch((e) => {
+          console.warn("[accounting-execute] Inbox pull failed:", e);
+          return [] as InteracNotification[];
+        })
+      : Promise.resolve([] as InteracNotification[]),
   ]);
 
   if (uncategorized.items.length === 0) {
@@ -139,13 +153,33 @@ export async function runCategorizationBatch(opts?: {
     accounts.map((a) => [a.account_name.trim().toLowerCase(), a])
   );
 
+  // Deterministic pre-match: for each money-in line, find the Interac email
+  // with the same amount within ±5 days. A unique hit is annotated directly on
+  // the transaction so Penny doesn't have to hunt for it.
+  const emailMatchFor = (t: BooksBankTxn): InteracNotification | null => {
+    if (t.debit_or_credit !== "credit" || interac.length === 0) return null;
+    const txnTime = new Date(t.date).getTime();
+    const hits = interac.filter(
+      (n) =>
+        n.direction === "received" &&
+        n.amount != null &&
+        Math.abs(n.amount - (t.amount ?? 0)) < 0.005 &&
+        n.date &&
+        Math.abs(new Date(n.date).getTime() - txnTime) <= 5 * 86_400_000
+    );
+    return hits.length === 1 ? hits[0] : null;
+  };
+
   const txnBlock = uncategorized.items
-    .map(
-      (t) =>
-        `- id=${t.transaction_id} | ${t.date} | $${(t.amount ?? 0).toFixed(2)} | ${
-          t.debit_or_credit === "credit" ? "MONEY IN" : "MONEY OUT"
-        } | ${t.payee ?? "—"} | ${(t.description ?? "").slice(0, 80)} | bank=${t.account_name ?? "?"}`
-    )
+    .map((t) => {
+      const match = emailMatchFor(t);
+      const matchNote = match
+        ? ` | EMAIL MATCH: from "${match.name ?? "?"}"${match.message ? ` — message: "${match.message}"` : ""}`
+        : "";
+      return `- id=${t.transaction_id} | ${t.date} | $${(t.amount ?? 0).toFixed(2)} | ${
+        t.debit_or_credit === "credit" ? "MONEY IN" : "MONEY OUT"
+      } | ${t.payee ?? "—"} | ${(t.description ?? "").slice(0, 80)} | bank=${t.account_name ?? "?"}${matchNote}`;
+    })
     .join("\n");
 
   const coaBlock = accounts
@@ -163,7 +197,9 @@ export async function runCategorizationBatch(opts?: {
     "## Chart of Accounts (the ONLY valid category names)",
     coaBlock || "(unavailable)",
     "",
+    ...(interac.length > 0 ? [renderInteracBlock(interac), ""] : []),
     `## Uncategorized Transactions to process (${uncategorized.items.length} of ~${uncategorized.total} total)`,
+    "Lines marked EMAIL MATCH have been deterministically matched to an Interac notification by amount + date — treat the matched name/message as the payee.",
     txnBlock,
   ].join("\n");
 

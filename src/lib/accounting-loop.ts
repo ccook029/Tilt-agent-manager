@@ -26,6 +26,11 @@ import {
 } from "./policy-ledger";
 import { runCategorizationBatch } from "./accounting-execute";
 import { getDocuments, renderDocumentsBlock } from "./documents";
+import {
+  isInboxConfigured,
+  fetchInteracNotifications,
+  renderInteracBlock,
+} from "./email-inbox";
 import workerConfig from "@/agents/accounting-agent.config";
 import cfoConfig from "@/agents/accounting-manager.config";
 
@@ -93,6 +98,16 @@ export async function runWorkerTask(
     parts.push(
       `## Reference Documents Uploaded by Chris (compare against the books where relevant)\n${renderDocumentsBlock(docs, 10_000)}`
     );
+  }
+
+  // Interac e-Transfer notification emails — identify the senders behind
+  // anonymous bank-feed e-Transfers for categorization/reconciliation tasks.
+  if (
+    isInboxConfigured() &&
+    ["categorize-transactions", "bank-reconciliation"].includes(task)
+  ) {
+    const interac = await fetchInteracNotifications().catch(() => []);
+    if (interac.length > 0) parts.push(renderInteracBlock(interac));
   }
 
   if (extraContext.trim()) parts.push(`## Additional Context\n${extraContext}`);
