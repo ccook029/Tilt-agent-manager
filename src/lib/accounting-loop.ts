@@ -25,6 +25,7 @@ import {
   type Escalation,
 } from "./policy-ledger";
 import { runCategorizationBatch } from "./accounting-execute";
+import { getDocuments, renderDocumentsBlock } from "./documents";
 import workerConfig from "@/agents/accounting-agent.config";
 import cfoConfig from "@/agents/accounting-manager.config";
 
@@ -84,6 +85,16 @@ export async function runWorkerTask(
     ]);
     parts.push(sheet, sync, inventory);
   }
+
+  // Reference documents Chris uploaded (bank statements, detail exports) —
+  // this is how "check my spreadsheet against Books" reaches Penny.
+  const docs = await getDocuments().catch(() => []);
+  if (docs.length > 0) {
+    parts.push(
+      `## Reference Documents Uploaded by Chris (compare against the books where relevant)\n${renderDocumentsBlock(docs, 10_000)}`
+    );
+  }
+
   if (extraContext.trim()) parts.push(`## Additional Context\n${extraContext}`);
 
   const userMessage = substituteVariables(taskPrompt, {
@@ -290,10 +301,13 @@ export async function runCfoChat(
           .map((m) => `${m.role === "user" ? "Chris" : "Sterling"}: ${m.content.slice(0, 1500)}`)
           .join("\n\n");
 
+  const docs = await getDocuments().catch(() => []);
+
   const userMessage = substituteVariables(cfoConfig.chatPrompt, {
     policy_block: await renderPolicyBlock(),
     open_escalations: openBlock,
     penny_work: pennyWork,
+    documents: renderDocumentsBlock(docs, 12_000),
     history: historyBlock,
     message,
   });
