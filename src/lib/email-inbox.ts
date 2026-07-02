@@ -119,17 +119,23 @@ export async function fetchInteracDetailed(opts?: {
           const haystack = `${subject}\n${text}`;
 
           const amountMatch = haystack.match(/\$\s?([\d,]+\.\d{2})/);
-          // "John Smith sent you money" / "INTERAC e-Transfer: John Smith has sent you $50.00"
+          // Known Interac subject formats:
+          //   "You've received $387.48 from JEREMY ELLIOTT and it has been automatically deposited."
+          //   "Your $565.00 transfer to GEOFFREY J HODGKINSON has been successfully deposited."
+          //   "Brad Cook sent you $2,500.00. Claim your deposit!"
           const nameMatch =
+            haystack.match(/received\s+\$[\d,.]+\s+from\s+(.+?)\s+and\s+it\s+has\s+been/i) ??
+            haystack.match(/transfer\s+to\s+(.+?)\s+has\s+been/i) ??
             subject.match(/(?:e-?Transfer:?\s*)?(.+?)\s+(?:sent you|has sent you)/i) ??
             text.match(/(?:^|\n)\s*(.+?)\s+(?:sent you|has sent you)/i);
           const messageMatch = text.match(/Message:?\s*([^\n]+)/i);
 
-          const direction: InteracNotification["direction"] = /sent you|has sent you/i.test(haystack)
-            ? "received"
-            : /you sent|transfer to|has been deposited by/i.test(haystack)
-              ? "sent"
-              : "other";
+          const direction: InteracNotification["direction"] =
+            /you'?ve received|sent you|has sent you/i.test(haystack)
+              ? "received"
+              : /your\s+\$[\d,.]+\s+transfer to|you sent|transfer to .+ has been successfully deposited/i.test(haystack)
+                ? "sent"
+                : "other";
 
           const dateObj = parsed?.date ?? msg.envelope?.date ?? null;
 
