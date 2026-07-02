@@ -41,94 +41,131 @@ function defaultImapHost(user: string): string {
   return "imappro.zoho.com";
 }
 
+export interface InteracSearchDetail {
+  user: string;
+  host: string;
+  /** Every selectable folder searched, with its Interac hit count. */
+  foldersSearched: { folder: string; hits: number }[];
+  notifications: InteracNotification[];
+}
+
 /**
- * Fetch Interac e-Transfer notification emails. Searches only messages from
- * Interac's notification senders. Newest first.
+ * Search the WHOLE mailbox (every selectable folder) for Interac e-Transfer
+ * notifications, matching on sender OR subject — filters/archiving can't hide
+ * them. Returns full detail for diagnostics. Newest first.
  */
-export async function fetchInteracNotifications(opts?: {
+export async function fetchInteracDetailed(opts?: {
   sinceDays?: number;
   max?: number;
-}): Promise<InteracNotification[]> {
-  if (!isInboxConfigured()) return [];
+}): Promise<InteracSearchDetail> {
+  const user = process.env.INBOX_USER!;
+  const host = process.env.IMAP_HOST ?? defaultImapHost(user);
+  const empty: InteracSearchDetail = { user, host, foldersSearched: [], notifications: [] };
+  if (!isInboxConfigured()) return empty;
 
   const sinceDays = opts?.sinceDays ?? 730; // 2 years — the backlog is old
   const max = opts?.max ?? 150;
 
-  const user = process.env.INBOX_USER!;
   const client = new ImapFlow({
-    host: process.env.IMAP_HOST ?? defaultImapHost(user),
+    host,
     port: Number(process.env.IMAP_PORT ?? 993),
     secure: true,
-    auth: {
-      user,
-      pass: process.env.INBOX_APP_PASSWORD!,
-    },
+    auth: { user, pass: process.env.INBOX_APP_PASSWORD! },
     logger: false,
   });
 
   await client.connect();
   try {
-    // Gmail's All Mail covers archived messages; other providers use INBOX.
-    try {
-      await client.mailboxOpen("[Gmail]/All Mail", { readOnly: true });
-    } catch {
-      await client.mailboxOpen("INBOX", { readOnly: true });
-    }
-
     const since = new Date(Date.now() - sinceDays * 86_400_000);
-    const uids = await client.search(
-      { from: "interac", since },
-      { uid: true }
-    );
-    if (!uids || uids.length === 0) return [];
 
-    const selected = uids.slice(-max); // most recent N
+    // Enumerate folders. On Gmail, All Mail already contains everything.
+    const boxes = await client.list();
+    const selectable = boxes.filter((b) => !b.flags?.has("\\Noselect"));
+    const gmailAll = selectable.find(
+      (b) => b.specialUse === "\\All" || /all mail/i.test(b.path)
+    );
+    const targets = gmailAll ? [gmailAll] : selectable;
+
+    const foldersSearched: { folder: string; hits: number }[] = [];
     const out: InteracNotification[] = [];
 
-    for await (const msg of client.fetch(
-      selected,
-      { uid: true, envelope: true, source: true },
-      { uid: true }
-    )) {
+    for (const box of targets) {
+      if (out.length >= max) break;
+      let uids: number[] = [];
       try {
-        const parsed = msg.source ? await simpleParser(msg.source) : null;
-        const subject = parsed?.subject ?? msg.envelope?.subject ?? "";
-        const text = (parsed?.text ?? "").slice(0, 3000);
-        const haystack = `${subject}\n${text}`;
-
-        const amountMatch = haystack.match(/\$\s?([\d,]+\.\d{2})/);
-        // "John Smith sent you money" / "INTERAC e-Transfer: John Smith has sent you $50.00"
-        const nameMatch =
-          subject.match(/(?:e-?Transfer:?\s*)?(.+?)\s+(?:sent you|has sent you)/i) ??
-          text.match(/(?:^|\n)\s*(.+?)\s+(?:sent you|has sent you)/i);
-        const messageMatch = text.match(/Message:?\s*([^\n]+)/i);
-
-        const direction: InteracNotification["direction"] = /sent you|has sent you/i.test(haystack)
-          ? "received"
-          : /you sent|transfer to|has been deposited by/i.test(haystack)
-            ? "sent"
-            : "other";
-
-        const dateObj = parsed?.date ?? msg.envelope?.date ?? null;
-
-        out.push({
-          date: dateObj ? new Date(dateObj).toISOString().slice(0, 10) : "",
-          name: nameMatch?.[1]?.trim().slice(0, 60),
-          amount: amountMatch ? parseFloat(amountMatch[1].replace(/,/g, "")) : undefined,
-          message: messageMatch?.[1]?.trim().slice(0, 120),
-          subject: subject.slice(0, 140),
-          direction,
-        });
+        await client.mailboxOpen(box.path, { readOnly: true });
+        uids =
+          (await client.search(
+            // sender OR subject mentions interac (covers bank-branded senders)
+            { since, or: [{ from: "interac" }, { subject: "interac" }] },
+            { uid: true }
+          )) || [];
       } catch {
-        // Skip an unparseable message rather than failing the whole pull.
+        continue; // unreadable folder — skip it
+      }
+      foldersSearched.push({ folder: box.path, hits: uids.length });
+      if (uids.length === 0) continue;
+
+      const selected = uids.slice(-(max - out.length)); // most recent N
+      for await (const msg of client.fetch(
+        selected,
+        { uid: true, envelope: true, source: true },
+        { uid: true }
+      )) {
+        try {
+          const parsed = msg.source ? await simpleParser(msg.source) : null;
+          const subject = parsed?.subject ?? msg.envelope?.subject ?? "";
+          const text = (parsed?.text ?? "").slice(0, 3000);
+          const haystack = `${subject}\n${text}`;
+
+          const amountMatch = haystack.match(/\$\s?([\d,]+\.\d{2})/);
+          // Known Interac subject formats:
+          //   "You've received $387.48 from JEREMY ELLIOTT and it has been automatically deposited."
+          //   "Your $565.00 transfer to GEOFFREY J HODGKINSON has been successfully deposited."
+          //   "Brad Cook sent you $2,500.00. Claim your deposit!"
+          const nameMatch =
+            haystack.match(/received\s+\$[\d,.]+\s+from\s+(.+?)\s+and\s+it\s+has\s+been/i) ??
+            haystack.match(/transfer\s+to\s+(.+?)\s+has\s+been/i) ??
+            subject.match(/(?:e-?Transfer:?\s*)?(.+?)\s+(?:sent you|has sent you)/i) ??
+            text.match(/(?:^|\n)\s*(.+?)\s+(?:sent you|has sent you)/i);
+          const messageMatch = text.match(/Message:?\s*([^\n]+)/i);
+
+          const direction: InteracNotification["direction"] =
+            /you'?ve received|sent you|has sent you/i.test(haystack)
+              ? "received"
+              : /your\s+\$[\d,.]+\s+transfer to|you sent|transfer to .+ has been successfully deposited/i.test(haystack)
+                ? "sent"
+                : "other";
+
+          const dateObj = parsed?.date ?? msg.envelope?.date ?? null;
+
+          out.push({
+            date: dateObj ? new Date(dateObj).toISOString().slice(0, 10) : "",
+            name: nameMatch?.[1]?.trim().slice(0, 60),
+            amount: amountMatch ? parseFloat(amountMatch[1].replace(/,/g, "")) : undefined,
+            message: messageMatch?.[1]?.trim().slice(0, 120),
+            subject: subject.slice(0, 140),
+            direction,
+          });
+        } catch {
+          // Skip an unparseable message rather than failing the whole pull.
+        }
       }
     }
 
-    // Newest first
-    return out.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    out.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    return { user, host, foldersSearched, notifications: out };
   } finally {
     await client.logout().catch(() => {});
   }
+}
+
+/** Notifications only — the shape the categorization engine consumes. */
+export async function fetchInteracNotifications(opts?: {
+  sinceDays?: number;
+  max?: number;
+}): Promise<InteracNotification[]> {
+  return (await fetchInteracDetailed(opts)).notifications;
 }
 
 /** Render notifications as a prompt table. */
