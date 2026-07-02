@@ -41,6 +41,7 @@ export default function CfoChat() {
   const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const loadOpen = useCallback(async () => {
     try {
@@ -135,6 +136,7 @@ export default function CfoChat() {
     const history = messages.slice(-12).map((m) => ({ role: m.role, content: m.content }));
     setMessages((p) => [...p, { role: "user", content: text, timestamp: new Date().toISOString() }]);
     setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     setLoading(true);
     try {
       const res = await fetch("/api/accounting-manager/run", {
@@ -282,7 +284,7 @@ export default function CfoChat() {
             ))}
           </div>
         )}
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-end">
           <input
             ref={fileRef}
             type="file"
@@ -305,13 +307,24 @@ export default function CfoChat() {
               "📎"
             )}
           </button>
-          <input
-            type="text"
+          <textarea
+            ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-            placeholder="Ask the CFO, give direction, or attach a spreadsheet to verify against Books..."
-            className="flex-1 bg-gray-800/50 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-[#00d6ff] transition-colors"
+            rows={3}
+            onChange={(e) => {
+              setInput(e.target.value);
+              // Auto-grow with content, capped so it never swallows the chat.
+              e.target.style.height = "auto";
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            placeholder="Ask the CFO, answer his questions in detail, or give direction... (Enter to send, Shift+Enter for a new line)"
+            className="flex-1 min-h-[84px] max-h-[240px] resize-y bg-gray-800/50 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-[#00d6ff] transition-colors leading-relaxed"
             disabled={loading}
           />
           <button
