@@ -14,6 +14,13 @@ import { isInboxConfigured, fetchInteracDetailed } from "@/lib/email-inbox";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  // Deploy stamp — proves which build is answering. Vercel injects the SHA.
+  const deploy = {
+    commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "(local/dev)",
+    message: process.env.VERCEL_GIT_COMMIT_MESSAGE?.slice(0, 80) ?? "",
+    servedAt: new Date().toISOString(),
+  };
+
   const env = {
     ZOHO_CLIENT_ID: !!process.env.ZOHO_CLIENT_ID,
     ZOHO_CLIENT_SECRET: !!process.env.ZOHO_CLIENT_SECRET,
@@ -83,7 +90,12 @@ export async function GET() {
   }
 
   return NextResponse.json(
-    { env, tokenStatus, inbox, snapshot },
-    { headers: { "Content-Type": "application/json" } }
+    { deploy, env, tokenStatus, inbox, snapshot },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store, must-revalidate",
+      },
+    }
   );
 }
