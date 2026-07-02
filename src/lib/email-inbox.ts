@@ -27,6 +27,7 @@ export interface InteracNotification {
   message?: string;
   subject: string;
   direction: "received" | "sent" | "other";
+  from?: string;
 }
 
 export function isInboxConfigured(): boolean {
@@ -86,27 +87,44 @@ export async function fetchInteracDetailed(opts?: {
     );
     const targets = gmailAll ? [gmailAll] : selectable;
 
-    const foldersSearched: { folder: string; hits: number }[] = [];
-    const out: InteracNotification[] = [];
-
+    // PASS 1 — search every folder first, so the hit counts are complete even
+    // when one folder alone could fill the fetch cap.
+    const folderHits: { path: string; hits: number; uids: number[] }[] = [];
     for (const box of targets) {
-      if (out.length >= max) break;
-      let uids: number[] = [];
       try {
         await client.mailboxOpen(box.path, { readOnly: true });
-        uids =
+        const uids =
           (await client.search(
             // sender OR subject mentions interac (covers bank-branded senders)
             { since, or: [{ from: "interac" }, { subject: "interac" }] },
             { uid: true }
           )) || [];
+        folderHits.push({ path: box.path, hits: uids.length, uids });
       } catch {
         continue; // unreadable folder — skip it
       }
-      foldersSearched.push({ folder: box.path, hits: uids.length });
-      if (uids.length === 0) continue;
+    }
+    const foldersSearched = folderHits.map((f) => ({ folder: f.path, hits: f.hits }));
 
-      const selected = uids.slice(-(max - out.length)); // most recent N
+    // PASS 2 — fetch messages, dedicated e-transfer folders FIRST (that's
+    // where the real notifications live), then other folders by hit count,
+    // generic INBOX last (it's mostly bank alerts that merely mention Interac).
+    const priority = (p: string) =>
+      /e-?transfer|interac/i.test(p) ? 0 : p.toUpperCase() === "INBOX" ? 2 : 1;
+    const ordered = folderHits
+      .filter((f) => f.hits > 0)
+      .sort((a, b) => priority(a.path) - priority(b.path) || b.hits - a.hits);
+
+    const out: InteracNotification[] = [];
+
+    for (const f of ordered) {
+      if (out.length >= max) break;
+      try {
+        await client.mailboxOpen(f.path, { readOnly: true });
+      } catch {
+        continue;
+      }
+      const selected = f.uids.slice(-(max - out.length)); // most recent N
       for await (const msg of client.fetch(
         selected,
         { uid: true, envelope: true, source: true },
@@ -138,6 +156,16 @@ export async function fetchInteracDetailed(opts?: {
                 : "other";
 
           const dateObj = parsed?.date ?? msg.envelope?.date ?? null;
+          const fromAddr =
+            parsed?.from?.value?.[0]?.address ??
+            msg.envelope?.from?.[0]?.address ??
+            "";
+
+          // Keep genuine notifications only: a real Interac sender, or a
+          // subject we could parse a counterparty name from. Drops bank alert
+          // emails that merely mention "Interac" but carry no sender name.
+          const isGenuine = /interac\.ca/i.test(fromAddr) || !!nameMatch;
+          if (!isGenuine) continue;
 
           out.push({
             date: dateObj ? new Date(dateObj).toISOString().slice(0, 10) : "",
@@ -146,6 +174,7 @@ export async function fetchInteracDetailed(opts?: {
             message: messageMatch?.[1]?.trim().slice(0, 120),
             subject: subject.slice(0, 140),
             direction,
+            from: fromAddr,
           });
         } catch {
           // Skip an unparseable message rather than failing the whole pull.
