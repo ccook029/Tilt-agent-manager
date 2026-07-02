@@ -102,6 +102,30 @@ export interface BooksBankTxn {
   account_id?: string;
   /** "debit" = money out of the bank account, "credit" = money in. */
   debit_or_credit?: string;
+  /** Zoho's guessed type for the feed line (deposit, expense, ...). */
+  transaction_type?: string;
+}
+
+/**
+ * Determine a feed line's money direction from every available signal. Zoho
+ * doesn't reliably populate debit_or_credit on uncategorized lines, so fall
+ * back to the transaction_type and finally the bank's own "credit memo" /
+ * "debit memo" wording in the description. "unknown" means DON'T act on it.
+ */
+export function txnDirection(t: BooksBankTxn): "in" | "out" | "unknown" {
+  const flag = (t.debit_or_credit ?? "").toLowerCase();
+  if (flag === "credit") return "in";
+  if (flag === "debit") return "out";
+
+  const type = (t.transaction_type ?? "").toLowerCase();
+  if (["deposit", "customer_payment", "refund", "other_income", "interest_income", "sales_without_invoices"].includes(type)) return "in";
+  if (["expense", "vendor_payment", "card_payment", "credit_card_payment", "owner_drawings"].includes(type)) return "out";
+
+  const desc = (t.description ?? "").toLowerCase();
+  if (/credit memo|\bdeposit\b/.test(desc)) return "in";
+  if (/debit memo|\bwithdrawal\b/.test(desc)) return "out";
+
+  return "unknown";
 }
 
 export interface BooksInvoice {
