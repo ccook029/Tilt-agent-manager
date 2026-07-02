@@ -17,6 +17,8 @@
     "@types/react": "^19.2.14",
     "@vercel/kv": "^3.0.0",
     "framer-motion": "^12.40.0",
+    "imapflow": "^1.4.3",
+    "mailparser": "^3.9.12",
     "next": "^16.1.6",
     "postcss": "^8.5.8",
     "react": "^19.2.4",
@@ -25,5 +27,8 @@
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.4.6"
   }
 }
