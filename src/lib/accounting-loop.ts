@@ -25,6 +25,7 @@ import {
   type Escalation,
 } from "./policy-ledger";
 import { runCategorizationBatch } from "./accounting-execute";
+import { buildQuestionsWorkbook } from "./questions-export";
 import { getDocuments, renderDocumentsBlock } from "./documents";
 import {
   isInboxConfigured,
@@ -454,11 +455,20 @@ export async function sendCfoDigestEmail(email = true): Promise<{
     const emailTo =
       process.env.REPORT_EMAIL_TO?.split(",").map((e) => e.trim()) ??
       cfoConfig.email.to;
+    // Attach the open questions as a fill-in spreadsheet: answer the YOUR
+    // ANSWER column and re-upload it in Sterling's chat to record in bulk.
+    const questionsWb =
+      openCount > 0 ? await buildQuestionsWorkbook().catch(() => null) : null;
     await sendAnalyticsReport({
       to: emailTo,
       from: cfoConfig.email.from,
       subject: `CFO Digest — ${startedAt.toISOString().slice(0, 10)}${openCount > 0 ? ` (${openCount} need your call)` : ""}`,
-      reportText: body,
+      reportText: questionsWb
+        ? `${body}\n\n---\nAttached: ${questionsWb.filename} — fill in the YOUR ANSWER column and upload it back in my chat (📎) to record all your answers at once.`
+        : body,
+      attachments: questionsWb
+        ? [{ filename: questionsWb.filename, content: questionsWb.buffer }]
+        : undefined,
     });
   }
 

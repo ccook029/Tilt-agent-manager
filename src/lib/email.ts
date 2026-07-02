@@ -89,6 +89,8 @@ export interface AnalyticsEmailOptions {
   reportText: string;
   pdfBuffer?: Buffer;
   pdfFilename?: string;
+  /** Additional attachments (e.g. the open-questions .xlsx on the CFO digest). */
+  attachments?: { filename: string; content: Buffer }[];
 }
 
 /**
@@ -151,13 +153,14 @@ export async function sendAnalyticsReport(
     html: hasPdf ? briefHtml : fullHtml,
   };
 
-  if (opts.pdfBuffer && opts.pdfFilename) {
-    emailPayload.attachments = [
-      {
-        filename: opts.pdfFilename,
-        content: opts.pdfBuffer,
-      },
-    ];
+  const attachments = [
+    ...(opts.pdfBuffer && opts.pdfFilename
+      ? [{ filename: opts.pdfFilename, content: opts.pdfBuffer }]
+      : []),
+    ...(opts.attachments ?? []),
+  ];
+  if (attachments.length > 0) {
+    emailPayload.attachments = attachments;
   }
 
   await sendOrThrow(resend, emailPayload);

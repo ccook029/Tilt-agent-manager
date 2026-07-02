@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
 import { getDocuments, saveDocument, deleteDocument } from "@/lib/documents";
+import { resolveEscalation } from "@/lib/policy-ledger";
 
 export const maxDuration = 60;
 
@@ -64,13 +65,43 @@ export async function POST(request: NextRequest) {
     let sheets = 1;
     let rows = 0;
 
-    if (lower.endsWith(".csv") || lower.endsWith(".txt")) {
+    if (lower.endsWith(".txt")) {
       text = buf.toString("utf-8");
       rows = text.split(/\r?\n/).filter((l) => l.trim()).length;
     } else {
+      // XLSX.read handles .xlsx, .xls, and .csv buffers alike.
       const XLSX = await import("xlsx");
       const wb = XLSX.read(buf, { type: "buffer" });
       sheets = wb.SheetNames.length;
+
+      // Answered-questions round trip: if this is the exported questions sheet
+      // with the YOUR ANSWER column filled in, record each answer as standing
+      // policy instead of storing the file as a reference document.
+      let recorded = 0;
+      let alreadyResolved = 0;
+      for (const sheetName of wb.SheetNames) {
+        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[sheetName]);
+        for (const row of json) {
+          const keys = Object.keys(row);
+          const idKey = keys.find((k) => /question\s*id/i.test(k));
+          const answerKey = keys.find((k) => /your\s*answer|^answer$/i.test(k));
+          if (!idKey || !answerKey) break; // not a questions sheet
+          const id = String(row[idKey] ?? "").trim();
+          const answer = String(row[answerKey] ?? "").trim();
+          if (!id.startsWith("esc-") || !answer) continue;
+          const policy = await resolveEscalation(id, answer);
+          if (policy) recorded++;
+          else alreadyResolved++;
+        }
+      }
+      if (recorded > 0 || alreadyResolved > 0) {
+        return NextResponse.json({
+          ok: true,
+          answersRecorded: recorded,
+          answersSkipped: alreadyResolved,
+        });
+      }
+
       const parts: string[] = [];
       for (const sheetName of wb.SheetNames) {
         const csv = XLSX.utils.sheet_to_csv(wb.Sheets[sheetName]);

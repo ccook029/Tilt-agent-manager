@@ -78,7 +78,17 @@ export default function CfoChat() {
       form.append("file", file);
       const res = await fetch("/api/accounting/documents", { method: "POST", body: form });
       const data = await res.json();
-      if (data.ok) {
+      if (data.ok && typeof data.answersRecorded === "number") {
+        setMessages((p) => [
+          ...p,
+          {
+            role: "assistant",
+            content: `✅ Answer sheet processed — recorded ${data.answersRecorded} decision(s) as standing policy${data.answersSkipped ? ` (${data.answersSkipped} were already resolved)` : ""}. Penny will apply these on every run going forward — I won't ask those again.`,
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+        await loadOpen();
+      } else if (data.ok) {
         setMessages((p) => [
           ...p,
           {
@@ -203,9 +213,19 @@ export default function CfoChat() {
       {/* Open questions awaiting Chris */}
       {open.length > 0 && (
         <div className="border-b border-gray-800 bg-amber-950/20 p-3 space-y-3">
-          <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
-            {open.length} question{open.length > 1 ? "s" : ""} need your call
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+              {open.length} question{open.length > 1 ? "s" : ""} need your call
+            </p>
+            <a
+              href="/api/accounting/questions"
+              download
+              title="Download all open questions as Excel — fill in YOUR ANSWER and upload it back with the 📎 to record everything at once"
+              className="text-[11px] px-2.5 py-1 rounded-md bg-amber-600/20 border border-amber-700/50 text-amber-300 hover:bg-amber-600/30 transition-colors"
+            >
+              ⬇ Excel
+            </a>
+          </div>
           {open.map((e) => (
             <EscalationRow key={e.id} esc={e} onAnswer={answer} busy={answering === e.id} />
           ))}
