@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import { fetchBooksSnapshot, isMcpConfigured } from "@/lib/zoho-books";
 import { getAccessToken } from "@/lib/zoho";
-import { isInboxConfigured, fetchInteracNotifications } from "@/lib/email-inbox";
+import { isInboxConfigured, fetchInteracDetailed } from "@/lib/email-inbox";
 
 export const dynamic = "force-dynamic";
 
@@ -51,17 +51,24 @@ export async function GET() {
     };
   } else {
     try {
-      const notifications = await fetchInteracNotifications({ sinceDays: 365, max: 50 });
+      const detail = await fetchInteracDetailed({ sinceDays: 365, max: 50 });
       inbox = {
         configured: true,
         status: "ok — connected and searched",
-        interacNotificationsFoundLast12mo: notifications.length,
-        sample: notifications.slice(0, 5).map((n) => ({
+        mailbox: detail.user,
+        host: detail.host,
+        foldersSearched: detail.foldersSearched,
+        interacNotificationsFoundLast12mo: detail.notifications.length,
+        sample: detail.notifications.slice(0, 5).map((n) => ({
           date: n.date,
           direction: n.direction,
           name: n.name ?? "(name not parsed)",
           amount: n.amount ?? null,
         })),
+        hint:
+          detail.notifications.length === 0
+            ? "Connected fine but found no Interac emails in ANY folder of this mailbox. Most likely the e-Transfer notifications go to a DIFFERENT address — set INBOX_USER (and app password) to the mailbox that actually receives them."
+            : undefined,
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
