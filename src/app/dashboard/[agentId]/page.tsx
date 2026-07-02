@@ -11,6 +11,7 @@ import { ChevronDownIcon } from "@/components/icons";
 import RunStats from "@/components/run-stats";
 import MayaChat from "@/components/maya-chat";
 import CfoChat from "@/components/cfo-chat";
+import PennyChat from "@/components/penny-chat";
 import ReportFiles from "@/components/report-files";
 import ReportRenderer from "@/components/report-renderer";
 
@@ -33,6 +34,7 @@ export default function AgentDetailPage() {
   const persona = getPersonaByAgentId(agentId);
   const isMaya = agentId === "product-design";
   const isCfo = agentId === "accounting-manager";
+  const isPenny = agentId === "accounting";
   const isExternal = persona?.external === true;
 
   const [logs, setLogs] = useState<RunLog[]>([]);
@@ -42,7 +44,7 @@ export default function AgentDetailPage() {
   const [runningTask, setRunningTask] = useState<string | null>(null);
   const [innovating, setInnovating] = useState(false);
   const [activeTab, setActiveTab] = useState<"history" | "files" | "chat">(
-    isMaya || isCfo ? "chat" : "history"
+    isMaya || isCfo || isPenny ? "chat" : "history"
   );
   const { run } = useRunPipeline();
   const reduce = useReducedMotion();
@@ -338,6 +340,7 @@ export default function AgentDetailPage() {
         {([
           ...(isMaya ? [{ id: "chat" as const, label: "Talk to Maya" }] : []),
           ...(isCfo ? [{ id: "chat" as const, label: "Talk to Sterling" }] : []),
+          ...(isPenny ? [{ id: "chat" as const, label: "Talk to Penny" }] : []),
           { id: "history" as const, label: "Report History" },
           { id: "files" as const, label: "Files" },
         ]).map((tab) => {
@@ -376,6 +379,12 @@ export default function AgentDetailPage() {
       {activeTab === "chat" && isCfo && (
         <div>
           <CfoChat />
+        </div>
+      )}
+
+      {activeTab === "chat" && isPenny && (
+        <div>
+          <PennyChat />
         </div>
       )}
 
