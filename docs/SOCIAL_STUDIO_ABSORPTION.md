@@ -1,6 +1,10 @@
 # Social Studio Absorption Plan (Tilt OS Phase 3)
 
-**Date:** 2026-07-03 · **Status:** Plan — no code moves yet
+**Date:** 2026-07-03 · **Status:** Stages 1–3 DONE — the studio runs natively
+at `/studio/social` (pages + `/api/social/*` + `src/lib/social/*`, drizzle at
+repo root, signals via direct `postSignal`). Remaining: Stage 4 decommission
+(point the old domain at HQ, pause/delete the satellite Vercel project once
+env vars are moved), plus the later persona/cron/AgentChat wiring.
 **Subject:** `tilt-social-media-manager` ("Social Studio") → a module of the
 Tilt OS (this repo), per the platform audit's Phase 3 ("absorb the
 satellites").

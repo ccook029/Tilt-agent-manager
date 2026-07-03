@@ -9,11 +9,17 @@
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
 
-const MODULES: Record<string, { urlEnv: string; keyEnv: string; label: string }> = {
+const MODULES: Record<
+  string,
+  { urlEnv: string; keyEnv: string; label: string; internalPath?: string }
+> = {
+  // Absorbed into HQ (docs/SOCIAL_STUDIO_ABSORPTION.md Stage 3): m=social now
+  // redirects to the native module so old launch links keep working.
   social: {
     urlEnv: "SOCIAL_APP_URL",
     keyEnv: "SOCIAL_ACCESS_KEY",
     label: "Tilt Social Studio",
+    internalPath: "/studio/social",
   },
   webadmin: {
     urlEnv: "WEBADMIN_APP_URL",
@@ -35,6 +41,11 @@ export async function GET(request: NextRequest) {
       { error: `Unknown module "${m}". Valid: ${Object.keys(MODULES).join(", ")}` },
       { status: 400 }
     );
+  }
+
+  // Native modules live in this app — redirect internally, no env var needed.
+  if (mod.internalPath) {
+    return NextResponse.redirect(new URL(mod.internalPath, request.url));
   }
 
   const base = process.env[mod.urlEnv];
