@@ -27,6 +27,10 @@ export interface AccountingAction {
   after?: Record<string, unknown>;
   /** Which run produced it. */
   batchId: string;
+  /** Set once this write has been undone (feed line returned to Uncategorized). */
+  reversed?: boolean;
+  reversedAt?: string;
+  reversedBy?: string;
 }
 
 export async function getActions(): Promise<AccountingAction[]> {
@@ -44,6 +48,28 @@ export async function logActions(actions: AccountingAction[]): Promise<void> {
 export async function getRecentActions(limit = 100): Promise<AccountingAction[]> {
   const all = await getActions();
   return all.slice(-limit).reverse();
+}
+
+export async function getActionById(id: string): Promise<AccountingAction | null> {
+  return (await getActions()).find((a) => a.id === id) ?? null;
+}
+
+/** Mark an action as reversed (after its Zoho write has been undone). */
+export async function markActionReversed(
+  id: string,
+  reversedBy?: string
+): Promise<AccountingAction | null> {
+  const all = await getActions();
+  const idx = all.findIndex((a) => a.id === id);
+  if (idx === -1) return null;
+  all[idx] = {
+    ...all[idx],
+    reversed: true,
+    reversedAt: new Date().toISOString(),
+    reversedBy,
+  };
+  await kv.set(ACTION_LOG_KEY, all);
+  return all[idx];
 }
 
 export function makeAction(input: {

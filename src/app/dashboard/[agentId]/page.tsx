@@ -13,6 +13,7 @@ import MayaChat from "@/components/maya-chat";
 import CfoChat from "@/components/cfo-chat";
 import PennyChat from "@/components/penny-chat";
 import GenericAgentChat from "@/components/generic-agent-chat";
+import ActionLedger from "@/components/action-ledger";
 import ReportFiles from "@/components/report-files";
 import ReportRenderer from "@/components/report-renderer";
 
@@ -47,7 +48,8 @@ export default function AgentDetailPage() {
   const [running, setRunning] = useState(false);
   const [runningTask, setRunningTask] = useState<string | null>(null);
   const [innovating, setInnovating] = useState(false);
-  const [activeTab, setActiveTab] = useState<"history" | "files" | "chat">(
+  const showLedger = isPenny || isCfo;
+  const [activeTab, setActiveTab] = useState<"history" | "files" | "chat" | "ledger">(
     isMaya || isCfo || isPenny || isGenericChat ? "chat" : "history"
   );
   // Non-owners may not open the CFO/Penny agents (their routes are gated too).
@@ -368,6 +370,7 @@ export default function AgentDetailPage() {
           ...(isGenericChat
             ? [{ id: "chat" as const, label: `Talk to ${persona?.name?.split(" ")[0] ?? "agent"}` }]
             : []),
+          ...(showLedger ? [{ id: "ledger" as const, label: "Ledger" }] : []),
           { id: "history" as const, label: "Report History" },
           { id: "files" as const, label: "Files" },
         ]).map((tab) => {
@@ -418,6 +421,12 @@ export default function AgentDetailPage() {
       {activeTab === "chat" && isGenericChat && (
         <div>
           <GenericAgentChat agentId={agentId} name={persona?.name ?? agentId} />
+        </div>
+      )}
+
+      {activeTab === "ledger" && showLedger && (
+        <div>
+          <ActionLedger />
         </div>
       )}
 
