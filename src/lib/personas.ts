@@ -227,6 +227,43 @@ const personas: AgentPersona[] = [
   },
 ];
 
+// ---- Tilt OS modules — satellite tools federated into HQ ------------------
+// Launched via /api/modules/launch (server-side key injection). Set the
+// matching *_APP_URL env var in Vercel to activate each card.
+
+personas.push(
+  {
+    agentId: "social-studio",
+    name: "Tilt Social Studio",
+    title: "Social Content Creator",
+    department: "Marketing Studio",
+    bio: "The Tilt social media content creator — plans, drafts, and produces on-brand social content. Runs as its own module; launch it from here, and its updates flow into the Morning Brief via the Tilt OS signals inbox.",
+    status: "active",
+    schedule: "On-demand",
+    avatarInitials: "TS",
+    avatarColor: "bg-pink-700",
+    avatarAccent: "ring-pink-400",
+    runEndpoint: "/api/modules/launch?m=social",
+    external: true,
+    launchUrl: "/api/modules/launch?m=social",
+  },
+  {
+    agentId: "web-admin",
+    name: "Tilt Web Admin",
+    title: "Website Backend",
+    department: "Web Operations",
+    bio: "The tilthockey.com backend admin — orders, products, and site operations. Runs as its own module; launch it from here, and its updates flow into the Morning Brief via the Tilt OS signals inbox.",
+    status: "active",
+    schedule: "On-demand",
+    avatarInitials: "TW",
+    avatarColor: "bg-orange-700",
+    avatarAccent: "ring-orange-400",
+    runEndpoint: "/api/modules/launch?m=webadmin",
+    external: true,
+    launchUrl: "/api/modules/launch?m=webadmin",
+  }
+);
+
 export function getAllPersonas(): AgentPersona[] {
   return personas;
 }
