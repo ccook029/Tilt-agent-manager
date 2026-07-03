@@ -9,6 +9,7 @@ import { fetchInventorySnapshot } from "@/lib/zoho";
 import { fetchSheetSnapshot } from "@/lib/zoho-sheet";
 import { fetchSyncReport } from "@/lib/zoho-sync";
 import agentConfig from "@/agents/inventory-agent.config";
+import { renderOrgKnowledge } from "@/lib/org-knowledge";
 
 export async function runInventoryWeeklyReport(context?: string) {
   const startedAt = new Date();
@@ -49,7 +50,7 @@ export async function runInventoryWeeklyReport(context?: string) {
   }
 
   const response = await callClaude({
-    systemPrompt: agentConfig.systemPrompt,
+    systemPrompt: agentConfig.systemPrompt + (await renderOrgKnowledge()),
     userMessage,
     model: agentConfig.model,
     maxTokens: agentConfig.maxTokens,

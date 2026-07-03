@@ -7,6 +7,7 @@ import { sendAnalyticsReport } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import agentConfig from "@/agents/website-analytics-agent.config";
+import { renderOrgKnowledge } from "@/lib/org-knowledge";
 
 export async function runDailyReport(context?: string) {
   const startedAt = new Date();
@@ -32,7 +33,7 @@ export async function runDailyReport(context?: string) {
   const userMessage = substituteVariables(agentConfig.userPrompt, variables);
 
   const response = await callClaude({
-    systemPrompt: agentConfig.systemPrompt,
+    systemPrompt: agentConfig.systemPrompt + (await renderOrgKnowledge()),
     userMessage,
     model: agentConfig.model,
     maxTokens: agentConfig.maxTokens,

@@ -7,6 +7,7 @@ import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import { fetchFactoryReorderData } from "@/lib/factory-reorder";
 import agentConfig from "@/agents/inventory-agent.config";
+import { renderOrgKnowledge } from "@/lib/org-knowledge";
 
 export async function runFactoryReorder(context?: string) {
   const startedAt = new Date();
@@ -25,7 +26,7 @@ export async function runFactoryReorder(context?: string) {
   const userMessage = substituteVariables(taskPrompt, variables);
 
   const response = await callClaude({
-    systemPrompt: agentConfig.systemPrompt,
+    systemPrompt: agentConfig.systemPrompt + (await renderOrgKnowledge()),
     userMessage,
     model: agentConfig.model,
     maxTokens: agentConfig.maxTokens,

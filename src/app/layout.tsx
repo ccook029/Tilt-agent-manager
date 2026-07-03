@@ -117,6 +117,12 @@ export default function RootLayout({
               >
                 Files
               </Link>
+              <Link
+                href="/knowledge"
+                className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Knowledge
+              </Link>
               <span className="text-xs text-gray-700">|</span>
               <SignOut />
             </div>

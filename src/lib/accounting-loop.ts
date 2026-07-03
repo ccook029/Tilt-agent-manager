@@ -29,6 +29,7 @@ import { runCategorizationBatch } from "./accounting-execute";
 import { buildQuestionsWorkbook } from "./questions-export";
 import { getDocuments, renderDocumentsBlock } from "./documents";
 import { buildStrategistContext } from "./strategist-context";
+import { renderOrgKnowledge } from "./org-knowledge";
 import {
   loadCfoChat,
   saveCfoChat,
@@ -374,10 +375,11 @@ async function runAgentChat(
     message,
   });
 
-  // Sterling is also Chris's financial analyst/strategist — append the Tilt
-  // Business Strategist knowledge, live pipeline, and projection to his prompt.
+  // Every agent shares the company knowledge; Sterling additionally gets the
+  // financial-strategist context (Tilt Business Strategist + pipeline/projection).
   const systemPrompt =
     config.systemPrompt +
+    (await renderOrgKnowledge().catch(() => "")) +
     (agent === "sterling" ? await buildStrategistContext().catch(() => "") : "");
 
   const res = await callClaude({
