@@ -100,7 +100,7 @@ CONTROL BLOCK — after your conversational reply, append ONE fenced json block 
 \`\`\`json
 { "dispatch": "task-id or null", "resolutions": [ { "id": "esc-...", "answer": "the distilled standing rule" } ] }
 \`\`\`
-- "dispatch": exactly one of: auto-categorize, books-health, catch-up-plan, bank-reconciliation, categorize-transactions, coa-audit, ar-cleanup, ap-cleanup, inventory-tieout, sales-tax-review, monthly-close. Tell Chris you're on it and results land in your Report History shortly.
+- "dispatch": exactly one of: auto-categorize, books-health, catch-up-plan, bank-reconciliation, categorize-transactions, coa-audit, ar-cleanup, ap-cleanup, ar-collections, cash-outlook, inventory-tieout, sales-tax-review, monthly-close. Tell Chris you're on it and results land in your Report History shortly.
 - "resolutions": when Chris's message answers an open question, include its exact id and distill his answer into a clear, reusable rule. Never invent ids.
 The control block is machine-read and stripped before Chris sees your reply — never reference it in prose.`,
 
@@ -220,6 +220,39 @@ Produce:
 5. PROPOSED ADJUSTING ENTRIES (for human approval — DO NOT post): account, debit/credit, amount, rationale.
 6. UPSTREAM FIXES — where the real problem is a count out of sync (a Stockton/Inventory issue, not a Books issue), say so explicitly so it's fixed at the source rather than papered over with a journal entry.
 Then the json block.`,
+
+    "cash-outlook": `Build Tilt Hockey's ROLLING 4-WEEK CASH OUTLOOK from the data below — the single most important weekly finance artifact for Chris.
+
+{{context}}
+
+Produce:
+1. HEADLINE — one sentence: comfortable / tight / at risk, and why.
+2. CASH IN (next 4 weeks, weekly buckets)
+   | Week | Expected A/R collections | Basis (which invoices, likelihood) | Recurring revenue patterns (from e-transfer/deposit history) |
+3. CASH OUT (next 4 weeks)
+   | Week | Committed POs (from open purchase orders) | Recurring expenses observed (Upwork, subscriptions, loan payments) | Other known |
+4. NET POSITION BY WEEK — running estimate with the assumptions stated.
+5. RISKS & LEVERS — the 2-3 things that would most change the picture (collect overdue A/R, delay a PO, etc.).
+Be explicit about what you CANNOT see (actual bank balances unless provided) and mark estimates as estimates.
+Then the DECISION REQUESTS json block.
+
+Today's date: {{date}}`,
+
+    "ar-collections": `Run an A/R COLLECTIONS pass on the open invoices below — this cleanup also collects real money.
+
+{{context}}
+
+Produce:
+1. COLLECTIONS TRIAGE TABLE
+   | Invoice # | Customer | Amount | Age | Status assessment | Next action |
+   Status assessment: likely already PAID (match against bank deposits / e-transfer notifications by amount+date — flag these for payment application, do NOT chase), genuinely outstanding (chase), disputed/unknown (ask Chris), stale bad-debt candidate (write-off decision — Sterling/Chris only).
+2. PAYMENT MATCHES FOUND — invoices that appear already paid, with the matching deposit evidence. Propose the payment application (do not write it).
+3. DRAFT CHASE MESSAGES — for genuinely outstanding invoices, a short, friendly-but-firm email draft per customer (Chris sends or approves; do NOT send anything).
+4. EXPECTED RECOVERY — realistic $ you expect collectible in 30 days.
+Write-offs are ALWAYS a decision for Sterling/Chris — never propose posting one yourself.
+Then the DECISION REQUESTS json block.
+
+Today's date: {{date}}`,
 
     "sales-tax-review": `Review sales tax handling from the data below.
 

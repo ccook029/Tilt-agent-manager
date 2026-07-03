@@ -14,7 +14,7 @@ import { CLAUDE_MODEL } from "@/lib/models";
 // ---------------------------------------------------------------------------
 import { callClaude, substituteVariables, type McpServer } from "./anthropic";
 import { fetchBooksSnapshot, getZohoBooksMcpConfig } from "./zoho-books";
-import { fetchInventorySnapshot } from "./zoho";
+import { fetchInventorySnapshot, fetchOpenPurchaseOrders } from "./zoho";
 import { fetchSheetSnapshot } from "./zoho-sheet";
 import { fetchSyncReport } from "./zoho-sync";
 import { sendAnalyticsReport } from "./email";
@@ -109,11 +109,27 @@ export async function runWorkerTask(
     );
   }
 
+  // Committed purchase orders — the cash-outlook's "cash out" side.
+  if (task === "cash-outlook") {
+    const pos = await fetchOpenPurchaseOrders().catch(() => []);
+    parts.push(
+      pos.length === 0
+        ? "## Open Purchase Orders\n(none — no committed PO outflows)"
+        : `## Open Purchase Orders (committed cash out)\n${pos
+            .map(
+              (po) =>
+                `- ${po.purchaseorder_number} | ${po.vendor_name} | $${po.total.toFixed(2)} | expected ${po.expected_delivery_date || "TBD"} | ${po.status}`
+            )
+            .join("\n")}`
+    );
+  }
+
   // Interac e-Transfer notification emails — identify the senders behind
-  // anonymous bank-feed e-Transfers for categorization/reconciliation tasks.
+  // anonymous bank-feed e-Transfers (and match deposits to invoices for
+  // collections).
   if (
     isInboxConfigured() &&
-    ["categorize-transactions", "bank-reconciliation"].includes(task)
+    ["categorize-transactions", "bank-reconciliation", "ar-collections", "cash-outlook"].includes(task)
   ) {
     const interac = await fetchInteracNotifications().catch(() => []);
     if (interac.length > 0) parts.push(renderInteracBlock(interac));

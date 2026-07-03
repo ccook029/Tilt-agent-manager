@@ -29,12 +29,14 @@ export const maxDuration = 300;
 // finish well within serverless time limits — there are no real decisions for
 // the CFO to resolve on a read-only assessment. The two-call worker→CFO review
 // cycle runs for the action tasks that actually generate decision requests.
-const WORKER_ONLY = new Set(["books-health", "catch-up-plan"]);
+const WORKER_ONLY = new Set(["books-health", "catch-up-plan", "cash-outlook"]);
 
 const TASK_LABELS: Record<string, string> = {
   "auto-categorize": "Auto-Categorize (Wave 1)",
   "books-health": "Books Health Report",
   "catch-up-plan": "Catch-Up Roadmap",
+  "cash-outlook": "4-Week Cash Outlook",
+  "ar-collections": "A/R Collections Pass",
   "bank-reconciliation": "Bank Reconciliation",
   "categorize-transactions": "Transaction Categorization",
   "coa-audit": "Chart of Accounts Audit",
