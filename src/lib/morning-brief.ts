@@ -13,6 +13,7 @@ import { getRunLogs, saveRunLogs } from "./store";
 import { getOpenEscalations } from "./policy-ledger";
 import { buildQuestionsWorkbook } from "./questions-export";
 import { getProgress } from "./progress";
+import { getRecentSignals } from "./signals";
 import cfoConfig from "@/agents/accounting-manager.config";
 
 export async function sendMorningBrief(email = true): Promise<{
@@ -27,6 +28,7 @@ export async function sendMorningBrief(email = true): Promise<{
   const failures = logs.filter((l) => l.status === "error");
   const open = await getOpenEscalations().catch(() => []);
   const progress = (await getProgress().catch(() => [])).slice(-7);
+  const signals = await getRecentSignals().catch(() => []);
 
   const logsBlock =
     logs.length === 0
@@ -61,11 +63,15 @@ Sections, in order:
 1. TOP LINE — 3 bullets max across everything (money first).
 2. NEEDS YOUR CALL — the numbered open questions with your recommendation on each. If any exist, tell Chris the attached spreadsheet records all his answers at once (fill YOUR ANSWER, upload back in either accounting chat).
 3. AGENT REPORTS — one tight paragraph per agent that ran, with the actual numbers. No filler.
-4. CLEANUP PROGRESS — the uncategorized-backlog trend in one or two lines.
-5. ISSUES — failures and what should happen about them. Omit the section if none.
+4. TOOL SIGNALS — updates pushed by the other Tilt tools (social, web admin, catalog). One line each; fold material ones into TOP LINE. Omit the section if none.
+5. CLEANUP PROGRESS — the uncategorized-backlog trend in one or two lines.
+6. ISSUES — failures and what should happen about them. Omit the section if none.
 
 ## Agent runs (last 24h)
 ${logsBlock}
+
+## Signals from Tilt tools (last 24h)
+${signals.length === 0 ? "(none)" : signals.map((s) => `- [${s.source}] ${s.headline}${s.detail ? ` — ${s.detail}` : ""}`).join("\n")}
 
 ## Open questions awaiting Chris
 ${openBlock}
