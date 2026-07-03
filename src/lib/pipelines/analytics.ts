@@ -8,6 +8,8 @@ import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import agentConfig from "@/agents/website-analytics-agent.config";
 import { renderOrgKnowledge } from "@/lib/org-knowledge";
+import { postSignal } from "@/lib/signals";
+import { headlineFrom } from "@/lib/signal-headline";
 
 export async function runDailyReport(context?: string) {
   const startedAt = new Date();
@@ -84,6 +86,11 @@ export async function runDailyReport(context?: string) {
       tokensUsed: response.inputTokens + response.outputTokens,
     },
   ]);
+
+  await postSignal({
+    source: "analytics",
+    headline: headlineFrom(response.text),
+  }).catch(() => {});
 
   return {
     report: response.text,

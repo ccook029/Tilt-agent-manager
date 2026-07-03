@@ -10,6 +10,8 @@ import { fetchSheetSnapshot } from "@/lib/zoho-sheet";
 import { fetchSyncReport } from "@/lib/zoho-sync";
 import agentConfig from "@/agents/inventory-agent.config";
 import { renderOrgKnowledge } from "@/lib/org-knowledge";
+import { postSignal } from "@/lib/signals";
+import { headlineFrom } from "@/lib/signal-headline";
 
 export async function runInventoryWeeklyReport(context?: string) {
   const startedAt = new Date();
@@ -98,6 +100,11 @@ export async function runInventoryWeeklyReport(context?: string) {
       tokensUsed: response.inputTokens + response.outputTokens,
     },
   ]);
+
+  await postSignal({
+    source: "inventory",
+    headline: headlineFrom(response.text),
+  }).catch(() => {});
 
   return {
     report: response.text,

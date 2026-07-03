@@ -7,6 +7,8 @@ import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import agentConfig from "@/agents/materials-rd-agent.config";
 import { renderOrgKnowledge } from "@/lib/org-knowledge";
+import { postSignal } from "@/lib/signals";
+import { headlineFrom } from "@/lib/signal-headline";
 
 export async function runResearchScan(context?: string) {
   const startedAt = new Date();
@@ -67,6 +69,11 @@ export async function runResearchScan(context?: string) {
       tokensUsed: response.inputTokens + response.outputTokens,
     },
   ]);
+
+  await postSignal({
+    source: "materials-rd",
+    headline: headlineFrom(response.text),
+  }).catch(() => {});
 
   return {
     report: response.text,

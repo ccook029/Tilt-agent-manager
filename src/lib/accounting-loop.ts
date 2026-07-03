@@ -30,6 +30,7 @@ import { buildQuestionsWorkbook } from "./questions-export";
 import { getDocuments, renderDocumentsBlock } from "./documents";
 import { buildStrategistContext } from "./strategist-context";
 import { renderOrgKnowledge } from "./org-knowledge";
+import { renderCrossAgentSignals } from "./cross-agent";
 import {
   loadCfoChat,
   saveCfoChat,
@@ -380,6 +381,7 @@ async function runAgentChat(
   const systemPrompt =
     config.systemPrompt +
     (await renderOrgKnowledge().catch(() => "")) +
+    (await renderCrossAgentSignals(agent === "sterling" ? "sterling" : "penny").catch(() => "")) +
     (agent === "sterling" ? await buildStrategistContext().catch(() => "") : "");
 
   const res = await callClaude({
