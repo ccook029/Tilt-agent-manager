@@ -133,9 +133,12 @@ function OwnerConsole() {
           <a
             href="/api/accounting/questions"
             download
-            className="rounded-lg border border-amber-700/50 bg-amber-600/20 px-3 py-2 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-600/30"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-amber-600/20 px-3 py-2 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-600/30"
           >
-            ⬇ Answer by Excel
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16" />
+            </svg>
+            Answer by Excel
           </a>
           <Link
             href="/dashboard"
@@ -156,8 +159,8 @@ function OwnerConsole() {
             </h2>
             {open.length === 0 ? (
               <div className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-6 text-sm text-gray-400">
-                Nothing needs you right now. 🎉 New questions land here (and in the
-                Morning Brief) as the agents work.
+                All clear — nothing needs you right now. New questions land here
+                (and in the Morning Brief) as the agents work.
               </div>
             ) : (
               open.map((e) => (

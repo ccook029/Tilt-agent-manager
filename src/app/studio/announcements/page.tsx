@@ -7,6 +7,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import ReportRenderer from "@/components/report-renderer";
+import PageHeader from "@/components/page-header";
 
 const KINDS = [
   "Product drop",
@@ -59,19 +60,18 @@ export default function AnnouncementsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs uppercase tracking-widest text-gray-600">
-          <Link href="/studio" className="hover:text-[#00d6ff] transition-colors">
-            Design Studio
-          </Link>{" "}
-          /
-        </p>
-        <h1 className="text-2xl font-semibold">Announcement Creator</h1>
-        <p className="text-sm text-gray-500">
-          Say what&apos;s happening — get on-brand copy for Instagram, Facebook,
-          and TikTok, plus a visual brief for the designer.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow={
+          <>
+            <Link href="/studio" className="hover:text-[#00d6ff] transition-colors">
+              Design Studio
+            </Link>{" "}
+            /
+          </>
+        }
+        title="Announcement Creator"
+        subtitle="Say what's happening — get on-brand copy for Instagram, Facebook, and TikTok, plus a visual brief for the designer."
+      />
 
       <form
         onSubmit={generate}

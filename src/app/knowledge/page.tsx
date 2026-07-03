@@ -6,6 +6,7 @@
 // (chats, scheduled runs, and the Morning Brief), so a fact is taught once.
 // ---------------------------------------------------------------------------
 import { useEffect, useState } from "react";
+import PageHeader from "@/components/page-header";
 
 export default function KnowledgePage() {
   const [content, setContent] = useState("");
@@ -56,15 +57,11 @@ export default function KnowledgePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 py-2">
-      <div>
-        <p className="text-xs uppercase tracking-widest text-gray-600">Tilt OS</p>
-        <h1 className="text-2xl font-semibold">Company Knowledge</h1>
-        <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-          Facts about how Tilt runs — who&apos;s who, vendors, policies, brand
-          rules. Every agent reads this, so you teach the company once instead of
-          each agent separately.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Tilt OS"
+        title="Company Knowledge"
+        subtitle="Facts about how Tilt runs — who's who, vendors, policies, brand rules. Every agent reads this, so you teach the company once instead of each agent separately."
+      />
 
       {loading ? (
         <p className="text-gray-500">Loading…</p>

@@ -86,7 +86,7 @@ export default function AttentionStrip() {
       )}
       {showProgress && latest && (
         <span className="flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/[0.06] px-4 py-2.5 text-sm text-cyan-200">
-          🧹 Books backlog: <strong>{latest.uncategorized}</strong> uncategorized
+          Books backlog: <strong>{latest.uncategorized}</strong> uncategorized
           {previous && previous.uncategorized > latest.uncategorized && (
             <span className="text-xs text-emerald-300">
               ▼ {previous.uncategorized - latest.uncategorized} last batch
