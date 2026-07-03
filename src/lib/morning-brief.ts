@@ -21,6 +21,7 @@ import { buildQuestionsWorkbook } from "./questions-export";
 import { getProgress } from "./progress";
 import { getRecentSignals, type Signal } from "./signals";
 import { isAccountingOwnerEmail, getStaffByEmail } from "./os-identity";
+import { renderOrgKnowledge } from "./org-knowledge";
 import cfoConfig from "@/agents/accounting-manager.config";
 import inventoryConfig from "@/agents/inventory-agent.config";
 import type { AgentRunLog } from "./types";
@@ -130,6 +131,8 @@ export async function sendMorningBrief(email = true): Promise<{
 
   // Compose one brief for a recipient/focus. Questions are scoped to what the
   // recipient is allowed to see.
+  const orgKb = await renderOrgKnowledge().catch(() => "");
+
   async function compose(
     recipient: Recipient,
     name: string
@@ -148,7 +151,7 @@ export async function sendMorningBrief(email = true): Promise<{
 
     if (recipient.focus === "inventory") {
       const res = await callClaude({
-        systemPrompt: inventoryConfig.systemPrompt,
+        systemPrompt: inventoryConfig.systemPrompt + orgKb,
         userMessage: `Compose the TILT INVENTORY & PURCHASING BRIEF for ${name}, who runs inventory and apparel/merch purchasing. Plain text, skimmable, under 500 words. Lead with stock and purchasing; leave out bookkeeping/accounting detail unless it directly affects what to buy.
 
 Sections, in order:
@@ -184,7 +187,7 @@ Today's date: ${today}`,
 
     // accounting / all
     const res = await callClaude({
-      systemPrompt: cfoConfig.systemPrompt,
+      systemPrompt: cfoConfig.systemPrompt + orgKb,
       userMessage: `Compose the TILT MORNING BRIEF for ${name}${recipient.focus === "accounting" ? ", who owns accounting and finance" : ""} — the one email they read each morning covering the company's agents. Plain text, skimmable, under 600 words.${recipient.focus === "accounting" ? " Lead with money, the books cleanup, and decisions needed." : ""}
 
 Sections, in order:

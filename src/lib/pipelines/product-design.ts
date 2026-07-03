@@ -6,12 +6,13 @@ import { sendAnalyticsReport } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import agentConfig from "@/agents/product-design-agent.config";
+import { renderOrgKnowledge } from "@/lib/org-knowledge";
 
 export async function runInnovation() {
   const startedAt = new Date();
 
   const response = await callClaude({
-    systemPrompt: agentConfig.systemPrompt,
+    systemPrompt: agentConfig.systemPrompt + (await renderOrgKnowledge()),
     userMessage: agentConfig.innovationPrompt,
     model: agentConfig.model,
     maxTokens: agentConfig.maxTokens,

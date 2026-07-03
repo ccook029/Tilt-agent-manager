@@ -6,6 +6,7 @@ import { sendAnalyticsReport } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import agentConfig from "@/agents/materials-rd-agent.config";
+import { renderOrgKnowledge } from "@/lib/org-knowledge";
 
 export async function runResearchScan(context?: string) {
   const startedAt = new Date();
@@ -18,7 +19,7 @@ export async function runResearchScan(context?: string) {
   userMessage += `\n\nToday's date: ${scanDate.slice(0, 10)}`;
 
   const response = await callClaude({
-    systemPrompt: agentConfig.systemPrompt,
+    systemPrompt: agentConfig.systemPrompt + (await renderOrgKnowledge()),
     userMessage,
     model: agentConfig.model,
     maxTokens: agentConfig.maxTokens,
