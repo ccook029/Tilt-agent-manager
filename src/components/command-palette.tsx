@@ -66,6 +66,7 @@ export function CommandPalette() {
     const nav: Command[] = [
       { id: "home", label: "Go to HQ Home", group: "Navigate", perform: () => router.push("/") },
       { id: "dash", label: "Go to Operations Dashboard", group: "Navigate", perform: () => router.push("/dashboard") },
+      { id: "strategy", label: "Go to Strategy (CFO analyst)", group: "Navigate", perform: () => router.push("/strategy") },
       { id: "studio", label: "Go to Design Studio", group: "Navigate", perform: () => router.push("/studio") },
       { id: "studio-social", label: "Studio: Social Content", group: "Navigate", perform: () => router.push("/studio/social") },
       { id: "studio-announce", label: "Studio: Announcement Creator", group: "Navigate", perform: () => router.push("/studio/announcements") },

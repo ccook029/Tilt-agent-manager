@@ -10,6 +10,7 @@ import { RunPipelineProvider } from "@/components/run-pipeline";
 import IntroOverlay from "@/components/intro-overlay";
 import StudioMenu from "@/components/studio-menu";
 import SignOut from "@/components/sign-out";
+import OwnerNav from "@/components/owner-nav";
 
 const SITE_URL = "https://tilt-agent-manager-i3tk.vercel.app";
 const OG_DESCRIPTION =
@@ -103,6 +104,7 @@ export default function RootLayout({
                 Operations
               </Link>
               <StudioMenu />
+              <OwnerNav />
               <Link
                 href="/inventory"
                 className="text-sm text-gray-500 hover:text-gray-300 transition-colors"

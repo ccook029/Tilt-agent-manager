@@ -28,6 +28,7 @@ import {
 import { runCategorizationBatch } from "./accounting-execute";
 import { buildQuestionsWorkbook } from "./questions-export";
 import { getDocuments, renderDocumentsBlock } from "./documents";
+import { buildStrategistContext } from "./strategist-context";
 import {
   loadCfoChat,
   saveCfoChat,
@@ -373,11 +374,17 @@ async function runAgentChat(
     message,
   });
 
+  // Sterling is also Chris's financial analyst/strategist — append the Tilt
+  // Business Strategist knowledge, live pipeline, and projection to his prompt.
+  const systemPrompt =
+    config.systemPrompt +
+    (agent === "sterling" ? await buildStrategistContext().catch(() => "") : "");
+
   const res = await callClaude({
-    systemPrompt: config.systemPrompt,
+    systemPrompt,
     userMessage,
     model: config.model,
-    maxTokens: 2048,
+    maxTokens: 2560,
     temperature: 0.3,
   });
   const result = parseControlBlock(res.text);
