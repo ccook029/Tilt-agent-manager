@@ -66,6 +66,14 @@ export function CommandPalette() {
     const nav: Command[] = [
       { id: "home", label: "Go to HQ Home", group: "Navigate", perform: () => router.push("/") },
       { id: "dash", label: "Go to Operations Dashboard", group: "Navigate", perform: () => router.push("/dashboard") },
+      { id: "studio", label: "Go to Design Studio", group: "Navigate", perform: () => router.push("/studio") },
+      { id: "studio-social", label: "Studio: Social Content", group: "Navigate", perform: () => router.push("/studio/social") },
+      { id: "studio-announce", label: "Studio: Announcement Creator", group: "Navigate", perform: () => router.push("/studio/announcements") },
+      { id: "studio-catalog", label: "Studio: Catalog Builder", group: "Navigate", perform: () => router.push("/studio/catalog") },
+      { id: "studio-blanket", label: "Studio: Blanket Fundraiser", group: "Navigate", perform: () => router.push("/studio/blanket") },
+      { id: "studio-sox", label: "Studio: SOX Creator", group: "Navigate", perform: () => router.push("/studio/sox") },
+      { id: "files", label: "Go to Files", group: "Navigate", perform: () => router.push("/files") },
+      { id: "questions", label: "Go to Questions", group: "Navigate", perform: () => router.push("/questions") },
     ];
     const agents: Command[] = personas.map((p) => ({
       id: `agent-${p.agentId}`,
