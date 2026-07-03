@@ -32,6 +32,7 @@ import {
 } from "./zoho-books";
 import { renderPolicyBlock, addEscalations, type Escalation } from "./policy-ledger";
 import { getActions, logActions, makeAction } from "./action-log";
+import { recordProgress } from "./progress";
 import { WORKER_EXPERTISE } from "./accounting-knowledge";
 import {
   isInboxConfigured,
@@ -333,6 +334,15 @@ export async function runCategorizationBatch(opts?: {
   );
 
   const remaining = Math.max(0, uncategorized.total - (live ? executed.length : 0));
+
+  // Track the backlog burning down for the dashboard tile + Morning Brief.
+  if (live) {
+    await recordProgress({
+      at: new Date().toISOString(),
+      uncategorized: remaining,
+      written: executed.length,
+    }).catch(() => {});
+  }
 
   const report = [
     `# Categorization ${live ? "Run" : "Dry Run"} — ${batchId}`,

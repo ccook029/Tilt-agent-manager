@@ -22,7 +22,8 @@ import { runAutoReconciliation } from "@/lib/pipelines/reconciliation";
 import { runFactoryReorder } from "@/lib/pipelines/factory-reorder";
 import { runResearchScan } from "@/lib/pipelines/materials-rd";
 import { runInnovation } from "@/lib/pipelines/product-design";
-import { sendCfoDigestEmail, runDispatchedTask } from "@/lib/accounting-loop";
+import { runDispatchedTask } from "@/lib/accounting-loop";
+import { sendMorningBrief } from "@/lib/morning-brief";
 
 export const maxDuration = 300;
 
@@ -64,10 +65,6 @@ function getScheduledTasks(now: Date): PipelineTask[] {
     });
   }
 
-  // CFO Daily Digest: every day — Sterling batches open questions for Chris.
-  // Runs on the main daytime cron, not the Sunday-night factory-only run.
-  tasks.push({ name: "CFO Daily Digest", run: () => sendCfoDigestEmail() });
-
   // Inventory Reconciliation: Mon–Fri — runs first to keep Zoho Inventory in sync with the Sheet
   if (day >= 1 && day <= 5) {
     tasks.push({ name: "Inventory Reconciliation", run: () => runAutoReconciliation() });
@@ -94,6 +91,11 @@ function getScheduledTasks(now: Date): PipelineTask[] {
   if (day === 5) {
     tasks.push({ name: "Materials R&D Research", run: () => runResearchScan() });
   }
+
+  // Tilt Morning Brief: the ONE daily email — every agent's results, open
+  // questions (with the answer spreadsheet), cleanup progress, and failures.
+  // MUST be last so it summarizes everything that ran above it.
+  tasks.push({ name: "Tilt Morning Brief", run: () => sendMorningBrief() });
 
   return tasks;
 }

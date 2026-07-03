@@ -22,7 +22,12 @@ import {
   type CfoChatMessage,
 } from "@/lib/accounting-loop";
 import { loadCfoChat, clearCfoChat, type ChatAgent } from "@/lib/cfo-chat-store";
-import { resolveEscalation, getOpenEscalations } from "@/lib/policy-ledger";
+import {
+  resolveEscalation,
+  getOpenEscalations,
+  getEscalations,
+  getPolicies,
+} from "@/lib/policy-ledger";
 
 export const maxDuration = 300;
 
@@ -42,6 +47,17 @@ export async function POST(request: NextRequest) {
 
     if (mode === "list") {
       return NextResponse.json({ ok: true, open: await getOpenEscalations() });
+    }
+
+    if (mode === "list-all") {
+      const all = await getEscalations();
+      const policies = await getPolicies();
+      return NextResponse.json({
+        ok: true,
+        open: all.filter((e) => e.status === "open"),
+        resolved: all.filter((e) => e.status === "resolved").slice(-50).reverse(),
+        policyCount: policies.length,
+      });
     }
 
     if (mode === "history") {

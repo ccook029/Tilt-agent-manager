@@ -14,6 +14,7 @@ import ActivityRail from "@/components/activity-rail";
 import Magnetic from "@/components/magnetic";
 import { useRunPipeline } from "@/components/run-pipeline";
 import NeedsAttention, { type Failure } from "@/components/needs-attention";
+import AttentionStrip from "@/components/attention-strip";
 import { SearchIcon } from "@/components/icons";
 import {
   AgentCardBody,
@@ -222,6 +223,9 @@ export default function DashboardPage() {
           </button>
         </Magnetic>
       </div>
+
+      {/* What needs Chris — decisions + cleanup progress */}
+      <AttentionStrip />
 
       {/* Needs attention — recent failures */}
       <NeedsAttention failures={failures} />
