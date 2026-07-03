@@ -1,3 +1,4 @@
+import { CLAUDE_MODEL } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // /api/accounting/execute — Run a Wave 1 categorization batch.
 //
@@ -41,7 +42,7 @@ async function run(limit: number, dryRun?: boolean) {
         durationMs: Date.now() - startedAt.getTime(),
         status: "success",
         output: result.report,
-        model: "claude-sonnet-4-6",
+        model: CLAUDE_MODEL,
       },
     ]);
 

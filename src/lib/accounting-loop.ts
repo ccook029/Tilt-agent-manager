@@ -1,3 +1,4 @@
+import { CLAUDE_MODEL } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // accounting-loop.ts — The worker → CFO → escalate orchestration
 //
@@ -435,7 +436,7 @@ export async function runDispatchedTask(task: string): Promise<void> {
           durationMs: Date.now() - startedAt.getTime(),
           status: "success",
           output: result.report,
-          model: "claude-sonnet-4-6",
+          model: CLAUDE_MODEL,
         },
       ]);
       return;

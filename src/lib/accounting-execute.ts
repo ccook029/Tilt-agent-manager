@@ -1,3 +1,4 @@
+import { CLAUDE_MODEL } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // accounting-execute.ts — Wave 1 execution engine: autonomous categorization
 //
@@ -208,7 +209,7 @@ export async function runCategorizationBatch(opts?: {
   const res = await callClaude({
     systemPrompt: EXECUTION_SYSTEM_PROMPT,
     userMessage,
-    model: "claude-sonnet-4-6",
+    model: CLAUDE_MODEL,
     maxTokens: 6000,
     temperature: 0,
   });

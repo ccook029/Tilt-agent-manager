@@ -1,10 +1,11 @@
+import { CLAUDE_MODEL } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // manager.ts — Summarises combined agent outputs via Claude
 // ---------------------------------------------------------------------------
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentRunLog, ManagerSummary } from "./types";
 
-const MANAGER_MODEL = "claude-sonnet-4-6";
+const MANAGER_MODEL = CLAUDE_MODEL;
 
 const MANAGER_SYSTEM_PROMPT = `You are the Manager Agent for Tilt Hockey Inc.
 You receive the outputs of multiple specialist AI agents that ran today.
