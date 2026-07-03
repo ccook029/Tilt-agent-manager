@@ -8,6 +8,8 @@ import { generateReportPDF } from "@/lib/pdf";
 import { fetchFactoryReorderData } from "@/lib/factory-reorder";
 import agentConfig from "@/agents/inventory-agent.config";
 import { renderOrgKnowledge } from "@/lib/org-knowledge";
+import { postSignal } from "@/lib/signals";
+import { headlineFrom } from "@/lib/signal-headline";
 
 export async function runFactoryReorder(context?: string) {
   const startedAt = new Date();
@@ -74,6 +76,11 @@ export async function runFactoryReorder(context?: string) {
       tokensUsed: response.inputTokens + response.outputTokens,
     },
   ]);
+
+  await postSignal({
+    source: "factory-reorder",
+    headline: headlineFrom(response.text),
+  }).catch(() => {});
 
   return {
     report: response.text,

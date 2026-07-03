@@ -7,6 +7,8 @@ import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import agentConfig from "@/agents/product-design-agent.config";
 import { renderOrgKnowledge } from "@/lib/org-knowledge";
+import { postSignal } from "@/lib/signals";
+import { headlineFrom } from "@/lib/signal-headline";
 
 export async function runInnovation() {
   const startedAt = new Date();
@@ -58,6 +60,11 @@ export async function runInnovation() {
       tokensUsed: response.inputTokens + response.outputTokens,
     },
   ]);
+
+  await postSignal({
+    source: "product-design",
+    headline: headlineFrom(response.text),
+  }).catch(() => {});
 
   return {
     concept: response.text,

@@ -8,6 +8,8 @@ import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import agentConfig from "@/agents/competitor-intel-agent.config";
 import { renderOrgKnowledge } from "@/lib/org-knowledge";
+import { postSignal } from "@/lib/signals";
+import { headlineFrom } from "@/lib/signal-headline";
 
 export async function runCompetitorReport(context?: string) {
   const startedAt = new Date();
@@ -74,6 +76,11 @@ export async function runCompetitorReport(context?: string) {
       tokensUsed: response.inputTokens + response.outputTokens,
     },
   ]);
+
+  await postSignal({
+    source: "competitor-intel",
+    headline: headlineFrom(response.text),
+  }).catch(() => {});
 
   return {
     report: response.text,

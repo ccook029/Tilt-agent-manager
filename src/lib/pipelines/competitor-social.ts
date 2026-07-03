@@ -8,6 +8,8 @@ import { generateReportPDF } from "@/lib/pdf";
 import { scrapeCompetitorSocials } from "@/lib/apify";
 import agentConfig from "@/agents/competitor-social-agent.config";
 import { renderOrgKnowledge } from "@/lib/org-knowledge";
+import { postSignal } from "@/lib/signals";
+import { headlineFrom } from "@/lib/signal-headline";
 
 export async function runSocialIntelReport(context?: string) {
   const startedAt = new Date();
@@ -77,6 +79,11 @@ export async function runSocialIntelReport(context?: string) {
       tokensUsed: response.inputTokens + response.outputTokens,
     },
   ]);
+
+  await postSignal({
+    source: "competitor-social",
+    headline: headlineFrom(response.text),
+  }).catch(() => {});
 
   return {
     report: response.text,
