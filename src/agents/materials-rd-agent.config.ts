@@ -1,3 +1,4 @@
+import { CLAUDE_MODEL } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // Materials Science R&D Agent — Configuration
 //
@@ -33,7 +34,7 @@ const config: MaterialsRdAgentConfig = {
   id: "materials-rd",
   name: "Materials Science R&D Agent",
   schedule: "0 12 * * 5", // Friday at 12:00 UTC (8 AM ET)
-  model: "claude-sonnet-4-6",
+  model: CLAUDE_MODEL,
   maxTokens: 8192,
   temperature: 0.3,
 

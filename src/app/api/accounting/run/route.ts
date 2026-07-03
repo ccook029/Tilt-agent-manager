@@ -1,3 +1,4 @@
+import { CLAUDE_MODEL } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // POST /api/accounting/run — Run a worker → CFO accounting cycle
 //
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
           durationMs: Date.now() - started.getTime(),
           status: "success",
           output: result.report,
-          model: "claude-sonnet-4-6",
+          model: CLAUDE_MODEL,
         },
       ]);
       return NextResponse.json({ ok: true, task, ...result });

@@ -1,3 +1,4 @@
+import { CLAUDE_MODEL } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // anthropic.ts — Claude API caller with template variable substitution
 // ---------------------------------------------------------------------------
@@ -48,7 +49,7 @@ export async function callClaude(
   opts: CallClaudeOptions
 ): Promise<ClaudeResponse> {
   const client = getClient();
-  const model = opts.model ?? "claude-sonnet-4-6";
+  const model = opts.model ?? CLAUDE_MODEL;
 
   const basePayload = {
     model,

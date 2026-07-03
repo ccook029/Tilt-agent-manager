@@ -1,3 +1,4 @@
+import { CLAUDE_MODEL } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // Accounting Manager — Sterling Vance, CFO ("the reviewer")
 //
@@ -32,7 +33,7 @@ const config: AccountingManagerConfig = {
   id: "accounting-manager",
   name: "Accounting Manager",
   schedule: "0 12 * * *", // daily 12:00 UTC — drives the daily escalation digest
-  model: "claude-sonnet-4-6",
+  model: CLAUDE_MODEL,
   maxTokens: 4096,
   temperature: 0.2,
 

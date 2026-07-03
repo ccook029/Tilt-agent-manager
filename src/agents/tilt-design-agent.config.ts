@@ -1,3 +1,4 @@
+import { CLAUDE_MODEL } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // Tilt Design Agent — Configuration
 //
@@ -90,7 +91,7 @@ const DESIGN_TOOLS: DesignTool[] = [
 const config: TiltDesignAgentConfig = {
   id: "tilt-design",
   name: "Tilt Design Agent",
-  model: "claude-sonnet-4-6",
+  model: CLAUDE_MODEL,
   maxTokens: 8192,
   temperature: 0.5,
 

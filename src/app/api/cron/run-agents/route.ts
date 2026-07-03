@@ -119,6 +119,7 @@ export async function GET(request: NextRequest) {
 
   // Run each pipeline sequentially to stay within memory/timeout limits
   const results: { name: string; status: "success" | "error"; error?: string }[] = [];
+  let billingAlertSent = false;
 
   for (const task of tasks) {
     try {
@@ -130,11 +131,40 @@ export async function GET(request: NextRequest) {
       results.push({ name: task.name, status: "error", error: message });
       console.error(`[cron] ${task.name}: failed —`, message);
 
+      const emailTo =
+        process.env.REPORT_EMAIL_TO?.split(",").map((e) => e.trim()) ??
+        ["chris@tilthockey.com"];
+
+      // An out-of-credits API account takes down EVERY agent — send one
+      // unmistakable alert instead of a generic per-task failure email.
+      const isBilling = /credit balance|Plans & Billing/i.test(message);
+      if (isBilling) {
+        if (!billingAlertSent) {
+          billingAlertSent = true;
+          try {
+            await sendErrorNotification(
+              emailTo,
+              "Tilt Agents <agents@tilthockey.com>",
+              [
+                "ALL TILT AGENTS ARE DOWN — the Anthropic API account is out of credits.",
+                "",
+                "Fix (2 minutes): console.anthropic.com → Plans & Billing → add credits.",
+                "Then enable auto-reload so this never happens silently again.",
+                "",
+                `First failing task: ${task.name}`,
+                message,
+              ].join("\n"),
+              "Platform Billing"
+            );
+          } catch {
+            console.error("[cron] Billing alert email also failed");
+          }
+        }
+        continue; // skip the generic per-task email for billing failures
+      }
+
       // Try to send error notification
       try {
-        const emailTo =
-          process.env.REPORT_EMAIL_TO?.split(",").map((e) => e.trim()) ??
-          ["chris@tilthockey.com"];
         await sendErrorNotification(
           emailTo,
           "Tilt Agents <agents@tilthockey.com>",

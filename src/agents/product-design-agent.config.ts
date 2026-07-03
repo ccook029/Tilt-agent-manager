@@ -1,3 +1,4 @@
+import { CLAUDE_MODEL } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // Product Design & Catalog Agent — Configuration
 //
@@ -31,7 +32,7 @@ export interface ProductDesignAgentConfig {
 const config: ProductDesignAgentConfig = {
   id: "product-design",
   name: "Product Design Agent",
-  model: "claude-sonnet-4-6",
+  model: CLAUDE_MODEL,
   maxTokens: 8192,
   temperature: 0.2,
 
