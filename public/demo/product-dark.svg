@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#0D0D0D"/>
+  <rect x="0" y="0" width="400" height="6" fill="#00BFFF"/>
+  <g transform="skewX(-8)" opacity="0.9">
+    <text x="28" y="210" font-family="Barlow Condensed, Arial" font-weight="800" font-size="66" fill="#F5F5F5">PRODUCT</text>
+  </g>
+  <text x="28" y="250" font-family="Barlow, Arial" font-size="18" fill="#9a9a9a" letter-spacing="2">SAMPLE THUMBNAIL</text>
+  <circle cx="340" cy="60" r="10" fill="#00BFFF"/>
+</svg>

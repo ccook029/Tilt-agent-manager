@@ -19,8 +19,8 @@ const TOOLS: {
     href: "/studio/social",
     name: "Social Content",
     blurb:
-      "The Social Studio — a living 6-month content plan, drafted posts with platform copy, branded visuals, and the shot list of missing assets.",
-    tag: "Module",
+      "The Social Studio, running natively in HQ — a living 6-month content plan, drafted posts with platform copy, branded visuals, and the shot list of missing assets.",
+    tag: "Native",
     accent: "text-pink-400 border-pink-900/60",
   },
   {

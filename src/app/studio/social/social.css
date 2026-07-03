@@ -1,0 +1,527 @@
+/* ---------------------------------------------------------------------------
+   Social Studio module styles — ported from tilt-social-media-manager's
+   globals.css and scoped under .social-studio so nothing leaks into the hub's
+   Tailwind theme. The hub layout already provides fonts (Barlow / Barlow
+   Condensed), the dark background, and page chrome, so the source's html/body
+   and site-header/footer rules are intentionally dropped.
+--------------------------------------------------------------------------- */
+
+.social-studio {
+  --tilt-black: #0d0d0d;
+  --tilt-cyan: #00bfff;
+  --tilt-dark-gray: #1a1a1a;
+  --tilt-mid-gray: #333333;
+  --tilt-text: #f5f5f5;
+  --tilt-muted: #9a9a9a;
+  --tilt-cyan-glow: rgba(0, 191, 255, 0.25);
+  color: var(--tilt-text);
+  font-family: "Barlow", system-ui, -apple-system, sans-serif;
+}
+
+.social-studio a {
+  color: var(--tilt-cyan);
+  text-decoration: none;
+}
+
+.social-studio h1,
+.social-studio h2,
+.social-studio h3 {
+  font-family: "Barlow Condensed", "Barlow", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-weight: 800;
+  line-height: 1.02;
+}
+
+.social-studio h1 {
+  /* Slightly more compact than the standalone app — it lives inside HQ now. */
+  font-size: clamp(1.9rem, 4vw, 2.8rem);
+  margin: 0.2em 0 0.3em;
+}
+
+.social-studio .container {
+  /* The hub's <main> already constrains width (max-w-6xl) and pads the page. */
+  max-width: 100%;
+  margin: 0;
+  padding: 20px 0 48px;
+}
+
+.social-studio .tagline {
+  color: var(--tilt-cyan);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+}
+
+/* Rendered inside the module (below the sub-nav) rather than across the top
+   of the whole site, so it gets module-friendly rounding + margin. */
+.social-studio .demo-banner {
+  background: var(--tilt-cyan);
+  color: var(--tilt-black);
+  text-align: center;
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.82rem;
+  padding: 7px 12px;
+  border-radius: 8px;
+  margin: 14px 0 0;
+}
+
+/* ---- Module sub-nav (replaces the source app's SiteHeader) ---- */
+.social-studio .module-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--tilt-mid-gray);
+  padding-bottom: 0;
+}
+
+.social-studio .module-nav a {
+  color: var(--tilt-text);
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.95rem;
+  padding: 6px 12px 8px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.social-studio .module-nav a:hover {
+  color: var(--tilt-cyan);
+}
+
+.social-studio .module-nav a.active {
+  color: var(--tilt-cyan);
+  border-color: var(--tilt-cyan);
+}
+
+/* ---- Hero ---- */
+.social-studio .hero {
+  position: relative;
+  border: 1px solid var(--tilt-mid-gray);
+  border-radius: 16px;
+  padding: 36px 32px;
+  background:
+    radial-gradient(
+      120% 140% at 100% 0%,
+      var(--tilt-cyan-glow) 0%,
+      transparent 45%
+    ),
+    var(--tilt-dark-gray);
+  overflow: hidden;
+}
+
+.social-studio .hero h1 {
+  max-width: 16ch;
+}
+
+.social-studio .hero .sub {
+  color: var(--tilt-muted);
+  max-width: 60ch;
+  font-size: 1.02rem;
+  line-height: 1.6;
+}
+
+.social-studio .btn {
+  display: inline-block;
+  background: var(--tilt-cyan);
+  color: var(--tilt-black);
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 11px 22px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+.social-studio .btn--ghost {
+  background: transparent;
+  color: var(--tilt-cyan);
+  border: 1px solid var(--tilt-cyan);
+}
+
+.social-studio .btn-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 26px;
+}
+
+.social-studio .stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 16px 0 28px;
+}
+
+.social-studio .stat {
+  background: var(--tilt-dark-gray);
+  border: 1px solid var(--tilt-mid-gray);
+  border-radius: 10px;
+  padding: 14px 18px;
+  min-width: 110px;
+}
+
+.social-studio .stat .num {
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: var(--tilt-cyan);
+  line-height: 1;
+}
+
+.social-studio .stat .label {
+  color: var(--tilt-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 6px;
+}
+
+.social-studio .grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.social-studio .card {
+  background: var(--tilt-dark-gray);
+  border: 1px solid var(--tilt-mid-gray);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.social-studio .card .media {
+  aspect-ratio: 1 / 1;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.social-studio .card .media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.social-studio .card .video-badge,
+.social-studio .card .placeholder {
+  color: var(--tilt-muted);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 12px;
+}
+
+.social-studio .card .body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.social-studio .card .filename {
+  font-size: 0.85rem;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.social-studio .card .desc {
+  font-size: 0.78rem;
+  color: var(--tilt-muted);
+}
+
+.social-studio .tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.social-studio .chip {
+  font-size: 0.68rem;
+  background: var(--tilt-mid-gray);
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: var(--tilt-text);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.social-studio .chip.cyan {
+  background: rgba(0, 191, 255, 0.15);
+  color: var(--tilt-cyan);
+  border: 1px solid rgba(0, 191, 255, 0.4);
+}
+
+.social-studio .chip.warn {
+  background: rgba(255, 170, 0, 0.12);
+  color: #ffb020;
+  border: 1px solid rgba(255, 170, 0, 0.4);
+}
+
+.social-studio .filters {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 20px;
+}
+
+.social-studio .filters a {
+  background: var(--tilt-dark-gray);
+  border: 1px solid var(--tilt-mid-gray);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  color: var(--tilt-text);
+}
+
+.social-studio .filters a.active {
+  background: var(--tilt-cyan);
+  color: var(--tilt-black);
+  border-color: var(--tilt-cyan);
+  font-weight: 600;
+}
+
+.social-studio .empty {
+  background: var(--tilt-dark-gray);
+  border: 1px dashed var(--tilt-mid-gray);
+  border-radius: 12px;
+  padding: 40px;
+  text-align: center;
+  color: var(--tilt-muted);
+}
+
+.social-studio .empty code {
+  background: var(--tilt-black);
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: var(--tilt-cyan);
+}
+
+/* ---- Roadmap list ---- */
+.social-studio .roadmap {
+  color: var(--tilt-muted);
+  line-height: 1.9;
+  padding-left: 20px;
+}
+
+.social-studio .roadmap strong {
+  color: var(--tilt-text);
+}
+
+.social-studio .badge {
+  display: inline-block;
+  background: rgba(0, 191, 255, 0.15);
+  color: var(--tilt-cyan);
+  border: 1px solid rgba(0, 191, 255, 0.4);
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 9px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ---- Posts ---- */
+.social-studio .post-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.social-studio .post-card {
+  background: var(--tilt-dark-gray);
+  border: 1px solid var(--tilt-mid-gray);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.social-studio .post-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.social-studio .post-card__render {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--tilt-mid-gray);
+  display: block;
+}
+
+.social-studio .post-card__copy {
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.social-studio .post-card__tags {
+  color: var(--tilt-cyan);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.social-studio .post-card__cta {
+  color: var(--tilt-text);
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.social-studio .post-card__brief {
+  border-top: 1px solid var(--tilt-mid-gray);
+  padding-top: 10px;
+  color: var(--tilt-muted);
+  font-size: 0.78rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.social-studio .platform {
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+  padding: 3px 9px;
+  border-radius: 6px;
+  color: var(--tilt-black);
+}
+.social-studio .platform--instagram { background: #e1306c; color: #fff; }
+.social-studio .platform--tiktok { background: #fff; color: #000; }
+.social-studio .platform--facebook { background: #1877f2; color: #fff; }
+
+.social-studio .status {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--tilt-mid-gray);
+  color: var(--tilt-muted);
+}
+.social-studio .status--needs_review { color: #ffb020; border-color: rgba(255, 170, 0, 0.4); }
+.social-studio .status--approved { color: var(--tilt-cyan); border-color: rgba(0, 191, 255, 0.4); }
+.social-studio .status--published { color: #29c467; border-color: rgba(41, 196, 103, 0.4); }
+
+.social-studio .render {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 6px;
+  align-self: flex-start;
+  background: var(--tilt-mid-gray);
+  color: var(--tilt-text);
+}
+.social-studio .render--shotstack { background: rgba(0, 191, 255, 0.15); color: var(--tilt-cyan); }
+.social-studio .render--manual { background: rgba(255, 170, 0, 0.12); color: #ffb020; }
+
+/* ---- Plan / skeleton ---- */
+.social-studio .week-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.social-studio .week-row {
+  display: flex;
+  gap: 16px;
+  background: var(--tilt-dark-gray);
+  border: 1px solid var(--tilt-mid-gray);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+.social-studio .week-row--locked {
+  border-color: var(--tilt-cyan);
+  background: rgba(0, 191, 255, 0.06);
+}
+
+.social-studio .week-row__date {
+  min-width: 88px;
+}
+
+.social-studio .week-row__label {
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  color: var(--tilt-cyan);
+}
+
+.social-studio .week-row__start {
+  color: var(--tilt-muted);
+  font-size: 0.82rem;
+}
+
+.social-studio .week-row__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.social-studio .week-row__events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.social-studio .pinned {
+  font-size: 0.78rem;
+  color: #ffb020;
+}
+
+/* ---- Gaps ---- */
+.social-studio .gap-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.social-studio .gap-card {
+  background: var(--tilt-dark-gray);
+  border: 1px solid var(--tilt-mid-gray);
+  border-left: 3px solid #ffb020;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.social-studio .gap-card__week {
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.74rem;
+  color: var(--tilt-cyan);
+}
+
+.social-studio .gap-card__desc {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  margin: 0;
+}

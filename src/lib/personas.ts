@@ -237,15 +237,17 @@ personas.push(
     name: "Tilt Social Studio",
     title: "Social Content Creator",
     department: "Marketing Studio",
-    bio: "The Tilt social media content creator — plans, drafts, and produces on-brand social content. Runs as its own module; launch it from here, and its updates flow into the Morning Brief via the Tilt OS signals inbox.",
+    bio: "The Tilt social media content creator — plans, drafts, and produces on-brand social content. Absorbed into HQ: it now runs natively at /studio/social behind the OS login, and its updates post straight into the Morning Brief signals inbox.",
     status: "active",
     schedule: "On-demand",
     avatarInitials: "TS",
     avatarColor: "bg-pink-700",
     avatarAccent: "ring-pink-400",
-    runEndpoint: "/api/modules/launch?m=social",
+    runEndpoint: "/studio/social",
+    // Still an "open the tool" persona (no scheduled pipeline/run history
+    // yet), but the launch URL is the native module page inside HQ.
     external: true,
-    launchUrl: "/api/modules/launch?m=social",
+    launchUrl: "/studio/social",
   },
   {
     agentId: "web-admin",

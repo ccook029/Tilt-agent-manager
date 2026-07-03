@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 64" role="img" aria-label="TILT">
+  <!-- PLACEHOLDER wordmark. Replace public/brand/tilt-logo.svg (or drop a
+       tilt-logo.png and update <Logo/>) with the real Tilt logo asset. -->
+  <style>
+    .wm { font-family: "Barlow Condensed", Arial, sans-serif; font-weight: 700;
+          font-size: 52px; letter-spacing: 2px; }
+  </style>
+  <g transform="skewX(-8)">
+    <text x="8" y="48" class="wm" fill="#F5F5F5">TIL</text>
+    <text x="132" y="48" class="wm" fill="#00BFFF">T</text>
+  </g>
+  <rect x="158" y="10" width="6" height="42" transform="skewX(-8)" fill="#00BFFF"/>
+</svg>
