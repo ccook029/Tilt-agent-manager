@@ -23,6 +23,7 @@ import { runFactoryReorder } from "@/lib/pipelines/factory-reorder";
 import { runResearchScan } from "@/lib/pipelines/materials-rd";
 import { runInnovation } from "@/lib/pipelines/product-design";
 import { runDispatchedTask } from "@/lib/accounting-loop";
+import { runSocialPlanWeekly } from "@/lib/pipelines/social-plan";
 import { sendMorningBrief } from "@/lib/morning-brief";
 
 export const maxDuration = 300;
@@ -90,6 +91,13 @@ function getScheduledTasks(now: Date): PipelineTask[] {
   // Friday (day 5): Materials R&D
   if (day === 5) {
     tasks.push({ name: "Materials R&D Research", run: () => runResearchScan() });
+  }
+
+  // Sunday (day 0): regenerate the social content plan for the coming weeks.
+  // No-ops unless SOCIAL_PLAN_CRON=true and the studio database is configured
+  // (one Claude call per slot — the priciest scheduled task, so opt-in).
+  if (day === 0) {
+    tasks.push({ name: "Social Weekly Plan", run: () => runSocialPlanWeekly() });
   }
 
   // Tilt Morning Brief: the ONE daily email — every agent's results, open
