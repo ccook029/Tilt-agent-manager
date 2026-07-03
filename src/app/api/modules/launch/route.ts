@@ -26,10 +26,13 @@ const MODULES: Record<
     keyEnv: "WEBADMIN_ACCESS_KEY",
     label: "Tilt Web Admin",
   },
+  // Absorbed into HQ as the native Stick Inventory module: m=inventory now
+  // redirects to /inventory so old launch links keep working.
   inventory: {
     urlEnv: "INVENTORY_APP_URL",
     keyEnv: "INVENTORY_ACCESS_KEY",
     label: "Tilt Inventory",
+    internalPath: "/inventory",
   },
 };
 

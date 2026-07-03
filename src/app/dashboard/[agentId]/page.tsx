@@ -149,12 +149,10 @@ export default function AgentDetailPage() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {/* Stockton gets a link to the Tilt Inventory app */}
+          {/* Stockton gets a link to the native Stick Inventory module */}
           {agentId === "inventory" && (
             <a
-              href="https://tiltinventory.vercel.app/"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/inventory"
               className="px-4 py-2 bg-cyan-700 hover:bg-cyan-600 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
             >
               Inventory App

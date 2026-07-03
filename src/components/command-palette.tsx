@@ -72,6 +72,8 @@ export function CommandPalette() {
       { id: "studio-catalog", label: "Studio: Catalog Builder", group: "Navigate", perform: () => router.push("/studio/catalog") },
       { id: "studio-blanket", label: "Studio: Blanket Fundraiser", group: "Navigate", perform: () => router.push("/studio/blanket") },
       { id: "studio-sox", label: "Studio: SOX Creator", group: "Navigate", perform: () => router.push("/studio/sox") },
+      { id: "inventory", label: "Go to Stick Inventory", group: "Navigate", perform: () => router.push("/inventory") },
+      { id: "inventory-scan", label: "Inventory: Scan & Sell", group: "Navigate", perform: () => router.push("/inventory/scan") },
       { id: "files", label: "Go to Files", group: "Navigate", perform: () => router.push("/files") },
       { id: "questions", label: "Go to Questions", group: "Navigate", perform: () => router.push("/questions") },
     ];
