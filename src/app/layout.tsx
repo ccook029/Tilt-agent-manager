@@ -8,6 +8,8 @@ import { Confetti } from "@/components/confetti";
 import CursorSpotlight from "@/components/cursor-spotlight";
 import { RunPipelineProvider } from "@/components/run-pipeline";
 import IntroOverlay from "@/components/intro-overlay";
+import StudioMenu from "@/components/studio-menu";
+import SignOut from "@/components/sign-out";
 
 const SITE_URL = "https://tilt-agent-manager-i3tk.vercel.app";
 const OG_DESCRIPTION =
@@ -100,8 +102,15 @@ export default function RootLayout({
               >
                 Operations
               </Link>
+              <StudioMenu />
+              <Link
+                href="/files"
+                className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Files
+              </Link>
               <span className="text-xs text-gray-700">|</span>
-              <span className="text-sm text-gray-600">Tilt Hockey Inc.</span>
+              <SignOut />
             </div>
           </div>
         </header>

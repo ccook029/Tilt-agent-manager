@@ -13,20 +13,28 @@
 //   CATALOG_ACCESS_KEY       — server-only shared secret (NO NEXT_PUBLIC_ prefix).
 //                              Must match the tilt-catalog-agent project's value.
 // ---------------------------------------------------------------------------
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 // Never cache the redirect — the Location carries the access key.
 export const dynamic = "force-dynamic";
 
 const FALLBACK_CATALOG_URL = "https://tilt-catalog-agent.vercel.app/";
 
-export function GET() {
+export function GET(request: NextRequest) {
   const base = process.env.NEXT_PUBLIC_CATALOG_URL ?? FALLBACK_CATALOG_URL;
   const key = process.env.CATALOG_ACCESS_KEY ?? "";
 
   // URL.searchParams handles encoding (equivalent to encodeURIComponent).
   const target = new URL(base);
   target.searchParams.set("key", key);
+
+  // Deep-link passthrough for the Design Studio's product-focused tools
+  // (Blanket Fundraiser, SOX Creator): the catalog app preselects `product`
+  // and shows `title` as its heading.
+  for (const param of ["product", "title"]) {
+    const v = request.nextUrl.searchParams.get(param);
+    if (v) target.searchParams.set(param, v);
+  }
 
   return NextResponse.redirect(target.toString());
 }
