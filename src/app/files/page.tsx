@@ -105,7 +105,7 @@ export default function FilesPage() {
         </p>
       )}
 
-      <div className="rounded-2xl border border-gray-800/80 bg-[#101010]/80 overflow-hidden">
+      <div className="rounded-2xl border border-gray-800/80 bg-[#101010]/80 overflow-x-auto">
         {loading ? (
           <p className="px-5 py-8 text-sm text-gray-600">Loading…</p>
         ) : files.length === 0 ? (
@@ -113,7 +113,7 @@ export default function FilesPage() {
             No files yet — upload the first one.
           </p>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wider text-gray-600 border-b border-gray-800/70">
                 <th className="px-5 py-3 font-medium">Name</th>
