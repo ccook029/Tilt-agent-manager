@@ -120,6 +120,22 @@ export function isAccountingOwner(staff: StaffProfile | null): boolean {
   return false;
 }
 
+/** Email-only owner check (for non-request contexts like the Morning Brief).
+ * When accounting is unrestricted, everyone is effectively the owner. */
+export function isAccountingOwnerEmail(email: string): boolean {
+  if (!accountingRestricted()) return true;
+  return ownerEmails().includes(email.trim().toLowerCase());
+}
+
+/** Look up a recorded staff member by email (for friendly names). */
+export async function getStaffByEmail(
+  email: string
+): Promise<StaffProfile | null> {
+  const target = email.trim().toLowerCase();
+  const dir = await getStaffDirectory();
+  return dir.find((s) => s.email === target) ?? null;
+}
+
 /**
  * Route-handler guard: returns a 403 NextResponse when the caller is not the
  * accounting owner, or null when they may proceed. The cron (CRON_SECRET
