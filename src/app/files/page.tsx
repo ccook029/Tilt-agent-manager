@@ -6,6 +6,7 @@
 // anywhere in the OS. Backed by Vercel Blob via /api/files.
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useRef, useState } from "react";
+import PageHeader from "@/components/page-header";
 
 interface StaffFile {
   name: string;
@@ -76,28 +77,24 @@ export default function FilesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-xs uppercase tracking-widest text-gray-600">
-            Tilt OS
-          </p>
-          <h1 className="text-2xl font-semibold">Files</h1>
-          <p className="text-sm text-gray-500">
-            Shared staff documents — everything the team needs, one place.
-          </p>
-        </div>
-        <label className="rounded-lg bg-[#00d6ff] text-black font-semibold px-5 py-2 text-sm hover:bg-[#33e0ff] transition-colors cursor-pointer">
-          {busy ? "Uploading…" : "Upload files"}
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            className="hidden"
-            disabled={busy}
-            onChange={(e) => upload(e.target.files)}
-          />
-        </label>
-      </div>
+      <PageHeader
+        eyebrow="Tilt OS"
+        title="Files"
+        subtitle="Shared staff documents — everything the team needs, one place."
+        actions={
+          <label className="rounded-lg bg-[#00d6ff] text-black font-semibold px-5 py-2 text-sm hover:bg-[#33e0ff] transition-colors cursor-pointer">
+            {busy ? "Uploading…" : "Upload files"}
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              className="hidden"
+              disabled={busy}
+              onChange={(e) => upload(e.target.files)}
+            />
+          </label>
+        }
+      />
 
       {notice && (
         <p className="text-sm text-amber-300 border border-amber-900/60 bg-amber-950/20 rounded-lg px-4 py-3">

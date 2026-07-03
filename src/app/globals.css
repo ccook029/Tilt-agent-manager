@@ -2,6 +2,11 @@
 
 /* ── Tilt Hockey brand tokens ── */
 :root {
+  /* One accent for the whole OS (hub + every module). */
+  --accent: #00d6ff;
+  --accent-dark: #00a6c9;
+  --accent-glow: rgba(0, 214, 255, 0.25);
+  /* Back-compat aliases (older rules referenced --tilt-red, which was cyan). */
   --tilt-red: #00d6ff;
   --tilt-red-dark: #00a6c9;
   --tilt-black: #0a0a0a;
@@ -101,13 +106,14 @@ html {
   100% { background-position: 250% 0; }
 }
 
-/* Animated aurora — slowly drifting red glow behind the whole app */
+/* Animated aurora — slowly drifting cyan glow behind the whole app (matches
+   the brand accent instead of the old crimson that fought it). */
 .aurora {
   background:
-    radial-gradient(40% 50% at 18% 28%, rgba(228, 0, 43, 0.16), transparent 60%),
-    radial-gradient(38% 46% at 82% 18%, rgba(228, 0, 43, 0.10), transparent 60%),
-    radial-gradient(46% 56% at 62% 82%, rgba(150, 0, 25, 0.14), transparent 60%);
-  filter: blur(36px);
+    radial-gradient(40% 50% at 18% 28%, rgba(0, 214, 255, 0.11), transparent 60%),
+    radial-gradient(38% 46% at 82% 18%, rgba(0, 160, 210, 0.08), transparent 60%),
+    radial-gradient(46% 56% at 62% 82%, rgba(0, 120, 180, 0.10), transparent 60%);
+  filter: blur(40px);
   animation: auroraDrift 26s ease-in-out infinite alternate;
 }
 @keyframes auroraDrift {

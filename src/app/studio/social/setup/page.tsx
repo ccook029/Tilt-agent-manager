@@ -84,7 +84,7 @@ export default function SetupPage() {
         <div
           style={{
             border: "1px solid var(--tilt-cyan)",
-            background: "rgba(0,191,255,0.08)",
+            background: "rgba(0,214,255,0.08)",
             borderRadius: 10,
             padding: "12px 16px",
             margin: "8px 0 4px",

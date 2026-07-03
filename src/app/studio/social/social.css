@@ -7,13 +7,14 @@
 --------------------------------------------------------------------------- */
 
 .social-studio {
-  --tilt-black: #0d0d0d;
-  --tilt-cyan: #00bfff;
-  --tilt-dark-gray: #1a1a1a;
-  --tilt-mid-gray: #333333;
-  --tilt-text: #f5f5f5;
+  --tilt-black: #0a0a0a;
+  /* Unified with the hub accent (was #00bfff). */
+  --tilt-cyan: #00d6ff;
+  --tilt-dark-gray: #101010;
+  --tilt-mid-gray: #2a2a2e;
+  --tilt-text: #ededed;
   --tilt-muted: #9a9a9a;
-  --tilt-cyan-glow: rgba(0, 191, 255, 0.25);
+  --tilt-cyan-glow: rgba(0, 214, 255, 0.2);
   color: var(--tilt-text);
   font-family: "Barlow", system-ui, -apple-system, sans-serif;
 }
@@ -57,16 +58,17 @@
 /* Rendered inside the module (below the sub-nav) rather than across the top
    of the whole site, so it gets module-friendly rounding + margin. */
 .social-studio .demo-banner {
-  background: var(--tilt-cyan);
-  color: var(--tilt-black);
+  background: rgba(0, 214, 255, 0.08);
+  color: var(--tilt-cyan);
+  border: 1px solid rgba(0, 214, 255, 0.28);
   text-align: center;
   font-family: "Barlow Condensed", sans-serif;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 0.82rem;
-  padding: 7px 12px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
   margin: 14px 0 0;
 }
 
@@ -128,24 +130,36 @@
   line-height: 1.6;
 }
 
+/* Match the hub's primary button (rounded, cyan, sentence-case Barlow). */
 .social-studio .btn {
   display: inline-block;
   background: var(--tilt-cyan);
-  color: var(--tilt-black);
-  font-family: "Barlow Condensed", sans-serif;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 11px 22px;
+  color: #000;
+  font-family: "Barlow", sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0;
+  padding: 9px 20px;
   border-radius: 8px;
   border: none;
   cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.social-studio .btn:hover {
+  background: #33e0ff;
 }
 
 .social-studio .btn--ghost {
   background: transparent;
+  color: var(--tilt-text);
+  border: 1px solid var(--tilt-mid-gray);
+}
+
+.social-studio .btn--ghost:hover {
+  background: transparent;
+  border-color: var(--tilt-cyan);
   color: var(--tilt-cyan);
-  border: 1px solid var(--tilt-cyan);
 }
 
 .social-studio .btn-row {
@@ -259,9 +273,9 @@
 }
 
 .social-studio .chip.cyan {
-  background: rgba(0, 191, 255, 0.15);
+  background: rgba(0, 214, 255, 0.15);
   color: var(--tilt-cyan);
-  border: 1px solid rgba(0, 191, 255, 0.4);
+  border: 1px solid rgba(0, 214, 255, 0.4);
 }
 
 .social-studio .chip.warn {
@@ -321,9 +335,9 @@
 
 .social-studio .badge {
   display: inline-block;
-  background: rgba(0, 191, 255, 0.15);
+  background: rgba(0, 214, 255, 0.15);
   color: var(--tilt-cyan);
-  border: 1px solid rgba(0, 191, 255, 0.4);
+  border: 1px solid rgba(0, 214, 255, 0.4);
   border-radius: 999px;
   font-size: 0.66rem;
   font-weight: 700;
@@ -420,7 +434,7 @@
   color: var(--tilt-muted);
 }
 .social-studio .status--needs_review { color: #ffb020; border-color: rgba(255, 170, 0, 0.4); }
-.social-studio .status--approved { color: var(--tilt-cyan); border-color: rgba(0, 191, 255, 0.4); }
+.social-studio .status--approved { color: var(--tilt-cyan); border-color: rgba(0, 214, 255, 0.4); }
 .social-studio .status--published { color: #29c467; border-color: rgba(41, 196, 103, 0.4); }
 
 .social-studio .render {
@@ -433,7 +447,7 @@
   background: var(--tilt-mid-gray);
   color: var(--tilt-text);
 }
-.social-studio .render--shotstack { background: rgba(0, 191, 255, 0.15); color: var(--tilt-cyan); }
+.social-studio .render--shotstack { background: rgba(0, 214, 255, 0.15); color: var(--tilt-cyan); }
 .social-studio .render--manual { background: rgba(255, 170, 0, 0.12); color: #ffb020; }
 
 /* ---- Plan / skeleton ---- */
@@ -455,7 +469,7 @@
 
 .social-studio .week-row--locked {
   border-color: var(--tilt-cyan);
-  background: rgba(0, 191, 255, 0.06);
+  background: rgba(0, 214, 255, 0.06);
 }
 
 .social-studio .week-row__date {
