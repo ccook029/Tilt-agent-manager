@@ -2,7 +2,7 @@
 // Pipeline: Weekly inventory health report — powered by Zoho Inventory data
 // ---------------------------------------------------------------------------
 import { callClaude, substituteVariables } from "@/lib/anthropic";
-import { sendAnalyticsReport } from "@/lib/email";
+import { sendAnalyticsReport, perAgentEmailsEnabled } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import { fetchInventorySnapshot } from "@/lib/zoho";
@@ -75,14 +75,16 @@ export async function runInventoryWeeklyReport(context?: string) {
 
   const pdfFilename = `tilt-inventory-weekly-${reportDate}.pdf`;
 
-  await sendAnalyticsReport({
-    to: emailTo,
-    from: emailFrom,
-    subject: emailSubject,
-    reportText: response.text,
-    pdfBuffer,
-    pdfFilename,
-  });
+  if (perAgentEmailsEnabled()) {
+    await sendAnalyticsReport({
+      to: emailTo,
+      from: emailFrom,
+      subject: emailSubject,
+      reportText: response.text,
+      pdfBuffer,
+      pdfFilename,
+    });
+  }
 
   const finishedAt = new Date();
 

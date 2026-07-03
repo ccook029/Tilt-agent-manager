@@ -16,7 +16,7 @@ export default function InventoryNav() {
   const pathname = usePathname() ?? "";
   return (
     <nav
-      className="flex gap-1 border-b border-gray-800/70"
+      className="flex gap-1 border-b border-gray-800/70 overflow-x-auto [&>*]:shrink-0"
       aria-label="Stick Inventory"
     >
       {TABS.map((t) => {

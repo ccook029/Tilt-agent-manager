@@ -110,8 +110,8 @@ export default function ActionLedger() {
           categorization, it shows here with an undo button.
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-800/70">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-xl border border-gray-800/70">
+          <table className="w-full min-w-[520px] text-sm">
             <thead>
               <tr className="border-b border-gray-800/70 text-left text-xs uppercase tracking-wider text-gray-600">
                 <th className="px-4 py-2.5 font-medium">Change</th>

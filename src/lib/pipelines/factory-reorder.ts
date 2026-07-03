@@ -2,7 +2,7 @@
 // Pipeline: Biweekly factory reorder recommendation — powered by Stockton
 // ---------------------------------------------------------------------------
 import { callClaude, substituteVariables } from "@/lib/anthropic";
-import { sendAnalyticsReport } from "@/lib/email";
+import { sendAnalyticsReport, perAgentEmailsEnabled } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import { fetchFactoryReorderData } from "@/lib/factory-reorder";
@@ -51,14 +51,16 @@ export async function runFactoryReorder(context?: string) {
 
   const pdfFilename = `tilt-factory-reorder-${reportDate}.pdf`;
 
-  await sendAnalyticsReport({
-    to: emailTo,
-    from: emailFrom,
-    subject: emailSubject,
-    reportText: response.text,
-    pdfBuffer,
-    pdfFilename,
-  });
+  if (perAgentEmailsEnabled()) {
+    await sendAnalyticsReport({
+      to: emailTo,
+      from: emailFrom,
+      subject: emailSubject,
+      reportText: response.text,
+      pdfBuffer,
+      pdfFilename,
+    });
+  }
 
   const finishedAt = new Date();
 

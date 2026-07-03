@@ -17,16 +17,21 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { getAllPersonas } from "@/lib/personas";
 import { useToast } from "@/components/toast";
+import { useRunPipeline } from "@/components/run-pipeline";
 import { SearchIcon } from "@/components/icons";
 import { EASE_OUT } from "@/lib/motion";
 
 const OPEN_EVENT = "tilt:open-command";
 
+// Agents that shouldn't be one-click "run" from the palette: the accounting
+// team (their runs are digests/writes with their own flows) and external tools.
+const NO_QUICK_RUN = new Set(["accounting", "accounting-manager"]);
+
 interface Command {
   id: string;
   label: string;
   hint?: string;
-  group: "Navigate" | "Agents" | "Actions";
+  group: "Navigate" | "Run agent" | "Ask agent" | "Agents" | "Actions";
   perform: () => void | Promise<void>;
 }
 
@@ -48,6 +53,7 @@ export function CommandButton() {
 export function CommandPalette() {
   const router = useRouter();
   const toast = useToast();
+  const { run: runPipeline } = useRunPipeline();
   const reduce = useReducedMotion();
   const personas = getAllPersonas();
 
@@ -86,6 +92,62 @@ export function CommandPalette() {
       group: "Agents",
       perform: () => router.push(`/dashboard/${p.agentId}`),
     }));
+
+    // "Run <agent>" — trigger a scheduled agent's run right now, with the
+    // progress overlay (skips the accounting team + external tools).
+    const runVerbs: Command[] = personas
+      .filter(
+        (p) =>
+          p.status === "active" &&
+          !p.external &&
+          !NO_QUICK_RUN.has(p.agentId) &&
+          Boolean(p.runEndpoint)
+      )
+      .map((p) => ({
+        id: `run-${p.agentId}`,
+        label: `Run ${p.name}`,
+        hint: p.title,
+        group: "Run agent",
+        perform: () => {
+          void runPipeline(`Running ${p.name}…`, async () => {
+            try {
+              const r = await fetch(p.runEndpoint, { method: "POST" });
+              toast(
+                r.ok
+                  ? { title: `${p.name} is running`, kind: "success" }
+                  : { title: `${p.name} failed to start`, kind: "error" }
+              );
+              return { ok: r.ok };
+            } catch {
+              toast({ title: `Couldn't reach ${p.name}`, kind: "error" });
+              return { ok: false };
+            }
+          });
+        },
+      }));
+
+    // "Ask <agent>" — jump straight into an agent's chat.
+    const askVerbs: Command[] = personas
+      .filter((p) => !p.external)
+      .map((p) => ({
+        id: `ask-${p.agentId}`,
+        label: `Ask ${p.name}`,
+        hint: "Open chat",
+        group: "Ask agent",
+        perform: () => router.push(`/dashboard/${p.agentId}`),
+      }));
+
+    // "Open <tool>" — launch an external module.
+    const openVerbs: Command[] = personas
+      .filter((p) => p.external && (p.launchUrl || p.runEndpoint))
+      .map((p) => ({
+        id: `open-${p.agentId}`,
+        label: `Open ${p.name}`,
+        hint: "External tool",
+        group: "Actions",
+        perform: () => router.push(p.launchUrl ?? p.runEndpoint),
+      }));
+
     const actions: Command[] = [
       {
         id: "run-all",
@@ -107,8 +169,8 @@ export function CommandPalette() {
         },
       },
     ];
-    return [...nav, ...agents, ...actions];
-  }, [personas, router, toast]);
+    return [...nav, ...runVerbs, ...askVerbs, ...agents, ...openVerbs, ...actions];
+  }, [personas, router, toast, runPipeline]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

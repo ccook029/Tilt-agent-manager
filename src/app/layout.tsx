@@ -80,22 +80,22 @@ export default function RootLayout({
         <IntroOverlay />
         <ToastProvider>
         <RunPipelineProvider>
-        <header className="border-b border-gray-800/60 px-6 py-6 bg-[#0a0a0a]/90 backdrop-blur-sm sticky top-0 z-50">
-          <div className="max-w-6xl mx-auto flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-5 group">
+        <header className="border-b border-gray-800/60 px-4 sm:px-6 py-4 sm:py-6 bg-[#0a0a0a]/90 backdrop-blur-sm sticky top-0 z-50">
+          <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <Link href="/" className="flex items-center gap-3 sm:gap-5 group shrink-0">
               <Image
                 src="/images/tilt-logo.png"
                 alt="Tilt"
                 width={320}
                 height={96}
-                className="invert brightness-200"
+                className="invert brightness-200 w-32 sm:w-[220px] h-auto"
                 priority
               />
-              <span className="text-base text-gray-500 border-l border-gray-700 pl-5 group-hover:text-[#00d6ff] transition-colors">
+              <span className="hidden sm:inline text-base text-gray-500 border-l border-gray-700 pl-5 group-hover:text-[#00d6ff] transition-colors">
                 Corporate HQ
               </span>
             </Link>
-            <div className="flex items-center gap-4">
+            <nav className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <CommandButton />
               <Link
                 href="/dashboard"
@@ -123,12 +123,12 @@ export default function RootLayout({
               >
                 Knowledge
               </Link>
-              <span className="text-xs text-gray-700">|</span>
+              <span className="hidden sm:inline text-xs text-gray-700">|</span>
               <SignOut />
-            </div>
+            </nav>
           </div>
         </header>
-        <main className="max-w-6xl mx-auto px-6 py-8 relative z-10">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 relative z-10">
           {children}
         </main>
         <CommandPalette />

@@ -362,7 +362,7 @@ export default function AgentDetailPage() {
       ) : (
         <>
       {/* Tab navigation — sliding red underline */}
-      <div className="flex gap-1 border-b border-gray-800/60">
+      <div className="flex gap-1 border-b border-gray-800/60 overflow-x-auto [&>*]:shrink-0">
         {([
           ...(isMaya ? [{ id: "chat" as const, label: "Talk to Maya" }] : []),
           ...(isCfo ? [{ id: "chat" as const, label: "Talk to Sterling" }] : []),

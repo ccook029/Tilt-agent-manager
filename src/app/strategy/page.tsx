@@ -84,7 +84,7 @@ export default function StrategyPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-gray-800/60">
+      <div className="flex gap-1 border-b border-gray-800/60 overflow-x-auto [&>*]:shrink-0">
         {TABS.map((t) => {
           const active = tab === t.id;
           return (
