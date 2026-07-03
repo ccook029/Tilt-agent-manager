@@ -12,6 +12,7 @@ import RunStats from "@/components/run-stats";
 import MayaChat from "@/components/maya-chat";
 import CfoChat from "@/components/cfo-chat";
 import PennyChat from "@/components/penny-chat";
+import GenericAgentChat from "@/components/generic-agent-chat";
 import ReportFiles from "@/components/report-files";
 import ReportRenderer from "@/components/report-renderer";
 
@@ -36,6 +37,9 @@ export default function AgentDetailPage() {
   const isCfo = agentId === "accounting-manager";
   const isPenny = agentId === "accounting";
   const isExternal = persona?.external === true;
+  // Every other internal agent gets the generic "talk to them" chat.
+  const isGenericChat =
+    Boolean(persona) && !isExternal && !isMaya && !isCfo && !isPenny;
 
   const [logs, setLogs] = useState<RunLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +48,7 @@ export default function AgentDetailPage() {
   const [runningTask, setRunningTask] = useState<string | null>(null);
   const [innovating, setInnovating] = useState(false);
   const [activeTab, setActiveTab] = useState<"history" | "files" | "chat">(
-    isMaya || isCfo || isPenny ? "chat" : "history"
+    isMaya || isCfo || isPenny || isGenericChat ? "chat" : "history"
   );
   // Non-owners may not open the CFO/Penny agents (their routes are gated too).
   const [acctAllowed, setAcctAllowed] = useState(true);
@@ -361,6 +365,9 @@ export default function AgentDetailPage() {
           ...(isMaya ? [{ id: "chat" as const, label: "Talk to Maya" }] : []),
           ...(isCfo ? [{ id: "chat" as const, label: "Talk to Sterling" }] : []),
           ...(isPenny ? [{ id: "chat" as const, label: "Talk to Penny" }] : []),
+          ...(isGenericChat
+            ? [{ id: "chat" as const, label: `Talk to ${persona?.name?.split(" ")[0] ?? "agent"}` }]
+            : []),
           { id: "history" as const, label: "Report History" },
           { id: "files" as const, label: "Files" },
         ]).map((tab) => {
@@ -405,6 +412,12 @@ export default function AgentDetailPage() {
       {activeTab === "chat" && isPenny && (
         <div>
           <PennyChat />
+        </div>
+      )}
+
+      {activeTab === "chat" && isGenericChat && (
+        <div>
+          <GenericAgentChat agentId={agentId} name={persona?.name ?? agentId} />
         </div>
       )}
 
