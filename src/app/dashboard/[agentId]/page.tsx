@@ -46,6 +46,15 @@ export default function AgentDetailPage() {
   const [activeTab, setActiveTab] = useState<"history" | "files" | "chat">(
     isMaya || isCfo || isPenny ? "chat" : "history"
   );
+  // Non-owners may not open the CFO/Penny agents (their routes are gated too).
+  const [acctAllowed, setAcctAllowed] = useState(true);
+  useEffect(() => {
+    if (!isCfo && !isPenny) return;
+    fetch("/api/os/me")
+      .then((r) => r.json())
+      .then((d) => setAcctAllowed(!d.authEnabled || Boolean(d.isAccountingOwner)))
+      .catch(() => {});
+  }, [isCfo, isPenny]);
   const { run } = useRunPipeline();
   const reduce = useReducedMotion();
 
@@ -319,8 +328,21 @@ export default function AgentDetailPage() {
         </div>
       )}
 
-      {/* External tools have no run history / files — show a launch note. */}
-      {isExternal ? (
+      {/* Accounting agents are restricted to the accounting owner. */}
+      {(isCfo || isPenny) && !acctAllowed ? (
+        <div className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-8 text-center">
+          <p className="text-lg text-gray-300 mb-1">Restricted</p>
+          <p className="text-sm text-gray-500">
+            {persona?.name} and the accounting console are limited to the
+            accounting owner. If a specific question was assigned to you, you&apos;ll
+            find it under{" "}
+            <Link href="/questions" className="text-[#00d6ff] hover:underline">
+              Questions
+            </Link>
+            .
+          </p>
+        </div>
+      ) : isExternal ? (
         <div className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-6">
           <p className="text-sm text-gray-400 leading-relaxed">
             {persona?.name} is a live, on-demand tool — it doesn&apos;t run on a

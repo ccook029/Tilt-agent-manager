@@ -20,6 +20,7 @@ import {
   osCookieOptions,
   verifyOsToken,
 } from "@/lib/os-auth";
+import { recordStaff } from "@/lib/os-identity";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,15 @@ export async function POST(request: NextRequest) {
     const staffId = await verifyOsToken(data.token);
     if (!data.token || staffId === null || staffId === SHARED_STAFF_ID) {
       return fail(502, "Staff directory returned an invalid session token.");
+    }
+    // Remember this person so we can resolve their id → email later (for the
+    // accounting-owner check and question assignment).
+    if (data.staff?.email) {
+      await recordStaff({
+        id: staffId,
+        name: data.staff.name ?? email,
+        email: data.staff.email,
+      });
     }
     const out = NextResponse.json({ ok: true, staff: data.staff ?? { id: staffId } });
     out.cookies.set(OS_COOKIE, data.token, osCookieOptions);

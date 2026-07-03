@@ -24,19 +24,58 @@ import {
 import { loadCfoChat, clearCfoChat, type ChatAgent } from "@/lib/cfo-chat-store";
 import {
   resolveEscalation,
+  assignEscalation,
   getOpenEscalations,
   getEscalations,
   getPolicies,
 } from "@/lib/policy-ledger";
+import { SHARED_STAFF_ID } from "@/lib/os-auth";
+import {
+  getCurrentStaff,
+  getStaffDirectory,
+  isAccountingOwner,
+  type StaffProfile,
+} from "@/lib/os-identity";
 
 export const maxDuration = 300;
 
-export async function GET() {
+// This whole route is the accounting owner's console (CFO/Penny chat, the
+// decisions queue, digests, assignment). Everyone else is turned away here and
+// uses /api/my-questions for questions delegated to them. The cron reaches the
+// digest with its own bearer secret.
+async function ownerGuard(
+  request: NextRequest
+): Promise<{ staff: StaffProfile } | NextResponse> {
+  const auth = request.headers.get("authorization");
+  if (
+    auth &&
+    process.env.CRON_SECRET &&
+    auth === `Bearer ${process.env.CRON_SECRET}`
+  ) {
+    return { staff: { id: SHARED_STAFF_ID, name: "Cron", email: "" } };
+  }
+  const staff = await getCurrentStaff();
+  if (!isAccountingOwner(staff)) {
+    return NextResponse.json(
+      { error: "The accounting console is restricted to the accounting owner." },
+      { status: 403 }
+    );
+  }
+  return { staff: staff ?? { id: SHARED_STAFF_ID, name: "Owner", email: "" } };
+}
+
+export async function GET(request: NextRequest) {
+  const guard = await ownerGuard(request);
+  if (guard instanceof NextResponse) return guard;
   return sendDigest(true);
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const guard = await ownerGuard(request);
+    if (guard instanceof NextResponse) return guard;
+    const currentStaff = guard.staff;
+
     const body = await request.json().catch(() => ({}));
     const { mode = "digest" } = body as { mode?: string };
 
@@ -88,7 +127,7 @@ export async function POST(request: NextRequest) {
       // Record any decisions Sterling extracted from Chris's message as policy.
       const recorded: string[] = [];
       for (const r of result.resolutions) {
-        const policy = await resolveEscalation(r.id, r.answer);
+        const policy = await resolveEscalation(r.id, r.answer, currentStaff.name);
         if (policy) recorded.push(policy.rule);
       }
 
@@ -121,7 +160,7 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const policy = await resolveEscalation(escalationId, answer);
+      const policy = await resolveEscalation(escalationId, answer, currentStaff.name);
       if (!policy) {
         return NextResponse.json({ error: "Escalation not found" }, { status: 404 });
       }
@@ -131,6 +170,46 @@ export async function POST(request: NextRequest) {
         policy,
         open: await getOpenEscalations(),
       });
+    }
+
+    if (mode === "directory") {
+      // Who the owner can delegate questions to.
+      return NextResponse.json({ ok: true, staff: await getStaffDirectory() });
+    }
+
+    if (mode === "assign") {
+      const { escalationId, assigneeEmail, assigneeName, unassign } = body as {
+        escalationId?: string;
+        assigneeEmail?: string;
+        assigneeName?: string;
+        unassign?: boolean;
+      };
+      if (!escalationId) {
+        return NextResponse.json(
+          { error: "escalationId is required" },
+          { status: 400 }
+        );
+      }
+      if (!unassign && !assigneeEmail?.trim()) {
+        return NextResponse.json(
+          { error: "assigneeEmail is required to assign" },
+          { status: 400 }
+        );
+      }
+      const updated = await assignEscalation(
+        escalationId,
+        unassign
+          ? null
+          : {
+              email: assigneeEmail!.trim(),
+              name: (assigneeName ?? assigneeEmail!).trim(),
+            },
+        currentStaff.name
+      );
+      if (!updated) {
+        return NextResponse.json({ error: "Escalation not found" }, { status: 404 });
+      }
+      return NextResponse.json({ ok: true, escalation: updated });
     }
 
     // default: digest

@@ -12,16 +12,23 @@ import { CLAUDE_MODEL } from "@/lib/models";
 import { NextRequest, NextResponse } from "next/server";
 import { runCategorizationBatch } from "@/lib/accounting-execute";
 import { saveRunLogs } from "@/lib/store";
+import { guardAccountingOwner } from "@/lib/os-identity";
 
 export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
+  const guard = await guardAccountingOwner(request);
+  if (guard) return guard;
+
   const limit = Number(request.nextUrl.searchParams.get("limit") ?? "10");
   const dryRun = request.nextUrl.searchParams.get("dryRun");
   return run(limit, dryRun === null ? undefined : dryRun === "true");
 }
 
 export async function POST(request: NextRequest) {
+  const guard = await guardAccountingOwner(request);
+  if (guard) return guard;
+
   const body = await request.json().catch(() => ({}));
   const { limit = 15, dryRun } = body as { limit?: number; dryRun?: boolean };
   return run(limit, dryRun);

@@ -4,12 +4,16 @@
 // Fill in the YOUR ANSWER column and re-upload the file in Sterling's chat
 // (the 📎 button) — each answered row is recorded as standing policy.
 // ---------------------------------------------------------------------------
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { buildQuestionsWorkbook } from "@/lib/questions-export";
+import { guardAccountingOwner } from "@/lib/os-identity";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const guard = await guardAccountingOwner(request);
+  if (guard) return guard;
+
   const wb = await buildQuestionsWorkbook();
   if (!wb) {
     return NextResponse.json({
