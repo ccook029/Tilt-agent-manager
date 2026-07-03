@@ -5,7 +5,7 @@
 // reach every creative tool, whether native (Announcements) or an embedded
 // module (Social Studio, Catalog Builder and its product-focused variants).
 // ---------------------------------------------------------------------------
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -40,6 +40,10 @@ export const STUDIO_TOOLS = [
 export default function StudioMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  // Viewport-relative panel position so it never runs off a phone screen
+  // (the button sits mid-row, so anchoring to it can overflow either edge).
+  const [style, setStyle] = useState<CSSProperties>({});
   const pathname = usePathname();
   const active = pathname?.startsWith("/studio");
 
@@ -52,9 +56,32 @@ export default function StudioMenu() {
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (!r) return;
+      if (window.innerWidth < 640) {
+        // Full-width sheet with equal screen margins, dropped below the button.
+        setStyle({ position: "fixed", top: r.bottom + 8, left: 12, right: 12, width: "auto" });
+      } else {
+        // Desktop: aligned to the button's right edge, fixed width.
+        setStyle({ position: "fixed", top: r.bottom + 10, right: window.innerWidth - r.right, width: 288 });
+      }
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
   return (
     <div ref={ref} className="relative">
       <button
+        ref={btnRef}
         onClick={() => setOpen((v) => !v)}
         className={`text-sm transition-colors flex items-center gap-1 ${
           active ? "text-[#00d6ff]" : "text-gray-500 hover:text-gray-300"
@@ -77,7 +104,8 @@ export default function StudioMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-3 w-72 rounded-xl border border-gray-800 bg-[#101010]/95 backdrop-blur-md shadow-2xl shadow-black/60 p-2 z-[60]"
+          style={style}
+          className="rounded-xl border border-gray-800 bg-[#101010]/95 backdrop-blur-md shadow-2xl shadow-black/60 p-2 z-[60]"
         >
           <Link
             href="/studio"
