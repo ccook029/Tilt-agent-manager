@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 import { fetchGA4Data, getDailyReportRanges } from "@/lib/ga4";
 import { callClaude, substituteVariables } from "@/lib/anthropic";
-import { sendAnalyticsReport } from "@/lib/email";
+import { sendAnalyticsReport, perAgentEmailsEnabled } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import agentConfig from "@/agents/website-analytics-agent.config";
@@ -61,14 +61,16 @@ export async function runDailyReport(context?: string) {
 
   const pdfFilename = `tilt-analytics-${current.endDate}.pdf`;
 
-  await sendAnalyticsReport({
-    to: emailTo,
-    from: emailFrom,
-    subject: emailSubject,
-    reportText: response.text,
-    pdfBuffer,
-    pdfFilename,
-  });
+  if (perAgentEmailsEnabled()) {
+    await sendAnalyticsReport({
+      to: emailTo,
+      from: emailFrom,
+      subject: emailSubject,
+      reportText: response.text,
+      pdfBuffer,
+      pdfFilename,
+    });
+  }
 
   const finishedAt = new Date();
 

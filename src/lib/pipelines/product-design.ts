@@ -2,7 +2,7 @@
 // Pipeline: Product design innovation concept
 // ---------------------------------------------------------------------------
 import { callClaude } from "@/lib/anthropic";
-import { sendAnalyticsReport } from "@/lib/email";
+import { sendAnalyticsReport, perAgentEmailsEnabled } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import agentConfig from "@/agents/product-design-agent.config";
@@ -35,14 +35,16 @@ export async function runInnovation() {
     process.env.REPORT_EMAIL_TO?.split(",").map((e) => e.trim()) ??
     agentConfig.email.to;
 
-  await sendAnalyticsReport({
-    to: emailTo,
-    from: agentConfig.email.from,
-    subject: `New Product Concept from Maya — ${startedAt.toISOString().slice(0, 10)}`,
-    reportText: response.text,
-    pdfBuffer,
-    pdfFilename,
-  });
+  if (perAgentEmailsEnabled()) {
+    await sendAnalyticsReport({
+      to: emailTo,
+      from: agentConfig.email.from,
+      subject: `New Product Concept from Maya — ${startedAt.toISOString().slice(0, 10)}`,
+      reportText: response.text,
+      pdfBuffer,
+      pdfFilename,
+    });
+  }
 
   const finishedAt = new Date();
 

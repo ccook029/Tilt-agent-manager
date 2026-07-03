@@ -94,6 +94,17 @@ export interface AnalyticsEmailOptions {
 }
 
 /**
+ * Whether individual agents should email their own reports. OFF by default:
+ * the single Morning Brief now consolidates every agent's output, so the
+ * per-agent emails would just flood the inbox (audit #7). Every report is
+ * still saved to run logs and shown in-app + the brief. Set
+ * PER_AGENT_EMAILS=true to bring the individual emails back.
+ */
+export function perAgentEmailsEnabled(): boolean {
+  return process.env.PER_AGENT_EMAILS === "true";
+}
+
+/**
  * Send an analytics report email.
  * - If the report contains "🚨", prepends "[URGENT]" to the subject.
  * - Sends both plain text and an HTML version (wrapped in <pre> for tables).

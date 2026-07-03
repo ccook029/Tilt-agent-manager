@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 import { runCompetitorScan } from "@/lib/competitors";
 import { callClaude, substituteVariables } from "@/lib/anthropic";
-import { sendAnalyticsReport } from "@/lib/email";
+import { sendAnalyticsReport, perAgentEmailsEnabled } from "@/lib/email";
 import { saveRunLogs } from "@/lib/store";
 import { generateReportPDF } from "@/lib/pdf";
 import agentConfig from "@/agents/competitor-intel-agent.config";
@@ -51,14 +51,16 @@ export async function runCompetitorReport(context?: string) {
 
   const pdfFilename = `tilt-competitor-intel-${scanDate.slice(0, 10)}.pdf`;
 
-  await sendAnalyticsReport({
-    to: emailTo,
-    from: emailFrom,
-    subject: emailSubject,
-    reportText: response.text,
-    pdfBuffer,
-    pdfFilename,
-  });
+  if (perAgentEmailsEnabled()) {
+    await sendAnalyticsReport({
+      to: emailTo,
+      from: emailFrom,
+      subject: emailSubject,
+      reportText: response.text,
+      pdfBuffer,
+      pdfFilename,
+    });
+  }
 
   const finishedAt = new Date();
 
