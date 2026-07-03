@@ -15,6 +15,7 @@ import Magnetic from "@/components/magnetic";
 import { useRunPipeline } from "@/components/run-pipeline";
 import NeedsAttention, { type Failure } from "@/components/needs-attention";
 import AttentionStrip from "@/components/attention-strip";
+import SignalsFeed from "@/components/signals-feed";
 import { SearchIcon } from "@/components/icons";
 import {
   AgentCardBody,
@@ -229,6 +230,9 @@ export default function DashboardPage() {
 
       {/* Needs attention — recent failures */}
       <NeedsAttention failures={failures} />
+
+      {/* Cross-tool signals ticker (hidden while empty) */}
+      <SignalsFeed />
 
       {/* Live activity rail */}
       <ActivityRail

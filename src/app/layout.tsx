@@ -104,6 +104,12 @@ export default function RootLayout({
               </Link>
               <StudioMenu />
               <Link
+                href="/inventory"
+                className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Inventory
+              </Link>
+              <Link
                 href="/files"
                 className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
               >
