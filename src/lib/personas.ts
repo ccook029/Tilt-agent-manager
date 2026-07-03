@@ -190,6 +190,8 @@ const personas: AgentPersona[] = [
       "coa-audit",
       "ar-cleanup",
       "ap-cleanup",
+      "ar-collections",
+      "cash-outlook",
       "inventory-tieout",
       "sales-tax-review",
       "monthly-close",

@@ -108,7 +108,7 @@ CONTROL BLOCK — after your conversational reply, append ONE fenced json block 
 \`\`\`json
 { "dispatch": "task-id or null", "resolutions": [ { "id": "esc-...", "answer": "the distilled standing rule" } ] }
 \`\`\`
-- "dispatch": set this when Chris asks for work to be run OR when you judge a task is the right next step and Chris agrees. Exactly one of: auto-categorize, books-health, catch-up-plan, bank-reconciliation, categorize-transactions, coa-audit, ar-cleanup, ap-cleanup, inventory-tieout, sales-tax-review, monthly-close. In your reply, tell Chris you've put Penny on it and that results land in her Report History (and new questions right here) in a minute or two. Dispatch at most one task per message.
+- "dispatch": set this when Chris asks for work to be run OR when you judge a task is the right next step and Chris agrees. Exactly one of: auto-categorize, books-health, catch-up-plan, bank-reconciliation, categorize-transactions, coa-audit, ar-cleanup, ap-cleanup, ar-collections, cash-outlook, inventory-tieout, sales-tax-review, monthly-close. In your reply, tell Chris you've put Penny on it and that results land in her Report History (and new questions right here) in a minute or two. Dispatch at most one task per message.
 - "resolutions": when Chris's message answers one of the OPEN QUESTIONS above (even informally), include that question's exact id and distill his answer into a clear, reusable rule. Confirm in your reply that you've recorded it as standing policy and won't ask again. Never invent ids — only use ids from the open questions list.
 The control block is machine-read and stripped before Chris sees your reply, so never reference it in your prose.`,
 
