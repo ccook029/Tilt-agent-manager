@@ -16,6 +16,7 @@ import { useRunPipeline } from "@/components/run-pipeline";
 import NeedsAttention, { type Failure } from "@/components/needs-attention";
 import AttentionStrip from "@/components/attention-strip";
 import SignalsFeed from "@/components/signals-feed";
+import ProgressMetrics from "@/components/progress-metrics";
 import { SearchIcon } from "@/components/icons";
 import {
   AgentCardBody,
@@ -248,6 +249,9 @@ export default function DashboardPage() {
 
       {/* Needs attention — recent failures */}
       <NeedsAttention failures={failures} />
+
+      {/* Books cleanup burn-down + tallies (owner-only, hidden while empty) */}
+      <ProgressMetrics />
 
       {/* Cross-tool signals ticker (hidden while empty) */}
       <SignalsFeed />
