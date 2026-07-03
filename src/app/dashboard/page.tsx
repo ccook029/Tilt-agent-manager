@@ -45,6 +45,8 @@ interface AgentSummary extends AgentCardData {
 const MotionLink = motion.create(Link);
 const ORDER_KEY = "tilt.dashboard.order";
 const PINNED_KEY = "tilt.dashboard.pinned";
+// Finance agents only the accounting owner may see.
+const ACCOUNTING_IDS = ["accounting", "accounting-manager"];
 
 type StatusFilter = "all" | "active" | "standby";
 
@@ -62,6 +64,17 @@ export default function DashboardPage() {
     personas.map((p) => p.agentId)
   );
   const [pinned, setPinned] = useState<string[]>([]);
+  // Non-owners don't see the CFO/Penny cards (the routes are gated too).
+  const [hideAccounting, setHideAccounting] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/os/me")
+      .then((r) => r.json())
+      .then((d) =>
+        setHideAccounting(Boolean(d.authEnabled) && !d.isAccountingOwner)
+      )
+      .catch(() => {});
+  }, []);
 
   // Restore saved order + pins after mount (avoids SSR mismatch).
   useEffect(() => {
@@ -172,8 +185,13 @@ export default function DashboardPage() {
 
   // Ordered persona ids that currently exist.
   const orderedIds = useMemo(
-    () => order.filter((id) => personaById.has(id)),
-    [order, personaById]
+    () =>
+      order.filter(
+        (id) =>
+          personaById.has(id) &&
+          !(hideAccounting && ACCOUNTING_IDS.includes(id))
+      ),
+    [order, personaById, hideAccounting]
   );
 
   const filteredIds = useMemo(() => {

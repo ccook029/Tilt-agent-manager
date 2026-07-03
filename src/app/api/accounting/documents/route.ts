@@ -9,13 +9,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDocuments, saveDocument, deleteDocument } from "@/lib/documents";
 import { resolveEscalation } from "@/lib/policy-ledger";
+import { guardAccountingOwner } from "@/lib/os-identity";
 
 export const maxDuration = 60;
 
 const ACCEPTED = [".xlsx", ".xls", ".csv", ".txt"];
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // Vercel body limit is ~4.5MB
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const guard = await guardAccountingOwner(request);
+  if (guard) return guard;
+
   const docs = await getDocuments();
   return NextResponse.json({
     ok: true,
@@ -31,6 +35,9 @@ export async function GET() {
 }
 
 export async function DELETE(request: NextRequest) {
+  const guard = await guardAccountingOwner(request);
+  if (guard) return guard;
+
   const id = request.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
   const removed = await deleteDocument(id);
@@ -38,6 +45,9 @@ export async function DELETE(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const guard = await guardAccountingOwner(request);
+  if (guard) return guard;
+
   try {
     const form = await request.formData();
     const file = form.get("file");

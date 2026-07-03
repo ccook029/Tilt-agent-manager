@@ -6,14 +6,18 @@
 // scope/token problem (401/403) apart from a data-center mismatch (404 / wrong
 // host). No Claude call, no email — returns instantly. Safe to delete after setup.
 // ---------------------------------------------------------------------------
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { fetchBooksSnapshot, isMcpConfigured } from "@/lib/zoho-books";
 import { getAccessToken } from "@/lib/zoho";
 import { isInboxConfigured, fetchInteracDetailed } from "@/lib/email-inbox";
+import { guardAccountingOwner } from "@/lib/os-identity";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const guard = await guardAccountingOwner(request);
+  if (guard) return guard;
+
   // Deploy stamp — proves which build is answering. Vercel injects the SHA.
   const deploy = {
     commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "(local/dev)",

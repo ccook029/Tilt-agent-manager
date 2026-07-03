@@ -184,6 +184,29 @@ server-to-server signal pushes, a different job than human login.
 5. **Later hardening:** KV-backed token denylist for true logout/revocation,
    KV rate limiting, password policy, admin login audit log.
 
+## Accounting access & question delegation (added 2026-07-03)
+
+The first real use of per-person identity. Accounting is the most sensitive
+surface, so it gets a role on top of the shared login:
+
+- **Accounting owner** (Chris) — set `ACCOUNTING_OWNER_EMAILS` (comma-separated
+  staff emails; `ACCOUNTING_OWNER_STAFF_IDS` is a fallback). Only the owner can
+  open the CFO (Sterling) and Penny agents, the `/questions` console, and the
+  `/api/accounting/*` + `/api/accounting-manager/run` routes. The shared-passcode
+  session (id 0) always counts as the owner. Unset ⇒ unrestricted (prior
+  behavior), so it's opt-in and can't silently lock anyone out.
+- **Delegation** — the owner can assign any open question to another staff
+  member (`assigneeEmail` on the escalation). That person — otherwise blocked
+  from accounting — sees only their assigned questions at `/questions` (served
+  by `/api/my-questions`, scoped to their session email) and can answer them;
+  their answer resolves the question and is recorded as policy under their name.
+
+Identity plumbing: `src/lib/os-identity.ts` keeps a KV staff directory
+(populated at email login), resolves the session cookie → `StaffProfile`, and
+exposes `isAccountingOwner()` + `guardAccountingOwner()`. `/api/os/me` tells the
+UI which role it's rendering for (hiding the CFO/Penny cards from non-owners).
+Requires per-person login (`TILTWEB_URL`) so staff carry real emails.
+
 ### Non-goals / future
 
 - Roles/RBAC: `admin_users.role` exists but is unenforced; the OS treats

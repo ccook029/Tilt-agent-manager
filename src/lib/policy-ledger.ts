@@ -59,8 +59,16 @@ export interface Escalation {
   status: "open" | "resolved";
   raisedAt: string;
   resolvedAt?: string;
-  /** Chris's answer, once given. */
+  /** The answer, once given. */
   answer?: string;
+  /** Who answered it (defaults to the accounting owner). */
+  answeredBy?: string;
+  /** Delegation: the owner can hand a question to another staff member to
+   * answer. Stored by email so the assignee's session can claim it. */
+  assigneeEmail?: string;
+  assigneeName?: string;
+  assignedBy?: string;
+  assignedAt?: string;
 }
 
 // ---- Policies -------------------------------------------------------------
@@ -122,6 +130,50 @@ export async function getOpenEscalations(): Promise<Escalation[]> {
   return (await getEscalations()).filter((e) => e.status === "open");
 }
 
+/** Open questions delegated to a given person (matched by email). */
+export async function getEscalationsAssignedTo(
+  email: string
+): Promise<Escalation[]> {
+  const target = email.trim().toLowerCase();
+  if (!target) return [];
+  return (await getEscalations()).filter(
+    (e) => e.status === "open" && e.assigneeEmail?.toLowerCase() === target
+  );
+}
+
+/**
+ * Delegate (or un-delegate) an open question to another staff member so they
+ * can answer it. Pass `assignee: null` to clear the assignment.
+ */
+export async function assignEscalation(
+  escalationId: string,
+  assignee: { email: string; name: string } | null,
+  assignedBy: string
+): Promise<Escalation | null> {
+  const escalations = await getEscalations();
+  const idx = escalations.findIndex((e) => e.id === escalationId);
+  if (idx === -1) return null;
+
+  if (assignee) {
+    escalations[idx] = {
+      ...escalations[idx],
+      assigneeEmail: assignee.email.trim().toLowerCase(),
+      assigneeName: assignee.name.trim() || assignee.email.trim(),
+      assignedBy,
+      assignedAt: new Date().toISOString(),
+    };
+  } else {
+    const { ...rest } = escalations[idx];
+    delete rest.assigneeEmail;
+    delete rest.assigneeName;
+    delete rest.assignedBy;
+    delete rest.assignedAt;
+    escalations[idx] = rest;
+  }
+  await kv.set(ESCALATION_KEY, escalations);
+  return escalations[idx];
+}
+
 /** Raise a new open question for Chris. De-dupes on identical question text. */
 export async function addEscalations(
   items: Array<{
@@ -166,7 +218,8 @@ export async function addEscalations(
  */
 export async function resolveEscalation(
   escalationId: string,
-  answer: string
+  answer: string,
+  answeredBy = "Chris Cook"
 ): Promise<AccountingPolicy | null> {
   const escalations = await getEscalations();
   const idx = escalations.findIndex((e) => e.id === escalationId);
@@ -177,6 +230,7 @@ export async function resolveEscalation(
     status: "resolved",
     resolvedAt: new Date().toISOString(),
     answer,
+    answeredBy,
   };
   await kv.set(ESCALATION_KEY, escalations);
 
@@ -185,6 +239,6 @@ export async function resolveEscalation(
     rule: `${escalations[idx].question} → ${answer}`,
     category: "general",
     context: escalations[idx].reason,
-    decidedBy: "Chris Cook",
+    decidedBy: answeredBy,
   });
 }

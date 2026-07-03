@@ -5,12 +5,16 @@
 //   executed  = real writes to Zoho Books (reversible via uncategorize)
 //   proposed  = dry-run decisions or guardrail skips — nothing was written
 // ---------------------------------------------------------------------------
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getRecentActions } from "@/lib/action-log";
+import { guardAccountingOwner } from "@/lib/os-identity";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const guard = await guardAccountingOwner(request);
+  if (guard) return guard;
+
   const recent = await getRecentActions(200);
   const executed = recent.filter((a) => a.mode === "executed");
   const proposed = recent.filter((a) => a.mode === "proposed");

@@ -21,6 +21,7 @@ import { generateReportPDF } from "@/lib/pdf";
 import { runAccountingCycle, runWorkerTask } from "@/lib/accounting-loop";
 import { runCategorizationBatch } from "@/lib/accounting-execute";
 import { addEscalations } from "@/lib/policy-ledger";
+import { guardAccountingOwner } from "@/lib/os-identity";
 import workerConfig from "@/agents/accounting-agent.config";
 
 export const maxDuration = 300;
@@ -48,6 +49,9 @@ const TASK_LABELS: Record<string, string> = {
 };
 
 export async function GET(request: NextRequest) {
+  const guard = await guardAccountingOwner(request);
+  if (guard) return guard;
+
   const task = request.nextUrl.searchParams.get("task") ?? "books-health";
   const fake = new NextRequest(request.url, {
     method: "POST",
@@ -58,6 +62,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const guard = await guardAccountingOwner(request);
+  if (guard) return guard;
+
   try {
     const body = await request.json();
     const {

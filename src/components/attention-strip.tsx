@@ -15,6 +15,7 @@ interface ProgressPoint {
 
 export default function AttentionStrip() {
   const [openCount, setOpenCount] = useState<number | null>(null);
+  const [assignedCount, setAssignedCount] = useState<number>(0);
   const [latest, setLatest] = useState<ProgressPoint | null>(null);
   const [previous, setPrevious] = useState<ProgressPoint | null>(null);
 
@@ -26,8 +27,17 @@ export default function AttentionStrip() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ mode: "list" }),
         });
+        // 403 for non-owners → data.open is undefined → count stays 0.
         const data = await res.json();
         setOpenCount((data.open ?? []).length);
+      } catch {
+        /* ignore */
+      }
+      try {
+        // Questions delegated to whoever is signed in (owner or not).
+        const res = await fetch("/api/my-questions");
+        const data = await res.json();
+        setAssignedCount((data.questions ?? []).length);
       } catch {
         /* ignore */
       }
@@ -44,8 +54,9 @@ export default function AttentionStrip() {
   }, []);
 
   const showQuestions = (openCount ?? 0) > 0;
+  const showAssigned = assignedCount > 0;
   const showProgress = latest !== null;
-  if (!showQuestions && !showProgress) return null;
+  if (!showQuestions && !showAssigned && !showProgress) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -58,6 +69,18 @@ export default function AttentionStrip() {
             {openCount}
           </span>
           decision{(openCount ?? 0) > 1 ? "s" : ""} waiting on you — answer here
+          <span aria-hidden>→</span>
+        </Link>
+      )}
+      {showAssigned && (
+        <Link
+          href="/questions"
+          className="flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-500/[0.08] px-4 py-2.5 text-sm text-cyan-200 transition-colors hover:bg-cyan-500/[0.15]"
+        >
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-xs font-bold">
+            {assignedCount}
+          </span>
+          question{assignedCount > 1 ? "s" : ""} assigned to you — answer here
           <span aria-hidden>→</span>
         </Link>
       )}
