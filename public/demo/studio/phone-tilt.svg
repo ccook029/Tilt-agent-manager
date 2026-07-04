@@ -1,0 +1,15 @@
+<svg width="1170" height="2532" viewBox="0 0 1170 2532" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="g" cx="72%" cy="22%" r="95%">
+      <stop offset="0%" stop-color="#00BFFF" stop-opacity="0.40"/>
+      <stop offset="44%" stop-color="#1A1A1A"/>
+      <stop offset="100%" stop-color="#0D0D0D"/>
+    </radialGradient>
+  </defs>
+  <rect width="1170" height="2532" fill="#0D0D0D"/>
+  <rect width="1170" height="2532" fill="url(#g)"/>
+  <path d="M820 -100 L1100 60 L360 2200 L80 2040 Z" fill="#00BFFF" opacity="0.12"/>
+  <text x="110" y="1980" font-family="'Barlow Condensed',sans-serif" font-size="150" font-weight="800" fill="#F5F5F5" letter-spacing="3">GO FULL</text>
+  <text x="110" y="2140" font-family="'Barlow Condensed',sans-serif" font-size="150" font-weight="800" fill="#00BFFF" letter-spacing="3">TILT</text>
+  <text x="1060" y="2470" text-anchor="end" font-family="'Barlow Condensed',sans-serif" font-size="56" font-weight="700" fill="#F5F5F5" letter-spacing="10">TILT</text>
+</svg>

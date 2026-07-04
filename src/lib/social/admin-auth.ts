@@ -1,15 +1,10 @@
 /**
- * Lightweight gate for the web-based admin/setup actions (migrate, sync).
+ * Lightweight gate for the web-based admin/setup actions (migrate, sync) until
+ * real auth lands in Phase 5.
  *
  * If ADMIN_TOKEN is set, the matching token must be supplied (header or body).
  * If it is NOT set, actions are allowed but the UI shows an "unprotected"
  * warning so the founder knows to set one.
- *
- * NOTE (post-absorption): now that the Social Studio runs natively inside
- * Tilt HQ, the hub's OS login middleware (TILT_OS_SESSION_SECRET — see
- * src/middleware.ts) is the real gate in front of every /api/social/* route.
- * ADMIN_TOKEN stays as an optional, opt-in second factor for the mutating
- * admin actions; leave it unset and the OS session is the only gate.
  */
 
 export function adminTokenConfigured(): boolean {

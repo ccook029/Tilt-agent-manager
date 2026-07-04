@@ -5,6 +5,8 @@ import {
   jsonb,
   timestamp,
   date,
+  integer,
+  boolean,
   pgEnum,
   index,
 } from "drizzle-orm/pg-core";
@@ -34,6 +36,11 @@ export const renderKindEnum = pgEnum("render_kind", [
 ]);
 
 export const gapStatusEnum = pgEnum("gap_status", ["open", "shot", "dismissed"]);
+
+export const announcementKindEnum = pgEnum("announcement_kind", [
+  "partner",
+  "ambassador",
+]);
 
 /**
  * assets — the tagged catalog. Source of truth for "what we can actually post".
@@ -143,6 +150,157 @@ export const gaps = pgTable("gaps", {
     .defaultNow(),
 });
 
+/**
+ * announcements — one-off uniform posts (partnership / ambassador welcomes),
+ * generated on demand from a name + uploaded logo/photo, outside the plan.
+ */
+export const announcements = pgTable("announcements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  kind: announcementKindEnum("kind").notNull(),
+  /** Partner name, or the ambassador's full name. */
+  name: text("name").notNull(),
+  /** Ambassador's team / partner tagline — shown under the name. */
+  subtitle: text("subtitle"),
+  /** Uploaded source in Blob: partner logo PNG, or ambassador photo. */
+  sourceUrl: text("source_url"),
+  copy: text("copy"),
+  hashtags: jsonb("hashtags").$type<string[]>().notNull().default([]),
+  cta: text("cta"),
+  /** Short sentence typeset ON the graphic itself (no emoji/hashtags). */
+  graphicLine: text("graphic_line"),
+  /** The finished composited 4:5 graphic in Blob. */
+  imageUrl: text("image_url"),
+  /** Partner only: the same graphic in 1:1 and 9:16 (rendered together). */
+  imageUrlSquare: text("image_url_square"),
+  imageUrlStory: text("image_url_story"),
+  /** Partner logo card placement — adjustable per card, re-composited instantly. */
+  logoPosition: text("logo_position").notNull().default("center"),
+  logoScale: text("logo_scale").notNull().default("md"),
+  /** Show the partner mark × TILT mark side by side instead of a single card. */
+  lockup: boolean("lockup").notNull().default(false),
+  /** Partner website — typeset on the graphic + offered to the caption CTA. */
+  website: text("website"),
+  /** Partner accent hex (#RRGGBB) — logo-card border + website line color. */
+  accentColor: text("accent_color"),
+  status: postStatusEnum("status").notNull().default("needs_review"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * fundraisers — blanket pre-order fundraiser posts. A team/org partners with
+ * Tilt to sell custom blankets; the founder uploads the finished blanket
+ * rendering, picks a pre-order deadline, and the agent writes the caption +
+ * builds the branded flyer. Price is fixed at $60/blanket (lives in code).
+ */
+export const fundraisers = pgTable("fundraisers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Organization / team name, e.g. "Jr. Lady Sting". */
+  orgName: text("org_name").notNull(),
+  /** Where supporters send payment / e-transfers. Shown on the flyer + caption. */
+  paymentEmail: text("payment_email"),
+  /** Pre-order deadline (varies per org — chosen with a date picker). */
+  deadline: date("deadline").notNull(),
+  /** Optional short note from the org to fold into the post. */
+  note: text("note"),
+  /** Uploaded blanket rendering in Blob — the hero image of the flyer. */
+  blanketUrl: text("blanket_url"),
+  copy: text("copy"),
+  hashtags: jsonb("hashtags").$type<string[]>().notNull().default([]),
+  cta: text("cta"),
+  /** Short sentence typeset ON the flyer itself (no emoji/hashtags). */
+  graphicLine: text("graphic_line"),
+  /** Free-form design feedback the founder wants folded into the next render. */
+  revisionNote: text("revision_note"),
+  /** The finished composited 4:5 flyer in Blob. */
+  imageUrl: text("image_url"),
+  status: postStatusEnum("status").notNull().default("needs_review"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * sock_designs — custom dress sock concepts Tilt pitches to teams/orgs. The
+ * founder uploads the org logo and names the team colors; the agent designs a
+ * dress sock mockup in those colors carrying the logo, then builds a Tilt-branded
+ * pitch flyer around that mockup to sell the concept to the org. Two images per
+ * row: the unbranded product mockup (designUrl) and the Tilt sales flyer
+ * (flyerUrl).
+ */
+export const sockDesigns = pgTable("sock_designs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Organization / team name, e.g. "Jr. Lady Sting". */
+  orgName: text("org_name").notNull(),
+  /** Team colors, freeform, e.g. "Yellow, silver, black". */
+  colors: text("colors"),
+  /** Optional style direction from the founder. */
+  note: text("note"),
+  /** Uploaded org logo / crest in Blob — featured on the sock. */
+  logoUrl: text("logo_url"),
+  /** The unbranded dress sock product mockup in Blob. */
+  designUrl: text("design_url"),
+  /** The Tilt-branded pitch flyer in Blob. */
+  flyerUrl: text("flyer_url"),
+  /** Pitch copy for the org (short B2B pitch). */
+  copy: text("copy"),
+  hashtags: jsonb("hashtags").$type<string[]>().notNull().default([]),
+  cta: text("cta"),
+  /** Short sentence typeset ON the pitch flyer itself (no emoji/hashtags). */
+  graphicLine: text("graphic_line"),
+  /** Free-form design feedback the founder wants folded into the next render. */
+  revisionNote: text("revision_note"),
+  status: postStatusEnum("status").notNull().default("needs_review"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * studio_assets — freeform, on-brand content generated in the Studio (desktop
+ * backgrounds, phone wallpapers, posters, banners, …). Unlike `posts`, these are
+ * not tied to the social plan/calendar; they're one-off brand pieces the founder
+ * asks for directly. Same hard rules apply: a real photo is the base whenever a
+ * subject is involved, and the TILT logo is composited by code, never AI-drawn.
+ */
+export const studioAssets = pgTable(
+  "studio_assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Preset key driving the canvas dimensions (desktop, phone, square, …). */
+    kind: text("kind").notNull(),
+    /** Short human label for the piece. */
+    title: text("title").notNull(),
+    /** The founder's freeform request, verbatim. */
+    prompt: text("prompt").notNull(),
+    /** The composed, guardrail-safe render brief sent to the image model. */
+    brief: text("brief"),
+    /** Optional display text rendered onto the image. */
+    displayText: text("display_text"),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    /** Real catalog photo used as the base, when a subject is involved. */
+    baseAssetId: uuid("base_asset_id").references(() => assets.id),
+    /** Whether the TILT logo was composited in. */
+    logo: boolean("logo").notNull().default(true),
+    renderUrl: text("render_url"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("studio_assets_kind_idx").on(t.kind)],
+);
+
 // ---- Shared TS types ----
 
 export type AssetTags = {
@@ -174,3 +332,15 @@ export type NewPost = typeof posts.$inferInsert;
 
 export type SkeletonRow = typeof planSkeleton.$inferSelect;
 export type Gap = typeof gaps.$inferSelect;
+
+export type Announcement = typeof announcements.$inferSelect;
+export type NewAnnouncement = typeof announcements.$inferInsert;
+
+export type Fundraiser = typeof fundraisers.$inferSelect;
+export type NewFundraiser = typeof fundraisers.$inferInsert;
+
+export type SockDesign = typeof sockDesigns.$inferSelect;
+export type NewSockDesign = typeof sockDesigns.$inferInsert;
+
+export type StudioAsset = typeof studioAssets.$inferSelect;
+export type NewStudioAsset = typeof studioAssets.$inferInsert;

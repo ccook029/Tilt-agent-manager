@@ -13,7 +13,12 @@ export async function runMigrations(): Promise<{ applied: true }> {
   const url = resolveDatabaseUrl();
   if (!url) throw new Error("No database URL set (add a Postgres store in Vercel).");
 
-  const client = postgres(url, { max: 1 });
+  const client = postgres(url, {
+    max: 1,
+    ssl: /sslmode=disable/i.test(url) || /@(localhost|127\.0\.0\.1)[:/]/i.test(url)
+      ? undefined
+      : "require",
+  });
   try {
     const dbm = drizzle(client);
     await migrate(dbm, {

@@ -5,13 +5,19 @@ import {
   posts,
   planSkeleton,
   gaps,
+  studioAssets,
   type Asset,
   type Post,
   type SkeletonRow,
   type Gap,
+  type StudioAsset,
 } from "./db/schema";
+
+type PostStatus = Post["status"];
+type GapStatus = Gap["status"];
 import { isDemoMode, getDemoAssets } from "./demo-data";
 import { DEMO_POSTS, DEMO_GAPS } from "./demo-plan";
+import { DEMO_STUDIO } from "./demo-studio";
 import { getActiveKbConfig } from "./kb/config";
 import { buildSkeleton, type SkeletonWeek } from "./planner/schedule";
 
@@ -107,8 +113,126 @@ export async function listPosts(): Promise<Post[]> {
   return db.select().from(posts).orderBy(asc(posts.scheduledDate)).limit(500);
 }
 
+export type PostWithAsset = Post & {
+  assetUrl: string | null;
+  assetType: "photo" | "video" | null;
+};
+
+/**
+ * Locked-window posts joined with their matched source asset, so the UI can
+ * show the real photo/clip as a preview until the final render exists.
+ */
+export async function listPostsWithAssets(): Promise<PostWithAsset[]> {
+  if (isDemoMode()) {
+    return DEMO_POSTS.map((p) => ({ ...p, assetUrl: null, assetType: null }));
+  }
+  const rows = await db
+    .select({ post: posts, assetUrl: assets.blobUrl, assetType: assets.type })
+    .from(posts)
+    .leftJoin(assets, eq(posts.assetId, assets.id))
+    .orderBy(asc(posts.scheduledDate))
+    .limit(500);
+  return rows.map((r) => ({
+    ...r.post,
+    assetUrl: r.assetUrl ?? null,
+    assetType: r.assetType ?? null,
+  }));
+}
+
 /** Open gaps = the founder's shot list. */
 export async function listGaps(): Promise<Gap[]> {
   if (isDemoMode()) return DEMO_GAPS;
   return db.select().from(gaps).orderBy(asc(gaps.weekStart)).limit(200);
+}
+
+// ---- Phase 5 review/approve mutations (posts + gaps) ----
+
+export async function getPostById(id: string): Promise<Post | null> {
+  if (isDemoMode()) return DEMO_POSTS.find((p) => p.id === id) ?? null;
+  const rows = await db.select().from(posts).where(eq(posts.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+/** Approve / send a post back to review. */
+export async function updatePostStatus(
+  id: string,
+  status: PostStatus,
+): Promise<Post | null> {
+  const rows = await db
+    .update(posts)
+    .set({ status, updatedAt: raw`now()` })
+    .where(eq(posts.id, id))
+    .returning();
+  return rows[0] ?? null;
+}
+
+/** Founder edits to the copy/hashtags/CTA. Only provided fields are touched. */
+export async function updatePostContent(
+  id: string,
+  fields: { copy?: string; hashtags?: string[]; cta?: string },
+): Promise<Post | null> {
+  const rows = await db
+    .update(posts)
+    .set({
+      ...(fields.copy !== undefined ? { copy: fields.copy } : {}),
+      ...(fields.hashtags !== undefined ? { hashtags: fields.hashtags } : {}),
+      ...(fields.cta !== undefined ? { cta: fields.cta } : {}),
+      // An edited post is no longer auto-approved — send it back to review.
+      status: "needs_review",
+      updatedAt: raw`now()`,
+    })
+    .where(eq(posts.id, id))
+    .returning();
+  return rows[0] ?? null;
+}
+
+/**
+ * Flip a manual-edit video post onto the Shotstack auto-cut pipeline. Keeps
+ * the copy/hashtags/CTA untouched; clears the visual so the next render pass
+ * cuts the branded reel automatically.
+ */
+export async function convertPostToAutoCut(id: string): Promise<Post | null> {
+  const post = (await db.select().from(posts).where(eq(posts.id, id)).limit(1))[0];
+  if (!post) return null;
+  if (post.renderKind !== "manual") {
+    throw new Error("Only manual-edit posts can switch to the auto-cut.");
+  }
+  if (!post.assetId) {
+    throw new Error("No matched clip — Regenerate the post first.");
+  }
+  const a = (await db.select().from(assets).where(eq(assets.id, post.assetId)).limit(1))[0];
+  if (a?.type !== "video") {
+    throw new Error("The matched asset isn't a video — the auto-cut needs a clip.");
+  }
+  const rows = await db
+    .update(posts)
+    .set({ renderKind: "shotstack", renderUrl: null, updatedAt: raw`now()` })
+    .where(eq(posts.id, id))
+    .returning();
+  return rows[0] ?? null;
+}
+
+/** Mark a gap shot / dismissed / reopened. */
+export async function updateGapStatus(
+  id: string,
+  status: GapStatus,
+): Promise<Gap | null> {
+  const rows = await db
+    .update(gaps)
+    .set({ status })
+    .where(eq(gaps.id, id))
+    .returning();
+  return rows[0] ?? null;
+}
+
+// ---- Studio (freeform brand content) ----
+
+/** Recent Studio generations, newest first. */
+export async function listStudioAssets(limit = 60): Promise<StudioAsset[]> {
+  if (isDemoMode()) return DEMO_STUDIO;
+  return db
+    .select()
+    .from(studioAssets)
+    .orderBy(desc(studioAssets.createdAt))
+    .limit(limit);
 }

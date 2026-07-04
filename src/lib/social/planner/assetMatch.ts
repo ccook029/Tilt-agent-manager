@@ -14,6 +14,12 @@ export function rankCandidates(slot: PostSlot, assets: Asset[]): RankedAsset[] {
   const ranked: RankedAsset[] = [];
 
   for (const a of assets) {
+    // Static/carousel posts can only be branded from photos — the nano
+    // pipeline can't treat video, so never offer videos for non-reel slots
+    // (a pillar-tagged video used to outrank photos and then silently skip
+    // rendering, leaving the post unbranded forever).
+    if (!wantVideo && a.type === "video") continue;
+
     const tags = a.tags ?? {};
     const pillars = tags.pillars ?? [];
     let score = 0;
@@ -55,5 +61,31 @@ export function rankCandidates(slot: PostSlot, assets: Asset[]): RankedAsset[] {
     }
   }
 
-  return ranked.sort((a, b) => b.score - a.score).slice(0, 6);
+  const sorted = ranked.sort((a, b) => b.score - a.score);
+
+  // Reels can only be auto-cut from footage, so when the library has any
+  // video candidates, offer only those — a pillar-tagged photo's higher score
+  // used to win the slot and then sit unbranded forever (Shotstack can't cut
+  // a still). Photos remain the fallback when no clip fits at all; the brain
+  // then downgrades the post to a static treatment.
+  if (wantVideo && sorted.some((r) => r.asset.type === "video")) {
+    return sorted.filter((r) => r.asset.type === "video").slice(0, 6);
+  }
+
+  return sorted.slice(0, 6);
+}
+
+/**
+ * The render pipelines are type-bound: nano brands photos, shotstack cuts
+ * videos. If the brain pairs a kind with the wrong asset type, fix the kind so
+ * the post can actually render instead of being skipped on every pass.
+ */
+export function coerceRenderKind<K extends string | null>(
+  kind: K,
+  asset: Pick<Asset, "type"> | null | undefined,
+): K {
+  if (!asset) return kind;
+  if (kind === "shotstack" && asset.type === "photo") return "nano" as K;
+  if (kind === "nano" && asset.type === "video") return "shotstack" as K;
+  return kind;
 }

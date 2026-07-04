@@ -6,7 +6,7 @@ import { checkAdminToken, tokenFromRequest } from "@/lib/social/admin-auth";
  *
  * Takes the Self Client credentials + a freshly generated grant code and
  * exchanges them for a long-lived refresh token, which the founder then pastes
- * into Vercel as ZOHO_WORKDRIVE_REFRESH_TOKEN. This avoids needing a curl/terminal step.
+ * into Vercel as ZOHO_REFRESH_TOKEN. This avoids needing a curl/terminal step.
  *
  * Nothing is stored — the refresh token is returned to the caller only.
  */
@@ -76,7 +76,7 @@ export async function POST(req: Request) {
       ok: true,
       refreshToken: data.refresh_token,
       message:
-        "Copy this refresh token into Vercel as ZOHO_WORKDRIVE_REFRESH_TOKEN, then redeploy.",
+        "Copy this refresh token into Vercel as ZOHO_WORKDRIVE_REFRESH_TOKEN (or ZOHO_REFRESH_TOKEN if WorkDrive shares the same Zoho app), then redeploy.",
     });
   } catch (err) {
     return NextResponse.json(

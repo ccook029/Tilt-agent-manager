@@ -2,11 +2,11 @@ import { eq, and, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/social/db";
 import { posts, assets, type Post } from "@/lib/social/db/schema";
 import { mirrorToBlob } from "@/lib/social/blob";
-// Signals go straight into the hub's KV inbox now that the studio runs
-// natively inside HQ (no HTTP hop / TILT_HQ_URL indirection).
-import { postSignal } from "@/lib/signals";
 import { nanoEdit } from "./nano";
 import { overlayBranding, type RenderFormat } from "./overlay";
+import { isStaleRender } from "./version";
+import { submitReel, fetchReelResult, shotstackConfigured } from "./shotstack";
+import { postSignal } from "@/lib/signals";
 
 /**
  * Phase 3 static render pipeline.
@@ -61,9 +61,10 @@ export async function renderStaticPost(post: Post): Promise<RenderResult> {
     // 2) Code composites the TILT logo (never AI-rendered).
     const branded = await overlayBranding(edited.image, toFormat(post.format));
 
-    // 3) Upload + persist.
+    // 3) Upload + persist. Timestamped key so a re-render (e.g. after a logo
+    // or treatment change) never gets masked by a stale CDN-cached URL.
     const url = await mirrorToBlob({
-      key: `renders/${post.id}.png`,
+      key: `renders/${post.id}-${Date.now()}.png`,
       buffer: branded,
       contentType: "image/png",
     });
@@ -75,9 +76,14 @@ export async function renderStaticPost(post: Post): Promise<RenderResult> {
   }
 }
 
-/** Renders all nano posts that don't yet have a render_url. */
+/**
+ * Renders all nano posts that are missing an image OR carry one made with
+ * outdated branding (see RENDER_EPOCH in version.ts). Pass `force` to
+ * re-render everything regardless.
+ */
 export async function renderPendingStatics(opts?: {
   limit?: number;
+  force?: boolean;
   onProgress?: (m: string) => void;
 }): Promise<RenderResult[]> {
   const log = opts?.onProgress ?? (() => {});
@@ -89,7 +95,7 @@ export async function renderPendingStatics(opts?: {
 
   const results: RenderResult[] = [];
   for (const p of pending) {
-    if (p.renderUrl) {
+    if (p.renderUrl && !opts?.force && !isStaleRender(p.renderUrl)) {
       results.push({ postId: p.id, skipped: "already rendered" });
       continue;
     }
@@ -106,6 +112,96 @@ export async function renderPendingStatics(opts?: {
       headline: `${rendered} branded visual(s) rendered for upcoming posts`,
       detail: failed ? `${failed} render(s) failed` : undefined,
     }).catch(() => {});
+  }
+
+  return results;
+}
+
+/**
+ * Renders pending reels via Shotstack. Platform variants of the same slot
+ * (same asset + brief) share ONE render — credits are spent per piece, not per
+ * platform. All jobs are submitted up front (Shotstack renders concurrently),
+ * then collected and mirrored to Blob.
+ */
+export async function renderPendingReels(opts?: {
+  limit?: number;
+  force?: boolean;
+  onProgress?: (m: string) => void;
+}): Promise<RenderResult[]> {
+  const log = opts?.onProgress ?? (() => {});
+  const rows = await db
+    .select()
+    .from(posts)
+    .where(and(eq(posts.renderKind, "shotstack"), isNotNull(posts.assetId)))
+    .limit(opts?.limit ?? 24);
+
+  const pending = rows.filter(
+    (p) => opts?.force || !p.renderUrl || isStaleRender(p.renderUrl),
+  );
+  if (pending.length === 0) return [];
+
+  if (!shotstackConfigured()) {
+    return pending.map((p) => ({
+      postId: p.id,
+      skipped: "video pipeline not configured (SHOTSTACK_API_KEY)",
+    }));
+  }
+
+  const results: RenderResult[] = [];
+
+  // Group platform variants that share an asset + brief into one render job.
+  const groups = new Map<string, Post[]>();
+  for (const p of pending) {
+    const key = `${p.assetId}|${p.editBrief ?? ""}`;
+    const group = groups.get(key) ?? [];
+    group.push(p);
+    groups.set(key, group);
+  }
+
+  // Submit every group's job up front.
+  const jobs: { group: Post[]; jobId: string }[] = [];
+  for (const group of groups.values()) {
+    const lead = group[0];
+    const a = (
+      await db.select().from(assets).where(eq(assets.id, lead.assetId!)).limit(1)
+    )[0];
+    if (!a?.blobUrl || a.type !== "video") {
+      for (const p of group) {
+        results.push({ postId: p.id, skipped: "matched asset is not a video" });
+      }
+      continue;
+    }
+    try {
+      log(`  ▶ submitting reel · ${lead.scheduledDate} · ${lead.pillar}…`);
+      const jobId = await submitReel({
+        videoUrl: a.blobUrl,
+        caption: lead.cta ?? undefined,
+      });
+      jobs.push({ group, jobId });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      for (const p of group) results.push({ postId: p.id, error });
+    }
+  }
+
+  // Collect finished renders; one URL persisted across the whole group.
+  for (const job of jobs) {
+    try {
+      const bytes = await fetchReelResult(job.jobId);
+      const url = await mirrorToBlob({
+        key: `renders/${job.group[0].id}-${Date.now()}.mp4`,
+        buffer: bytes,
+        contentType: "video/mp4",
+      });
+      for (const p of job.group) {
+        await db.update(posts).set({ renderUrl: url }).where(eq(posts.id, p.id));
+        results.push({ postId: p.id, renderUrl: url });
+      }
+      log(`  ✔ reel done · ${job.group[0].scheduledDate} · ${job.group[0].pillar}`);
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      for (const p of job.group) results.push({ postId: p.id, error });
+    }
   }
 
   return results;

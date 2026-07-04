@@ -23,11 +23,21 @@ type Status = {
   } | null;
 };
 
+type CheckResult = {
+  key: string;
+  label: string;
+  ok: boolean;
+  skipped?: boolean;
+  detail: string;
+};
+
 export default function SetupPage() {
   const [status, setStatus] = useState<Status | null>(null);
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
+  const [preflight, setPreflight] = useState<CheckResult[] | null>(null);
+  const [preflightReady, setPreflightReady] = useState(false);
 
   const addLog = (m: string) =>
     setLog((l) => [`${new Date().toLocaleTimeString()}  ${m}`, ...l]);
@@ -54,17 +64,50 @@ export default function SetupPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...body, token: token || undefined }),
       });
-      const data = await res.json();
+      const raw = await res.text();
+      let data: { ok?: boolean; error?: unknown; message?: string; summary?: unknown } = {};
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        // Platform errors (timeouts, crashes) can return plain text/HTML.
+        addLog(`✗ ${label} failed: HTTP ${res.status} — ${raw.slice(0, 300)}`);
+        return;
+      }
       if (data.ok) {
         addLog(`✓ ${label} — ${summarize(data)}`);
       } else {
-        addLog(`✗ ${label} failed: ${data.error}`);
+        addLog(`✗ ${label} failed: HTTP ${res.status} — ${errText(data.error)}`);
       }
     } catch (e) {
       addLog(`✗ ${label} error: ${e}`);
     } finally {
       setBusy(null);
       refresh();
+    }
+  }
+
+  async function runPreflight() {
+    setBusy("Preflight");
+    addLog("Running preflight checks…");
+    try {
+      const res = await fetch("/api/social/admin/preflight", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token: token || undefined }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setPreflight(data.checks ?? []);
+        setPreflightReady(Boolean(data.ready));
+        const failed = (data.checks ?? []).filter((c: CheckResult) => !c.ok && !c.skipped).length;
+        addLog(failed === 0 ? "✓ Preflight: all configured checks passed" : `✗ Preflight: ${failed} check(s) failing`);
+      } else {
+        addLog(`✗ Preflight failed: ${errText(data.error)}`);
+      }
+    } catch (e) {
+      addLog(`✗ Preflight error: ${e}`);
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -84,7 +127,7 @@ export default function SetupPage() {
         <div
           style={{
             border: "1px solid var(--tilt-cyan)",
-            background: "rgba(0,214,255,0.08)",
+            background: "rgba(0,191,255,0.08)",
             borderRadius: 10,
             padding: "12px 16px",
             margin: "8px 0 4px",
@@ -135,8 +178,57 @@ export default function SetupPage() {
         />
       </div>
 
+      {/* Preflight — live verification of every integration */}
+      <h2 style={{ fontSize: "1rem", marginTop: 24 }}>Preflight check</h2>
+      <p style={{ color: "var(--tilt-muted)", fontSize: "0.85rem" }}>
+        Actively tests each connection (not just whether a secret is present):
+        the database + schema, the Claude key, Blob, WorkDrive auth/folder/download,
+        Gemini, and Shotstack. Run it after each secret change to see exactly what
+        works.
+      </p>
+      <button
+        style={btnStyle(busy === "Preflight", true)}
+        disabled={busy !== null || status?.demoMode}
+        onClick={runPreflight}
+      >
+        {busy === "Preflight" ? "Checking…" : "Run preflight checks"}
+      </button>
+
+      {preflight && (
+        <div style={{ marginTop: 14 }}>
+          {preflightReady && (
+            <div className="preview-note" style={{ borderColor: "#29c467", background: "rgba(41,196,103,0.08)" }}>
+              ✓ All configured integrations are live — you&apos;re ready to sync and plan.
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+            {preflight.map((c) => (
+              <div
+                key={c.key}
+                style={{
+                  border: "1px solid var(--tilt-mid-gray)",
+                  borderRadius: 8,
+                  padding: "10px 12px",
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "flex-start",
+                }}
+              >
+                <span style={{ fontSize: "1rem", lineHeight: 1.4, color: c.skipped ? "var(--tilt-muted)" : c.ok ? "#29c467" : "#ff6a6a" }}>
+                  {c.skipped ? "—" : c.ok ? "✓" : "✗"}
+                </span>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{c.label}</div>
+                  <div style={{ fontSize: "0.78rem", color: "var(--tilt-muted)" }}>{c.detail}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Step 2 — initialize DB */}
-      <h2 style={{ fontSize: "1rem", marginTop: 20 }}>2 · Create the database</h2>
+      <h2 style={{ fontSize: "1rem", marginTop: 24 }}>2 · Create the database</h2>
       <p style={{ color: "var(--tilt-muted)", fontSize: "0.85rem" }}>
         {status?.dbInitialized
           ? "✓ Database is initialized."
@@ -224,9 +316,18 @@ export default function SetupPage() {
           disabled={!status?.dbInitialized || busy !== null}
           onClick={() => post("/api/social/admin/render", {}, "Render visuals")}
         >
-          Render visuals (needs Blob + Gemini)
+          Render visuals (Blob + Gemini; reels need Shotstack)
         </button>
       </div>
+
+      {/* Studio — freeform brand content */}
+      <h2 style={{ fontSize: "1rem", marginTop: 28 }}>5 · Studio (anytime)</h2>
+      <p style={{ color: "var(--tilt-muted)", fontSize: "0.85rem" }}>
+        Need a one-off branded piece — a desktop background, a wallpaper, a
+        poster? The <Link href="/studio/social/studio">Studio</Link> generates any Tilt-branded
+        content on request, using the same brand knowledge and your real photo
+        library. Needs Blob + Gemini (Claude optional, for a sharper brief).
+      </p>
 
       {/* Activity log */}
       {log.length > 0 && (
@@ -257,6 +358,13 @@ function summarize(data: { message?: string; summary?: unknown }): string {
   if (data.message) return data.message;
   if (data.summary) return JSON.stringify(data.summary);
   return "done";
+}
+
+/** Errors can be strings (our routes) or objects (Vercel platform errors). */
+function errText(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error == null) return "unknown error";
+  return JSON.stringify(error);
 }
 
 function Check({ ok, label }: { ok?: boolean; label: string }) {
