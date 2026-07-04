@@ -56,7 +56,13 @@ just confirm. Blob and Postgres are new for the absorbed modules.
 | `OS_SHARED_PASSCODE` | any passphrase | optional; a shared login to use before per-person login is live |
 | `ACCOUNTING_OWNER_STAFF_IDS` | (blank) | optional fallback if an email-match ever misses |
 
-### 2b. New — carry over from the OLD Social Studio project (now `/studio/social`)
+### 2b. New — carry over from the OLD Social Studio project (now `/studio/social` + the Design Studio builders)
+
+The **full** social app is now absorbed: the content planner (`/studio/social`)
+**and** the three staff builders — Blanket Fundraiser (`/studio/blanket`),
+SOX Creator (`/studio/sox`), and Announcements (`/studio/announcements`). They
+all share the same keys below (Claude for copy, Gemini for the flyer renders,
+Blob to store the image, Postgres to save the draft).
 
 Copy these from the tilt-social-media-manager Vercel project:
 
@@ -72,6 +78,11 @@ Copy these from the tilt-social-media-manager Vercel project:
 | `ANTHROPIC_BRAIN_MODEL` / `ANTHROPIC_VISION_MODEL` | optional; default to your main model |
 | `SOCIAL_PLAN_CRON` | optional; set to `true` to auto-regenerate the plan on Sundays |
 | `ADMIN_TOKEN` | optional; a second factor on the studio's setup buttons |
+| `SHOTSTACK_API_KEY` / `SHOTSTACK_ENV` | optional; only if you want auto-generated **video reels** in the plan. Leave unset and reels fall back to branded stills |
+
+> **Blob without a token:** if you added the Blob store from the Vercel
+> dashboard, it connects via OIDC (`BLOB_STORE_ID` + a runtime token) and no
+> `BLOB_READ_WRITE_TOKEN` is needed — the code accepts either.
 
 > WorkDrive is a **separate Zoho app** from your Books/Inventory one. If you
 > only have one Zoho app, you can leave the `ZOHO_WORKDRIVE_*` vars unset and
