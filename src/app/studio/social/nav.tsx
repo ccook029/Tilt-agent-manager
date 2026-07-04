@@ -11,6 +11,7 @@ const TABS: { href: string; label: string; exact?: boolean }[] = [
   { href: "/studio/social", label: "Overview", exact: true },
   { href: "/studio/social/plan", label: "Plan" },
   { href: "/studio/social/posts", label: "Posts" },
+  { href: "/studio/social/studio", label: "Studio" },
   { href: "/studio/social/catalog", label: "Catalog" },
   { href: "/studio/social/gaps", label: "Gaps" },
   { href: "/studio/social/setup", label: "Setup" },

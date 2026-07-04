@@ -1,6 +1,6 @@
+import { CLAUDE_MODEL } from "@/lib/models";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { CLAUDE_MODEL } from "@/lib/models";
 import { BRAND, PILLARS } from "./brand";
 import type { AssetTags } from "./db/schema";
 
@@ -19,8 +19,6 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "",
 });
 
-// Defaults to the hub's central model switch (src/lib/models.ts); the
-// ANTHROPIC_VISION_MODEL env var stays as a per-module override.
 const VISION_MODEL = process.env.ANTHROPIC_VISION_MODEL ?? CLAUDE_MODEL;
 
 const TagSchema = z.object({

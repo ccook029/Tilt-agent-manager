@@ -3,10 +3,8 @@ import { db } from "@/lib/social/db";
 import { planSkeleton, posts, gaps, assets, type Asset } from "@/lib/social/db/schema";
 import { getActiveKbConfig } from "@/lib/social/kb/config";
 import { buildSkeleton, buildLockedSlots } from "./schedule";
-import { rankCandidates } from "./assetMatch";
+import { rankCandidates, coerceRenderKind } from "./assetMatch";
 import { generateSlot } from "@/lib/social/brain";
-// Signals go straight into the hub's KV inbox now that the studio runs
-// natively inside HQ (no HTTP hop / TILT_HQ_URL indirection).
 import { postSignal } from "@/lib/signals";
 
 /**
@@ -78,13 +76,14 @@ export async function generatePlan(opts?: {
       const { content } = await generateSlot(slot, kb, candidates);
 
       // Resolve matched asset (workdrive_id -> assets.id).
-      let assetId: string | null = null;
+      let matched: Asset | undefined;
       if (content.assetMatch.matchedWorkdriveId) {
-        const match = allAssets.find(
+        matched = allAssets.find(
           (a) => a.workdriveId === content.assetMatch.matchedWorkdriveId,
         );
-        assetId = match?.id ?? null;
       }
+      const assetId = matched?.id ?? null;
+      const renderKind = coerceRenderKind(content.assetMatch.renderKind, matched);
 
       // One post row per platform variant (matches the posts schema).
       for (const variant of content.platforms) {
@@ -98,7 +97,7 @@ export async function generatePlan(opts?: {
           cta: variant.cta,
           status: "needs_review",
           assetId,
-          renderKind: content.assetMatch.renderKind,
+          renderKind,
           editBrief: content.assetMatch.renderBrief,
         });
         summary.postsWritten++;

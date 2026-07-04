@@ -1,14 +1,14 @@
 /* ---------------------------------------------------------------------------
-   Social Studio module styles — ported from tilt-social-media-manager's
-   globals.css and scoped under .social-studio so nothing leaks into the hub's
-   Tailwind theme. The hub layout already provides fonts (Barlow / Barlow
-   Condensed), the dark background, and page chrome, so the source's html/body
-   and site-header/footer rules are intentionally dropped.
+   Social Studio module styles — regenerated from tilt-social-media-manager's
+   globals.css (main branch, full app) and scoped under .social-studio so nothing
+   leaks into the hub's Tailwind theme. The hub layout provides fonts (Barlow /
+   Barlow Condensed), the dark background, and page chrome, so the source's
+   html/body and site-header/nav/footer rules are dropped. Accent unified to the
+   hub cyan (#00d6ff).
 --------------------------------------------------------------------------- */
 
 .social-studio {
   --tilt-black: #0a0a0a;
-  /* Unified with the hub accent (was #00bfff). */
   --tilt-cyan: #00d6ff;
   --tilt-dark-gray: #101010;
   --tilt-mid-gray: #2a2a2e;
@@ -35,16 +35,14 @@
 }
 
 .social-studio h1 {
-  /* Slightly more compact than the standalone app — it lives inside HQ now. */
-  font-size: clamp(1.9rem, 4vw, 2.8rem);
+  font-size: clamp(2.2rem, 5vw, 3.6rem);
   margin: 0.2em 0 0.3em;
 }
 
 .social-studio .container {
-  /* The hub's <main> already constrains width (max-w-6xl) and pads the page. */
-  max-width: 100%;
-  margin: 0;
-  padding: 20px 0 48px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
 }
 
 .social-studio .tagline {
@@ -55,60 +53,23 @@
   font-size: 0.8rem;
 }
 
-/* Rendered inside the module (below the sub-nav) rather than across the top
-   of the whole site, so it gets module-friendly rounding + margin. */
 .social-studio .demo-banner {
-  background: rgba(0, 214, 255, 0.08);
-  color: var(--tilt-cyan);
-  border: 1px solid rgba(0, 214, 255, 0.28);
+  background: var(--tilt-cyan);
+  color: var(--tilt-black);
   text-align: center;
   font-family: "Barlow Condensed", sans-serif;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 0.82rem;
-  padding: 8px 12px;
-  border-radius: 10px;
-  margin: 14px 0 0;
+  padding: 7px 12px;
 }
 
-/* ---- Module sub-nav (replaces the source app's SiteHeader) ---- */
-.social-studio .module-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  border-bottom: 1px solid var(--tilt-mid-gray);
-  padding-bottom: 0;
-}
-
-.social-studio .module-nav a {
-  color: var(--tilt-text);
-  font-family: "Barlow Condensed", sans-serif;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 0.95rem;
-  padding: 6px 12px 8px;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: border-color 0.15s, color 0.15s;
-}
-
-.social-studio .module-nav a:hover {
-  color: var(--tilt-cyan);
-}
-
-.social-studio .module-nav a.active {
-  color: var(--tilt-cyan);
-  border-color: var(--tilt-cyan);
-}
-
-/* ---- Hero ---- */
 .social-studio .hero {
   position: relative;
   border: 1px solid var(--tilt-mid-gray);
   border-radius: 16px;
-  padding: 36px 32px;
+  padding: 48px 40px;
   background:
     radial-gradient(
       120% 140% at 100% 0%,
@@ -130,36 +91,24 @@
   line-height: 1.6;
 }
 
-/* Match the hub's primary button (rounded, cyan, sentence-case Barlow). */
 .social-studio .btn {
   display: inline-block;
   background: var(--tilt-cyan);
-  color: #000;
-  font-family: "Barlow", sans-serif;
-  font-weight: 600;
-  font-size: 0.9rem;
-  letter-spacing: 0;
-  padding: 9px 20px;
+  color: var(--tilt-black);
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 11px 22px;
   border-radius: 8px;
   border: none;
   cursor: pointer;
-  transition: background-color 0.15s;
-}
-
-.social-studio .btn:hover {
-  background: #33e0ff;
 }
 
 .social-studio .btn--ghost {
   background: transparent;
-  color: var(--tilt-text);
-  border: 1px solid var(--tilt-mid-gray);
-}
-
-.social-studio .btn--ghost:hover {
-  background: transparent;
-  border-color: var(--tilt-cyan);
   color: var(--tilt-cyan);
+  border: 1px solid var(--tilt-cyan);
 }
 
 .social-studio .btn-row {
@@ -322,7 +271,181 @@
   color: var(--tilt-cyan);
 }
 
-/* ---- Roadmap list ---- */
+.social-studio .hero--dash {
+  padding-bottom: 8px;
+}
+
+.social-studio .hero__logo {
+  height: 56px;
+  width: auto;
+  display: block;
+  margin-bottom: 14px;
+}
+
+.social-studio .dash {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr);
+  gap: 36px;
+  margin-top: 28px;
+}
+
+@media (max-width: 800px) {
+  .social-studio .dash { grid-template-columns: 1fr; }
+}
+
+.social-studio .dash__col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.social-studio .dash__heading {
+  font-size: 1rem;
+  margin: 0 0 4px;
+  color: var(--tilt-cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: "Barlow Condensed", sans-serif;
+}
+
+.social-studio .dash__muted {
+  color: var(--tilt-muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.social-studio .task {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--tilt-dark-gray);
+  border: 1px solid var(--tilt-mid-gray);
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-decoration: none;
+  color: var(--tilt-text);
+  transition: border-color 0.15s ease;
+}
+
+.social-studio a.task:hover { border-color: var(--tilt-cyan); }
+
+.social-studio .task--primary {
+  border-color: var(--tilt-cyan);
+  background: rgba(0, 214, 255, 0.06);
+}
+
+.social-studio .task--done {
+  border-color: rgba(41, 196, 103, 0.5);
+}
+
+.social-studio .task--done .task__count { color: #29c467; border-color: rgba(41, 196, 103, 0.5); }
+
+.social-studio .task__count {
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 700;
+  font-size: 1.3rem;
+  color: var(--tilt-cyan);
+  border: 1px solid var(--tilt-mid-gray);
+  border-radius: 8px;
+  min-width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.social-studio .task__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.social-studio .task__body span { color: var(--tilt-muted); font-size: 0.8rem; }
+
+.social-studio .task__go {
+  color: var(--tilt-cyan);
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.social-studio .steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.social-studio .step {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-left: 2px solid var(--tilt-mid-gray);
+  padding-left: 14px;
+  margin-left: 8px;
+  color: var(--tilt-muted);
+}
+
+.social-studio .step--done { border-left-color: rgba(41, 196, 103, 0.6); }
+
+.social-studio .step--done .step__mark { color: #29c467; }
+
+.social-studio .step--done strong { color: var(--tilt-text); }
+
+.social-studio .step--current { border-left-color: var(--tilt-cyan); }
+
+.social-studio .step--current .step__mark { color: var(--tilt-cyan); }
+
+.social-studio .step--current strong { color: var(--tilt-cyan); }
+
+.social-studio .step__mark { flex-shrink: 0; width: 16px; }
+
+.social-studio .step__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.social-studio .step__body strong { font-size: 0.88rem; }
+
+.social-studio .step__body span { font-size: 0.76rem; }
+
+.social-studio .dash-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.social-studio .dash-stat {
+  background: var(--tilt-dark-gray);
+  border: 1px solid var(--tilt-mid-gray);
+  border-radius: 10px;
+  padding: 12px 14px;
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.15s ease;
+}
+
+.social-studio .dash-stat:hover { border-color: var(--tilt-cyan); }
+
+.social-studio .dash-stat__num {
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 700;
+  font-size: 1.5rem;
+  color: var(--tilt-text);
+}
+
+.social-studio .dash-stat__label {
+  color: var(--tilt-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 .social-studio .roadmap {
   color: var(--tilt-muted);
   line-height: 1.9;
@@ -348,7 +471,6 @@
   vertical-align: middle;
 }
 
-/* ---- Posts ---- */
 .social-studio .post-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -378,6 +500,37 @@
   border-radius: 8px;
   border: 1px solid var(--tilt-mid-gray);
   display: block;
+}
+
+.social-studio .post-card__visual {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.social-studio .visual-note {
+  font-size: 0.7rem;
+  color: var(--tilt-muted);
+}
+
+.social-studio .visual-note__flag {
+  color: #ffb020;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.66rem;
+}
+
+.social-studio .visual-note--error {
+  color: #ff6b6b;
+}
+
+.social-studio .post-card__placeholder {
+  border: 1px dashed var(--tilt-mid-gray);
+  border-radius: 8px;
+  padding: 22px 12px;
+  text-align: center;
+  color: var(--tilt-muted);
+  font-size: 0.8rem;
 }
 
 .social-studio .post-card__copy {
@@ -420,8 +573,11 @@
   border-radius: 6px;
   color: var(--tilt-black);
 }
+
 .social-studio .platform--instagram { background: #e1306c; color: #fff; }
+
 .social-studio .platform--tiktok { background: #fff; color: #000; }
+
 .social-studio .platform--facebook { background: #1877f2; color: #fff; }
 
 .social-studio .status {
@@ -433,9 +589,12 @@
   border: 1px solid var(--tilt-mid-gray);
   color: var(--tilt-muted);
 }
-.social-studio .status--needs_review { color: #ffb020; border-color: rgba(255, 170, 0, 0.4); }
-.social-studio .status--approved { color: var(--tilt-cyan); border-color: rgba(0, 214, 255, 0.4); }
-.social-studio .status--published { color: #29c467; border-color: rgba(41, 196, 103, 0.4); }
+
+.social-studio .status--needs_review { color: #ffb020; border-color: rgba(255,170,0,0.4); }
+
+.social-studio .status--approved { color: var(--tilt-cyan); border-color: rgba(0, 214, 255,0.4); }
+
+.social-studio .status--published { color: #29c467; border-color: rgba(41,196,103,0.4); }
 
 .social-studio .render {
   font-size: 0.68rem;
@@ -447,10 +606,11 @@
   background: var(--tilt-mid-gray);
   color: var(--tilt-text);
 }
-.social-studio .render--shotstack { background: rgba(0, 214, 255, 0.15); color: var(--tilt-cyan); }
-.social-studio .render--manual { background: rgba(255, 170, 0, 0.12); color: #ffb020; }
 
-/* ---- Plan / skeleton ---- */
+.social-studio .render--shotstack { background: rgba(0, 214, 255,0.15); color: var(--tilt-cyan); }
+
+.social-studio .render--manual { background: rgba(255,170,0,0.12); color: #ffb020; }
+
 .social-studio .week-list {
   display: flex;
   flex-direction: column;
@@ -507,7 +667,86 @@
   color: #ffb020;
 }
 
-/* ---- Gaps ---- */
+.social-studio .week-progress {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.82rem;
+  color: var(--tilt-text);
+}
+
+.social-studio .week-progress a {
+  color: var(--tilt-cyan);
+  text-decoration: none;
+  font-size: 0.8rem;
+}
+
+.social-studio .week-progress a:hover { text-decoration: underline; }
+
+.social-studio .week-progress--banner {
+  margin-top: 16px;
+  background: rgba(0, 214, 255, 0.08);
+  border: 1px solid var(--tilt-cyan);
+  border-radius: 10px;
+  padding: 10px 16px;
+}
+
+.social-studio .locked-piece {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--tilt-black);
+  border: 1px solid var(--tilt-mid-gray);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.social-studio .locked-piece__thumb {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--tilt-mid-gray);
+  flex-shrink: 0;
+}
+
+.social-studio .locked-piece__thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tilt-muted);
+  font-size: 0.9rem;
+  background: var(--tilt-dark-gray);
+}
+
+.social-studio .locked-piece__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+
+.social-studio .locked-piece__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.social-studio .locked-piece__day {
+  font-size: 0.78rem;
+  color: var(--tilt-muted);
+  min-width: 86px;
+}
+
+.social-studio .locked-piece__platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .social-studio .gap-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -538,4 +777,153 @@
   font-size: 0.88rem;
   line-height: 1.45;
   margin: 0;
+}
+
+.social-studio .preview-note {
+  border: 1px solid var(--tilt-cyan);
+  background: rgba(0, 214, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 12px 0 4px;
+  font-size: 0.82rem;
+  color: var(--tilt-text);
+}
+
+.social-studio .action-error {
+  border: 1px solid rgba(255, 90, 90, 0.5);
+  background: rgba(255, 90, 90, 0.08);
+  color: #ff8a8a;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 12px 0 4px;
+  font-size: 0.82rem;
+}
+
+.social-studio .filter-pill {
+  background: var(--tilt-dark-gray);
+  border: 1px solid var(--tilt-mid-gray);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  color: var(--tilt-text);
+  cursor: pointer;
+}
+
+.social-studio .filter-pill--active {
+  background: var(--tilt-cyan);
+  color: var(--tilt-black);
+  border-color: var(--tilt-cyan);
+  font-weight: 600;
+}
+
+.social-studio .filter-pill__count {
+  opacity: 0.7;
+  font-size: 0.74rem;
+}
+
+.social-studio .post-card__actions {
+  border-top: 1px solid var(--tilt-mid-gray);
+  padding-top: 10px;
+  margin-top: 2px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.social-studio .act {
+  background: transparent;
+  border: 1px solid var(--tilt-mid-gray);
+  color: var(--tilt-text);
+  border-radius: 7px;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.social-studio .act:hover:not(:disabled) {
+  border-color: var(--tilt-cyan);
+  color: var(--tilt-cyan);
+}
+
+.social-studio .act:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.social-studio .act--primary {
+  background: var(--tilt-cyan);
+  border-color: var(--tilt-cyan);
+  color: var(--tilt-black);
+}
+
+.social-studio .act--primary:hover:not(:disabled) {
+  color: var(--tilt-black);
+  opacity: 0.9;
+}
+
+.social-studio .post-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.social-studio .post-edit__copy,
+.social-studio .post-edit__input {
+  width: 100%;
+  background: var(--tilt-black);
+  border: 1px solid var(--tilt-mid-gray);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--tilt-text);
+  font-size: 0.88rem;
+  font-family: inherit;
+}
+
+.social-studio .post-edit__copy {
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.social-studio .status--draft { color: var(--tilt-muted); border-color: var(--tilt-mid-gray); }
+
+.social-studio .status--gap-open { color: #ffb020; border-color: rgba(255, 170, 0, 0.4); }
+
+.social-studio .status--gap-shot { color: #29c467; border-color: rgba(41, 196, 103, 0.4); }
+
+.social-studio .status--gap-dismissed { color: var(--tilt-muted); border-color: var(--tilt-mid-gray); }
+
+/* ---------------------------------------------------------------------------
+   Hub-only additions — the module sub-nav (replaces the standalone SiteHeader)
+   and the demo banner tuned to the hub cyan. These classes don't exist in the
+   source app's globals, so they're appended after the scoped regeneration.
+--------------------------------------------------------------------------- */
+.social-studio .module-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--tilt-mid-gray);
+  margin-bottom: 8px;
+}
+
+.social-studio .module-nav a {
+  color: var(--tilt-text);
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.95rem;
+  padding: 6px 12px 8px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.social-studio .module-nav a:hover {
+  color: var(--tilt-cyan);
+}
+
+.social-studio .module-nav a.active {
+  color: var(--tilt-cyan);
+  border-color: var(--tilt-cyan);
 }

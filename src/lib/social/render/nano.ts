@@ -41,36 +41,21 @@ function guardrailPrompt(brief: NanoBrief): string {
     .join("\n");
 }
 
-/**
- * Edits a real photo via Nano Banana Pro. Returns PNG/JPEG bytes.
- * Throws if GEMINI_API_KEY is unset or the model returns no image.
- */
-export async function nanoEdit(params: {
-  sourceImage: Buffer;
-  sourceMimeType: string;
-  brief: NanoBrief;
-}): Promise<{ image: Buffer; mimeType: string }> {
+type GeminiPart =
+  | { text: string }
+  | { inline_data: { mime_type: string; data: string } };
+
+async function callImageModel(
+  parts: GeminiPart[],
+): Promise<{ image: Buffer; mimeType: string }> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
-    throw new Error("GEMINI_API_KEY is not set — the static render pipeline needs it.");
+    throw new Error("GEMINI_API_KEY is not set — image generation needs it.");
   }
 
   const url = `${API_BASE}/models/${GEMINI_IMAGE_MODEL}:generateContent?key=${key}`;
   const body = {
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: guardrailPrompt(params.brief) },
-          {
-            inline_data: {
-              mime_type: params.sourceMimeType || "image/jpeg",
-              data: params.sourceImage.toString("base64"),
-            },
-          },
-        ],
-      },
-    ],
+    contents: [{ role: "user", parts }],
     generationConfig: { responseModalities: ["IMAGE"] },
   };
 
@@ -80,7 +65,20 @@ export async function nanoEdit(params: {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(`Nano Banana request failed: ${res.status} ${await res.text()}`);
+    const detail = await res.text();
+    if (res.status === 429 || /RESOURCE_EXHAUSTED/i.test(detail)) {
+      throw new Error(
+        "Image credits are used up — the Google AI (Gemini) project behind image generation has no prepaid credits left. " +
+          "Top up billing at https://aistudio.google.com (Projects → Billing), then hit Redo graphic. " +
+          "Partnership graphics don't use image credits; this only affects photo-based designs.",
+      );
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(
+        "The Gemini API key was rejected — check GEMINI_API_KEY in Vercel project settings.",
+      );
+    }
+    throw new Error(`Nano Banana request failed: ${res.status} ${detail}`);
   }
 
   type Inline = { mime_type?: string; mimeType?: string; data?: string };
@@ -88,8 +86,8 @@ export async function nanoEdit(params: {
     candidates?: { content?: { parts?: { inline_data?: Inline; inlineData?: Inline }[] } }[];
   };
 
-  const parts = data.candidates?.[0]?.content?.parts ?? [];
-  for (const p of parts) {
+  const outParts = data.candidates?.[0]?.content?.parts ?? [];
+  for (const p of outParts) {
     const inline: Inline | undefined = p.inline_data ?? p.inlineData;
     const b64 = inline?.data;
     if (b64) {
@@ -100,4 +98,55 @@ export async function nanoEdit(params: {
     }
   }
   throw new Error("Nano Banana returned no image in the response.");
+}
+
+/**
+ * Low-level Nano Banana Pro call with an OPTIONAL source image. Callers own the
+ * prompt (and therefore the guardrails): the Studio wraps it for branded graphics
+ * with or without a real base photo. Built on the same REST call as nanoEdit.
+ */
+export async function nanoCall(params: {
+  prompt: string;
+  sourceImage?: Buffer;
+  sourceMimeType?: string;
+}): Promise<{ image: Buffer; mimeType: string }> {
+  const parts: GeminiPart[] = [{ text: params.prompt }];
+  if (params.sourceImage) {
+    parts.push({
+      inline_data: {
+        mime_type: params.sourceMimeType || "image/jpeg",
+        data: params.sourceImage.toString("base64"),
+      },
+    });
+  }
+  return callImageModel(parts);
+}
+
+/**
+ * Edits a real photo via Nano Banana Pro. Returns PNG/JPEG bytes.
+ * Throws if GEMINI_API_KEY is unset or the model returns no image.
+ */
+export async function nanoEdit(params: {
+  sourceImage: Buffer;
+  sourceMimeType: string;
+  brief: NanoBrief;
+}): Promise<{ image: Buffer; mimeType: string }> {
+  return callImageModel([
+    { text: guardrailPrompt(params.brief) },
+    {
+      inline_data: {
+        mime_type: params.sourceMimeType || "image/jpeg",
+        data: params.sourceImage.toString("base64"),
+      },
+    },
+  ]);
+}
+
+/**
+ * Generates a pure DESIGN graphic from text only (no source photo) — used for
+ * announcement layouts. The same hard rules apply: the prompt must never ask
+ * for players, products, scenes, or logos; logos are composited by code.
+ */
+export async function nanoGenerate(prompt: string): Promise<{ image: Buffer; mimeType: string }> {
+  return callImageModel([{ text: prompt }]);
 }

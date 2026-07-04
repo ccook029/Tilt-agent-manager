@@ -26,3 +26,16 @@ export function resolveDatabaseUrl(): string | undefined {
 export function hasDatabase(): boolean {
   return Boolean(resolveDatabaseUrl());
 }
+
+/**
+ * Whether Vercel Blob is usable. Two connection styles both work with the
+ * @vercel/blob SDK (v2): a classic read-write token, OR an OIDC connection
+ * (the dashboard default) where the deployment gets VERCEL_OIDC_TOKEN at runtime
+ * and the store is identified by BLOB_STORE_ID. The SDK auto-resolves either, so
+ * presence of *either* signal means Blob is configured.
+ */
+export function hasBlob(): boolean {
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const storeId = process.env.BLOB_STORE_ID;
+  return Boolean((token && token.trim()) || (storeId && storeId.trim()));
+}

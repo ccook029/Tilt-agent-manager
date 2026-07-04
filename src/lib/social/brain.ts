@@ -1,7 +1,7 @@
+import { CLAUDE_MODEL } from "@/lib/models";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { CLAUDE_MODEL } from "@/lib/models";
 import type { KbConfig } from "@/lib/social/kb/config";
 import type { PostSlot } from "@/lib/social/planner/schedule";
 import type { RankedAsset } from "@/lib/social/planner/assetMatch";
@@ -21,8 +21,6 @@ import { HARD_RULES, checkContentSafety } from "@/lib/social/brand";
  */
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" });
-// Defaults to the hub's central model switch (src/lib/models.ts); the
-// ANTHROPIC_BRAIN_MODEL env var stays as a per-module override.
 const BRAIN_MODEL = process.env.ANTHROPIC_BRAIN_MODEL ?? CLAUDE_MODEL;
 
 const PlatformCopy = z.object({
@@ -103,6 +101,7 @@ function buildUserPrompt(slot: PostSlot, candidates: RankedAsset[]): string {
     `Rules for asset selection:`,
     `- If a candidate fits: set assetMatch.matchedWorkdriveId to its workdriveId, set gap.isGap=false, and write a renderBrief.`,
     `  renderKind: "nano" for a static photo treatment, "shotstack" for a simple auto-assembled reel, "manual" for a hero/creative video edit.`,
+    `  renderKind must match the asset type: "shotstack"/"manual" only for video candidates, "nano" only for photos. If a reel slot has no video candidate, pick the best photo with renderKind "nano" (a branded vertical static) — or declare a gap if the slot truly needs footage.`,
     `- If nothing fits: set gap.isGap=true and describe the exact shot needed in gap.neededAsset (the founder's next shot), and matchedWorkdriveId=null.`,
     `Write hook + full copy + hashtags + CTA for EACH target platform.`,
   ].join("\n");

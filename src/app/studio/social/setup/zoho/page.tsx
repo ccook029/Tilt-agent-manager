@@ -55,7 +55,7 @@ export default function ZohoSetupPage() {
       <p style={{ color: "var(--tilt-muted)", maxWidth: 680 }}>
         A one-time step. Follow the guide, paste the three values below, and
         click <strong>Get refresh token</strong>. Copy the result into Vercel as{" "}
-        <code style={codeStyle}>ZOHO_WORKDRIVE_REFRESH_TOKEN</code>, then redeploy.
+        <code style={codeStyle}>ZOHO_REFRESH_TOKEN</code>, then redeploy.
       </p>
 
       <ol style={{ color: "var(--tilt-muted)", lineHeight: 1.8, maxWidth: 680 }}>
@@ -69,8 +69,8 @@ export default function ZohoSetupPage() {
         <li>
           Copy the <strong>Client ID</strong> and <strong>Client Secret</strong>{" "}
           into the fields below (and into Vercel as{" "}
-          <code style={codeStyle}>ZOHO_WORKDRIVE_CLIENT_ID</code> /{" "}
-          <code style={codeStyle}>ZOHO_WORKDRIVE_CLIENT_SECRET</code>).
+          <code style={codeStyle}>ZOHO_CLIENT_ID</code> /{" "}
+          <code style={codeStyle}>ZOHO_CLIENT_SECRET</code>).
         </li>
         <li>
           In the Self Client → <strong>Generate Code</strong> tab, set scope to{" "}
@@ -154,7 +154,7 @@ export default function ZohoSetupPage() {
       {result && (
         <div style={{ marginTop: 16 }}>
           <p style={{ color: "var(--tilt-cyan)", fontWeight: 600 }}>
-            ✓ Your refresh token — paste into Vercel as ZOHO_WORKDRIVE_REFRESH_TOKEN:
+            ✓ Your refresh token — paste into Vercel as ZOHO_REFRESH_TOKEN:
           </p>
           <pre
             style={{
@@ -170,8 +170,8 @@ export default function ZohoSetupPage() {
             {result}
           </pre>
           <p style={{ color: "var(--tilt-muted)", fontSize: "0.82rem" }}>
-            Then set <code style={codeStyle}>ZOHO_WORKDRIVE_CLIENT_ID</code>,{" "}
-            <code style={codeStyle}>ZOHO_WORKDRIVE_CLIENT_SECRET</code>, and{" "}
+            Then set <code style={codeStyle}>ZOHO_CLIENT_ID</code>,{" "}
+            <code style={codeStyle}>ZOHO_CLIENT_SECRET</code>, and{" "}
             <code style={codeStyle}>ZOHO_WORKDRIVE_ROOT_FOLDER_ID</code> (the
             TILT HOCKEY SHOOT folder) in Vercel and redeploy. Back to{" "}
             <Link href="/studio/social/setup">Setup</Link>.

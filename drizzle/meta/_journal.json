@@ -8,6 +8,62 @@
       "when": 1780602117036,
       "tag": "0000_dark_stingray",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781288933951,
+      "tag": "0001_wealthy_major_mapleleaf",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781290242036,
+      "tag": "0002_fresh_stark_industries",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781326752470,
+      "tag": "0003_studio_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781799424665,
+      "tag": "0004_fundraisers",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781800342329,
+      "tag": "0005_sock_designs",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781801077015,
+      "tag": "0006_revision_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782960620894,
+      "tag": "0007_announcement_layout",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783025104539,
+      "tag": "0008_announcement_partner_details",
+      "breakpoints": true
     }
   ]
 }

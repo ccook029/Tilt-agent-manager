@@ -42,11 +42,15 @@ let tokenCache: TokenCache | null = null;
  * DIFFERENT Zoho app, so prefer the ZOHO_WORKDRIVE_-prefixed vars and fall
  * back to the plain ZOHO_* names when they are not set.
  */
-export function workdriveEnv(name: "CLIENT_ID" | "CLIENT_SECRET" | "REFRESH_TOKEN"): string | undefined {
+export function workdriveEnv(
+  name: "CLIENT_ID" | "CLIENT_SECRET" | "REFRESH_TOKEN",
+): string | undefined {
   return process.env[`ZOHO_WORKDRIVE_${name}`] ?? process.env[`ZOHO_${name}`];
 }
 
-function requireWorkdriveEnv(name: "CLIENT_ID" | "CLIENT_SECRET" | "REFRESH_TOKEN"): string {
+function requireWorkdriveEnv(
+  name: "CLIENT_ID" | "CLIENT_SECRET" | "REFRESH_TOKEN",
+): string {
   const v = workdriveEnv(name);
   if (!v) {
     throw new Error(
@@ -70,8 +74,12 @@ async function getAccessToken(): Promise<string> {
     grant_type: "refresh_token",
   });
 
-  const res = await fetch(`${accountsDomain}/oauth/v2/token?${params}`, {
+  // Credentials go in the form body, not the query string — secrets in URLs
+  // get captured by proxy/access logs.
+  const res = await fetch(`${accountsDomain}/oauth/v2/token`, {
     method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: params.toString(),
   });
   if (!res.ok) {
     throw new Error(
@@ -98,14 +106,27 @@ const API_BASE =
   process.env.ZOHO_WORKDRIVE_API_BASE ??
   "https://www.zohoapis.com/workdrive/api/v1";
 
+// File CONTENT download is not always served from the JSON:API base; some data
+// centers serve it from a separate host. Configurable so it can be corrected
+// (e.g. https://download.zoho.com/v1/workdrive/download) without a code change.
+const DOWNLOAD_BASE =
+  process.env.ZOHO_WORKDRIVE_DOWNLOAD_BASE ?? `${API_BASE}/download`;
+
 async function workdriveFetch(path: string): Promise<Response> {
-  const token = await getAccessToken();
-  return fetch(`${API_BASE}${path}`, {
-    headers: {
-      Authorization: `Zoho-oauthtoken ${token}`,
-      Accept: "application/vnd.api+json",
-    },
-  });
+  const doFetch = async () =>
+    fetch(`${API_BASE}${path}`, {
+      headers: {
+        Authorization: `Zoho-oauthtoken ${await getAccessToken()}`,
+        Accept: "application/vnd.api+json",
+      },
+    });
+  let res = await doFetch();
+  if (res.status === 401) {
+    // Token revoked/invalidated before its cached expiry — refresh once & retry.
+    tokenCache = null;
+    res = await doFetch();
+  }
+  return res;
 }
 
 type WorkDriveApiResource = {
@@ -175,7 +196,18 @@ export async function listAllFiles(rootFolderId: string): Promise<WorkDriveFile[
   const files: WorkDriveFile[] = [];
 
   async function walk(folderId: string, path: string) {
-    const children = await listChildren(folderId, path);
+    let children: WorkDriveFile[];
+    try {
+      children = await listChildren(folderId, path);
+    } catch (err) {
+      // One unreadable/throttled subfolder must not abort the whole sync.
+      console.warn(
+        `WorkDrive: skipping folder "${path || folderId}" — ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return;
+    }
     for (const child of children) {
       if (child.isFolder) {
         await walk(child.id, child.path ?? child.name);
@@ -189,15 +221,116 @@ export async function listAllFiles(rootFolderId: string): Promise<WorkDriveFile[
   return files;
 }
 
+export type WorkdriveProbe = {
+  auth: { ok: boolean; detail: string };
+  folder: { ok: boolean; detail: string };
+  download: { ok: boolean; detail: string; skipped?: boolean };
+};
+
+const short = (e: unknown) =>
+  (e instanceof Error ? e.message : String(e)).slice(0, 240);
+
+/**
+ * Live diagnostics for the WorkDrive link, used by the preflight check. Tests
+ * the three things that actually break a real sync, in order, stopping at the
+ * first failure: (1) can we mint an access token (creds + region)? (2) can we
+ * read the root folder (folder id + scope)? (3) does the file-content download
+ * endpoint actually return bytes (the data-center download-host gotcha)?
+ */
+export async function probeWorkdrive(): Promise<WorkdriveProbe> {
+  const result: WorkdriveProbe = {
+    auth: { ok: false, detail: "not run" },
+    folder: { ok: false, detail: "not run" },
+    download: { ok: false, detail: "not run" },
+  };
+
+  try {
+    await getAccessToken();
+    result.auth = { ok: true, detail: "Access token minted from refresh token." };
+  } catch (e) {
+    result.auth = { ok: false, detail: short(e) };
+    return result;
+  }
+
+  const rootId = process.env.ZOHO_WORKDRIVE_ROOT_FOLDER_ID;
+  if (!rootId) {
+    result.folder = { ok: false, detail: "ZOHO_WORKDRIVE_ROOT_FOLDER_ID is not set." };
+    return result;
+  }
+
+  let firstFileId: string | undefined;
+  try {
+    const res = await workdriveFetch(
+      `/files/${rootId}/files?page%5Blimit%5D=5&page%5Boffset%5D=0`,
+    );
+    if (!res.ok) {
+      result.folder = {
+        ok: false,
+        detail: `Listing root folder failed: ${res.status} ${(await res.text()).slice(0, 160)}`,
+      };
+      return result;
+    }
+    const body = (await res.json()) as { data?: WorkDriveApiResource[] };
+    const rows = body.data ?? [];
+    firstFileId = rows.map((r) => toFile(r, "")).find((f) => !f.isFolder)?.id;
+    result.folder = {
+      ok: true,
+      detail: `Root folder readable (${rows.length} item(s) in first page).`,
+    };
+  } catch (e) {
+    result.folder = { ok: false, detail: short(e) };
+    return result;
+  }
+
+  if (!firstFileId) {
+    result.download = {
+      ok: true,
+      skipped: true,
+      detail: "No file in the first page to test the download endpoint.",
+    };
+    return result;
+  }
+
+  try {
+    const res = await fetch(`${DOWNLOAD_BASE}/${firstFileId}`, {
+      headers: { Authorization: `Zoho-oauthtoken ${await getAccessToken()}` },
+    });
+    const ct = res.headers.get("content-type") ?? "";
+    if (res.ok && !ct.includes("json") && !ct.includes("html")) {
+      result.download = { ok: true, detail: `Download endpoint returns bytes (content-type: ${ct || "unknown"}).` };
+    } else {
+      result.download = {
+        ok: false,
+        detail: `Download probe returned ${res.status} (${ct || "no content-type"}). If files won't download, set ZOHO_WORKDRIVE_DOWNLOAD_BASE for your data center.`,
+      };
+    }
+    // Don't drain the body.
+    try {
+      await res.body?.cancel();
+    } catch {
+      /* ignore */
+    }
+  } catch (e) {
+    result.download = { ok: false, detail: short(e) };
+  }
+
+  return result;
+}
+
 /** Downloads a file's raw bytes from WorkDrive. */
 export async function downloadFile(fileId: string): Promise<{
   buffer: Buffer;
   contentType: string;
 }> {
-  const token = await getAccessToken();
-  const res = await fetch(`${API_BASE}/download/${fileId}`, {
-    headers: { Authorization: `Zoho-oauthtoken ${token}` },
-  });
+  const doDownload = async () =>
+    fetch(`${DOWNLOAD_BASE}/${fileId}`, {
+      headers: { Authorization: `Zoho-oauthtoken ${await getAccessToken()}` },
+    });
+  let res = await doDownload();
+  if (res.status === 401) {
+    tokenCache = null;
+    res = await doDownload();
+  }
   if (!res.ok) {
     throw new Error(
       `WorkDrive download failed for ${fileId}: ${res.status} ${await res.text()}`,

@@ -44,8 +44,8 @@ export default async function CatalogPage({
           <p>Could not load the catalog.</p>
           <p style={{ fontSize: "0.8rem" }}>{error}</p>
           <p>
-            Set <code>DATABASE_URL</code>, then initialize and sync from{" "}
-            <Link href="/studio/social/setup">Setup</Link>.
+            Set <code>DATABASE_URL</code>, run <code>npm run db:migrate</code>,
+            then <code>npm run catalog:sync</code>.
           </p>
         </div>
       ) : (
@@ -64,12 +64,12 @@ export default async function CatalogPage({
             <FilterLink label="All" href="/studio/social/catalog" active={!typeFilter} />
             <FilterLink
               label="Photos"
-              href="/studio/social/catalog?type=photo"
+              href="/catalog?type=photo"
               active={typeFilter === "photo"}
             />
             <FilterLink
               label="Videos"
-              href="/studio/social/catalog?type=video"
+              href="/catalog?type=video"
               active={typeFilter === "video"}
             />
           </div>
@@ -78,8 +78,8 @@ export default async function CatalogPage({
             <div className="empty">
               <p>No assets yet.</p>
               <p>
-                Run a sync from <Link href="/studio/social/setup">Setup</Link>{" "}
-                to mirror the WorkDrive library and tag it.
+                Run <code>npm run catalog:sync</code> to mirror the WorkDrive
+                library and tag it.
               </p>
             </div>
           ) : (

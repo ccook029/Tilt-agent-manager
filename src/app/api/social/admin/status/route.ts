@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCatalogStats } from "@/lib/social/queries";
 import { adminTokenConfigured } from "@/lib/social/admin-auth";
 import { isDemoMode } from "@/lib/social/demo-data";
-import { hasDatabase } from "@/lib/social/env";
+import { hasDatabase, hasBlob } from "@/lib/social/env";
 import { workdriveEnv } from "@/lib/social/workdrive";
 
 /**
@@ -15,12 +15,13 @@ export async function GET() {
   const secrets = {
     database: hasDatabase(),
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
-    blob: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    blob: hasBlob(),
     workdrive: Boolean(
       workdriveEnv("REFRESH_TOKEN") &&
         workdriveEnv("CLIENT_ID") &&
         workdriveEnv("CLIENT_SECRET"),
     ),
+    gemini: Boolean(process.env.GEMINI_API_KEY),
   };
 
   const demo = isDemoMode();

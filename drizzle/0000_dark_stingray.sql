@@ -1,8 +1,8 @@
-CREATE TYPE "public"."asset_type" AS ENUM('photo', 'video');--> statement-breakpoint
-CREATE TYPE "public"."gap_status" AS ENUM('open', 'shot', 'dismissed');--> statement-breakpoint
-CREATE TYPE "public"."post_status" AS ENUM('draft', 'needs_review', 'approved', 'published');--> statement-breakpoint
-CREATE TYPE "public"."render_kind" AS ENUM('nano', 'shotstack', 'manual');--> statement-breakpoint
-CREATE TABLE "assets" (
+DO $$ BEGIN CREATE TYPE "public"."asset_type" AS ENUM('photo', 'video'); EXCEPTION WHEN duplicate_object THEN null; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."gap_status" AS ENUM('open', 'shot', 'dismissed'); EXCEPTION WHEN duplicate_object THEN null; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."post_status" AS ENUM('draft', 'needs_review', 'approved', 'published'); EXCEPTION WHEN duplicate_object THEN null; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."render_kind" AS ENUM('nano', 'shotstack', 'manual'); EXCEPTION WHEN duplicate_object THEN null; END $$;--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "assets" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"workdrive_id" text NOT NULL,
 	"workdrive_path" text,
@@ -20,7 +20,7 @@ CREATE TABLE "assets" (
 	CONSTRAINT "assets_workdrive_id_unique" UNIQUE("workdrive_id")
 );
 --> statement-breakpoint
-CREATE TABLE "gaps" (
+CREATE TABLE IF NOT EXISTS "gaps" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"week_start" date NOT NULL,
 	"needed_asset_description" text NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE "gaps" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "kb_config" (
+CREATE TABLE IF NOT EXISTS "kb_config" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"version" text NOT NULL,
 	"config" jsonb NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE "kb_config" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "plan_skeleton" (
+CREATE TABLE IF NOT EXISTS "plan_skeleton" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"week_start" date NOT NULL,
 	"pillar_allocations" jsonb DEFAULT '{}'::jsonb NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE "plan_skeleton" (
 	CONSTRAINT "plan_skeleton_week_start_unique" UNIQUE("week_start")
 );
 --> statement-breakpoint
-CREATE TABLE "posts" (
+CREATE TABLE IF NOT EXISTS "posts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"scheduled_date" date,
 	"platform" text NOT NULL,
@@ -64,5 +64,5 @@ CREATE TABLE "posts" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "posts" ADD CONSTRAINT "posts_asset_id_assets_id_fk" FOREIGN KEY ("asset_id") REFERENCES "public"."assets"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "assets_type_idx" ON "assets" USING btree ("type");
+DO $$ BEGIN ALTER TABLE "posts" ADD CONSTRAINT "posts_asset_id_assets_id_fk" FOREIGN KEY ("asset_id") REFERENCES "public"."assets"("id") ON DELETE no action ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN null; END $$;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "assets_type_idx" ON "assets" USING btree ("type");

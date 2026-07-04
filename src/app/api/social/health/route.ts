@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
-import { workdriveEnv } from "@/lib/social/workdrive";
+import { hasDatabase, hasBlob } from "@/lib/social/env";
 
 export async function GET() {
   const checks = {
-    database: Boolean(process.env.DATABASE_URL) || Boolean(process.env.POSTGRES_URL),
+    database: hasDatabase(),
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
-    blob: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    blob: hasBlob(),
     workdrive: Boolean(
-      workdriveEnv("REFRESH_TOKEN") && workdriveEnv("CLIENT_ID"),
+      process.env.ZOHO_REFRESH_TOKEN &&
+        process.env.ZOHO_CLIENT_ID &&
+        process.env.ZOHO_CLIENT_SECRET,
     ),
   };
-  return NextResponse.json({ ok: true, phase: 1, checks });
+  return NextResponse.json({ ok: true, checks });
 }

@@ -24,12 +24,26 @@ function getConnectionString(): string {
   return url;
 }
 
+/**
+ * Decide SSL. Neon/Supabase require TLS, but a copy-pasted pooler URL often
+ * omits `sslmode=require`, and postgres.js does NOT enable TLS unless told to.
+ * So we default remote hosts to `require` rather than trusting the URL — while
+ * still honouring an explicit `sslmode=disable` and leaving plain local dev
+ * (localhost) untouched.
+ */
+function sslSetting(url: string): "require" | undefined {
+  if (/sslmode=disable/i.test(url)) return undefined;
+  if (/@(localhost|127\.0\.0\.1|\[::1\])[:/]/i.test(url)) return undefined;
+  return "require";
+}
+
 export function getSql(): ReturnType<typeof postgres> {
   if (!globalForDb.__tiltSql) {
-    globalForDb.__tiltSql = postgres(getConnectionString(), {
+    const url = getConnectionString();
+    globalForDb.__tiltSql = postgres(url, {
       max: 5,
       idle_timeout: 20,
-      // Neon/Supabase require SSL; the connection string carries sslmode=require.
+      ssl: sslSetting(url),
     });
   }
   return globalForDb.__tiltSql;
