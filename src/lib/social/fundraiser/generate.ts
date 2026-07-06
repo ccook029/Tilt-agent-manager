@@ -8,7 +8,7 @@ import { fundraisers, type Fundraiser } from "@/lib/social/db/schema";
 import { getActiveKbConfig } from "@/lib/social/kb/config";
 import { BRAND, HARD_RULES, checkContentSafety } from "@/lib/social/brand";
 import { composeFlyer } from "@/lib/social/render/flyer";
-import { mirrorToBlob } from "@/lib/social/blob";
+import { mirrorToBlob, readBlobBytes } from "@/lib/social/blob";
 
 /**
  * Blanket fundraisers — one-off pre-order posts for teams/orgs that partner with
@@ -115,13 +115,10 @@ function fallbackLine(orgName: string): string {
   return `${orgName} has teamed up with Tilt Hockey to bring you these premium custom blankets.`;
 }
 
-async function fetchBytes(url: string): Promise<{ buf: Buffer; mime: string }> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`fetch blanket image failed: ${res.status}`);
-  return {
-    buf: Buffer.from(await res.arrayBuffer()),
-    mime: res.headers.get("content-type") ?? "image/png",
-  };
+// The blanket image is a private blob; pull it back through the store token
+// rather than fetching a login-gated URL.
+async function fetchBytes(ref: string): Promise<{ buf: Buffer; mime: string }> {
+  return readBlobBytes(ref);
 }
 
 /** Renders the fundraiser flyer and persists the URL on the row. */

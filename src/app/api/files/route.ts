@@ -11,6 +11,7 @@
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
 import { del, list, put } from "@vercel/blob";
+import { blobProxyUrl, keyFromProxyUrl } from "@/lib/social/blob";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -36,7 +37,8 @@ export async function GET() {
     files: blobs
       .map((b) => ({
         name: b.pathname.slice(PREFIX.length),
-        url: b.url,
+        // Private store — serve through the gated proxy, not the raw blob URL.
+        url: blobProxyUrl(b.pathname),
         size: b.size,
         uploadedAt: b.uploadedAt,
       }))
@@ -59,10 +61,10 @@ export async function POST(request: NextRequest) {
   }
   const safeName = file.name.replace(/[^\w.\-() ]+/g, "_");
   const blob = await put(`${PREFIX}${safeName}`, file, {
-    access: "public",
+    access: "private",
     addRandomSuffix: true,
   });
-  return NextResponse.json({ ok: true, url: blob.url });
+  return NextResponse.json({ ok: true, url: blobProxyUrl(blob.pathname) });
 }
 
 export async function DELETE(request: NextRequest) {
@@ -71,6 +73,7 @@ export async function DELETE(request: NextRequest) {
   if (!url) {
     return NextResponse.json({ error: "url is required" }, { status: 400 });
   }
-  await del(url);
+  // The client holds the proxy path; delete by the underlying blob key.
+  await del(keyFromProxyUrl(url) ?? url);
   return NextResponse.json({ ok: true });
 }
