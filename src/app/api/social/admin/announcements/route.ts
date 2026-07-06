@@ -11,6 +11,7 @@ import {
   type AnnouncementKind,
 } from "@/lib/social/announce/generate";
 import { normalizeAccent } from "@/lib/social/announce/compose";
+import { notifyAnnouncement } from "@/lib/social/announce/notify";
 
 /**
  * Announcements (partnerships + ambassador welcomes).
@@ -54,8 +55,14 @@ export async function POST(req: Request) {
     /* empty body ok */
   }
 
+  // Two ways in: the studio's admin token (a human in the app), or a
+  // MODULES_SHARED_KEY bearer for server-to-server calls (the tiltweb ambassador
+  // approval → photo-upload flow generates announcements this way).
+  const bearer = req.headers.get("authorization");
+  const moduleKey = process.env.MODULES_SHARED_KEY;
+  const viaModule = Boolean(moduleKey && bearer === `Bearer ${moduleKey}`);
   const auth = checkAdminToken(tokenFromRequest(req, body));
-  if (!auth.ok) {
+  if (!auth.ok && !viaModule) {
     return NextResponse.json({ ok: false, error: auth.reason }, { status: 401 });
   }
 
@@ -135,6 +142,13 @@ export async function POST(req: Request) {
     const fresh =
       (await db.select().from(announcements).where(eq(announcements.id, row.id)).limit(1))[0] ??
       row;
+
+    // Auto-generated (server-to-server) ambassador announcements get emailed to
+    // the team so they land in the inbox without anyone opening the app.
+    // Best-effort: never let a mail hiccup fail the generation.
+    if (viaModule && fresh.kind === "ambassador") {
+      await notifyAnnouncement(fresh).catch(() => {});
+    }
 
     return NextResponse.json({ ok: true, announcement: fresh });
   } catch (err) {
