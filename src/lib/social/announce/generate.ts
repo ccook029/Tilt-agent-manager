@@ -9,7 +9,7 @@ import { announcements, type Announcement } from "@/lib/social/db/schema";
 import { getActiveKbConfig } from "@/lib/social/kb/config";
 import { BRAND, HARD_RULES, checkContentSafety } from "@/lib/social/brand";
 import { nanoEdit } from "@/lib/social/render/nano";
-import { loadLogo } from "@/lib/social/render/overlay";
+import { loadLogo, loadShield } from "@/lib/social/render/overlay";
 import { mirrorToBlob, readBlobBytes } from "@/lib/social/blob";
 import { composePartnerGraphic } from "./compose";
 
@@ -121,7 +121,9 @@ function ambassadorBrief(name: string, subtitle?: string | null): string {
     `  then the player's name "${name.toUpperCase()}" huge in white inside a thin silver outline;`,
     subtitle ? `  then "${subtitle.toUpperCase()}" smaller in white;` : ``,
     `  then "You're officially part of the" in white and "TILT AMBASSADOR CLUB" in bold cyan, with the subline "The ultimate squad for young hockey stars and future legends."`,
-    `- TOP-CENTER: leave a clean horizontal strip empty — the brand wordmark is placed there by code.`,
+    `- TOP-CENTER: leave a clean horizontal strip of plain background. Do not put anything there.`,
+    `- BOTTOM: keep the lowest tenth of the canvas calm and free of text.`,
+    `- Render ONLY the exact quoted words above. Never draw placeholder labels (like "WORDMARK", "LOGO", or "TEXT HERE") or any other lettering.`,
     `- Do not draw any logos, crests, signatures, or badges anywhere.`,
   ]
     .filter(Boolean)
@@ -166,6 +168,54 @@ async function composeAmbassador(base: Buffer): Promise<Buffer> {
       input: logoBuf,
       left: plateLeft + padX,
       top: plateTop + padY,
+    });
+  }
+
+  // Bottom anchor: a soft dark scrim with the T-shield over a small wordmark,
+  // centered — code-stamped so the marks are always crisp and never AI-drawn.
+  const band = Math.round(H * 0.18);
+  const scrim = Buffer.from(
+    `<svg width="${W}" height="${band}" xmlns="http://www.w3.org/2000/svg">` +
+      `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">` +
+      `<stop offset="0" stop-color="${BRAND.colors.black}" stop-opacity="0"/>` +
+      `<stop offset="1" stop-color="${BRAND.colors.black}" stop-opacity="0.85"/>` +
+      `</linearGradient></defs>` +
+      `<rect width="${W}" height="${band}" fill="url(#g)"/>` +
+      `</svg>`,
+  );
+  composites.push({ input: scrim, left: 0, top: H - band });
+
+  const shield = await loadShield();
+  let cursorY = H - band + Math.round(band * 0.22);
+  if (shield) {
+    const shieldW = Math.round(W * 0.085);
+    const shieldBuf = await sharp(shield, { density: 300 })
+      .resize({ width: shieldW })
+      .png()
+      .toBuffer();
+    const sMeta = await sharp(shieldBuf).metadata();
+    const sH = sMeta.height ?? shieldW;
+    composites.push({
+      input: shieldBuf,
+      left: Math.round((W - shieldW) / 2),
+      top: cursorY,
+    });
+    cursorY += sH + Math.round(H * 0.012);
+  }
+  if (logo) {
+    const wmW = Math.round(W * 0.24);
+    const wmBuf = await sharp(logo, { density: 300 })
+      .resize({ width: wmW })
+      .png()
+      .toBuffer();
+    const wmMeta = await sharp(wmBuf).metadata();
+    const wmH = wmMeta.height ?? Math.round(wmW / 8);
+    // Never run off the canvas even if the shield is unusually tall.
+    const wmTop = Math.min(cursorY, H - wmH - Math.round(H * 0.02));
+    composites.push({
+      input: wmBuf,
+      left: Math.round((W - wmW) / 2),
+      top: wmTop,
     });
   }
 
