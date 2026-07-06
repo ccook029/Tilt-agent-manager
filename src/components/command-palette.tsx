@@ -82,6 +82,7 @@ export function CommandPalette() {
       { id: "inventory", label: "Go to Stick Inventory", group: "Navigate", perform: () => router.push("/inventory") },
       { id: "inventory-scan", label: "Inventory: Scan & Sell", group: "Navigate", perform: () => router.push("/inventory/scan") },
       { id: "files", label: "Go to Files", group: "Navigate", perform: () => router.push("/files") },
+      { id: "staff", label: "Go to Staff Tools", group: "Navigate", perform: () => router.push("/staff") },
       { id: "knowledge", label: "Go to Company Knowledge", group: "Navigate", perform: () => router.push("/knowledge") },
       { id: "questions", label: "Go to Questions", group: "Navigate", perform: () => router.push("/questions") },
     ];
