@@ -10,7 +10,7 @@ import { getActiveKbConfig } from "@/lib/social/kb/config";
 import { BRAND, HARD_RULES, checkContentSafety } from "@/lib/social/brand";
 import { nanoEdit } from "@/lib/social/render/nano";
 import { loadLogo } from "@/lib/social/render/overlay";
-import { mirrorToBlob } from "@/lib/social/blob";
+import { mirrorToBlob, readBlobBytes } from "@/lib/social/blob";
 import { composePartnerGraphic } from "./compose";
 
 /**
@@ -172,13 +172,10 @@ async function composeAmbassador(base: Buffer): Promise<Buffer> {
   return sharp(canvas).composite(composites).png().toBuffer();
 }
 
-async function fetchBytes(url: string): Promise<{ buf: Buffer; mime: string }> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`fetch source failed: ${res.status}`);
-  return {
-    buf: Buffer.from(await res.arrayBuffer()),
-    mime: res.headers.get("content-type") ?? "image/png",
-  };
+// Source is a private blob (the uploaded logo/photo); pull it back through the
+// store token, not an HTTP fetch of a login-gated URL.
+async function fetchBytes(ref: string): Promise<{ buf: Buffer; mime: string }> {
+  return readBlobBytes(ref);
 }
 
 /** The three canvas sizes every partner announcement ships in. */

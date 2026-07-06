@@ -1,7 +1,7 @@
 import { eq, and, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/social/db";
 import { posts, assets, type Post } from "@/lib/social/db/schema";
-import { mirrorToBlob } from "@/lib/social/blob";
+import { mirrorToBlob, readBlobBytes } from "@/lib/social/blob";
 import { nanoEdit } from "./nano";
 import { overlayBranding, type RenderFormat } from "./overlay";
 import { isStaleRender } from "./version";
@@ -28,11 +28,10 @@ function toFormat(f: string | null): RenderFormat {
   return f === "reel" || f === "carousel" ? f : "static";
 }
 
-async function fetchBytes(url: string): Promise<{ buf: Buffer; mime: string }> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`fetch source failed: ${res.status}`);
-  const mime = res.headers.get("content-type") ?? "image/jpeg";
-  return { buf: Buffer.from(await res.arrayBuffer()), mime };
+// Catalog assets are private blobs; pull the bytes back through the store token
+// rather than fetching a login-gated URL.
+async function fetchBytes(ref: string): Promise<{ buf: Buffer; mime: string }> {
+  return readBlobBytes(ref);
 }
 
 /** Renders one static post. Returns the render URL (also persisted). */

@@ -10,7 +10,7 @@ import { getActiveKbConfig } from "@/lib/social/kb/config";
 import { BRAND, HARD_RULES, checkContentSafety } from "@/lib/social/brand";
 import { nanoCall } from "@/lib/social/render/nano";
 import { composeFlyer } from "@/lib/social/render/flyer";
-import { mirrorToBlob } from "@/lib/social/blob";
+import { mirrorToBlob, readBlobBytes } from "@/lib/social/blob";
 
 /**
  * Custom dress socks — a B2B design + pitch tool. Tilt wants to design dress
@@ -117,13 +117,10 @@ function fallbackLine(orgName: string): string {
   return `Custom dress socks for ${orgName}, designed in your colors and built to rep the crest.`;
 }
 
-async function fetchBytes(url: string): Promise<{ buf: Buffer; mime: string }> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`fetch image failed: ${res.status}`);
-  return {
-    buf: Buffer.from(await res.arrayBuffer()),
-    mime: res.headers.get("content-type") ?? "image/png",
-  };
+// Source is a private blob (uploaded logo, or the generated sock mockup); pull
+// it back through the store token rather than fetching a login-gated URL.
+async function fetchBytes(ref: string): Promise<{ buf: Buffer; mime: string }> {
+  return readBlobBytes(ref);
 }
 
 /** Renders the sock product mockup (unbranded) and persists designUrl. */
