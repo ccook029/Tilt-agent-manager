@@ -12,6 +12,7 @@ import {
 } from "@/lib/social/announce/generate";
 import { normalizeAccent } from "@/lib/social/announce/compose";
 import { notifyAnnouncement } from "@/lib/social/announce/notify";
+import { postSignal } from "@/lib/signals";
 
 /**
  * Announcements (partnerships + ambassador welcomes).
@@ -148,6 +149,12 @@ export async function POST(req: Request) {
     // Best-effort: never let a mail hiccup fail the generation.
     if (viaModule && fresh.kind === "ambassador") {
       await notifyAnnouncement(fresh).catch(() => {});
+      // Surface it on the dashboard signals feed + Morning Brief too.
+      await postSignal({
+        source: "social-studio",
+        headline: `Ambassador announcement generated: ${fresh.name}`,
+        detail: fresh.subtitle ?? undefined,
+      }).catch(() => {});
     }
 
     return NextResponse.json({ ok: true, announcement: fresh });
