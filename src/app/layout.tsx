@@ -9,6 +9,7 @@ import CursorSpotlight from "@/components/cursor-spotlight";
 import { RunPipelineProvider } from "@/components/run-pipeline";
 import IntroOverlay from "@/components/intro-overlay";
 import StudioMenu from "@/components/studio-menu";
+import StaffMenu from "@/components/staff-menu";
 import SignOut from "@/components/sign-out";
 import OwnerNav from "@/components/owner-nav";
 
@@ -104,6 +105,7 @@ export default function RootLayout({
                 Operations
               </Link>
               <StudioMenu />
+              <StaffMenu />
               <OwnerNav />
               <Link
                 href="/inventory"

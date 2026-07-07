@@ -106,16 +106,16 @@ export default function Home() {
               View agent run history, reports, and performance metrics.
             </p>
           </Link>
-          <div className="rounded-lg border border-gray-800/60 p-5 bg-[#111]/30">
-            <h3 className="font-semibold mb-1">API Access</h3>
+          <Link
+            href="/staff"
+            className="lift block rounded-lg border border-gray-800/60 p-5 hover:border-[#00d6ff]/30 bg-[#111]/30"
+          >
+            <h3 className="font-semibold mb-1">Staff Tools</h3>
             <p className="text-sm text-gray-500">
-              Trigger agents via{" "}
-              <code className="text-xs bg-gray-800 px-1 rounded text-[#00d6ff]/80">
-                POST /api/agents/run
-              </code>{" "}
-              or individual endpoints.
+              The storefront back office — ambassadors, partners, retailers, and
+              registrations — reachable straight from HQ.
             </p>
-          </div>
+          </Link>
         </div>
       </ScrollReveal>
     </div>
