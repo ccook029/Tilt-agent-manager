@@ -25,6 +25,27 @@ interface VetRequest {
   followers?: string;
   experience?: string;
   reason?: string;
+  /** What the applicant said when asked if they're tied to another brand. */
+  declaredAffiliation?: string;
+}
+
+// Competitor hockey brands/retailers. Used both in the prompt and as a
+// code-level safety net against the applicant's own declared affiliation.
+const COMPETITOR_BRANDS = [
+  "swift", "soyuz", "bauer", "ccm", "warrior", "true", "sherwood", "sher-wood",
+  "winnwell", "stx", "verbero", "raven", "base", "rocket", "goat",
+];
+
+/** Does the free-text affiliation name a known competitor (vs "none")? */
+function declaredCompetitor(raw: string | undefined): string | null {
+  const t = (raw || "").trim().toLowerCase();
+  if (!t || ["none", "no", "n/a", "na", "nope", "-", "none.", "no."].includes(t)) {
+    return null;
+  }
+  const hit = COMPETITOR_BRANDS.find((b) => t.includes(b));
+  if (hit) return raw!.trim();
+  // Non-empty and not an obvious "no" — still worth surfacing as a declared tie.
+  return raw!.trim();
 }
 
 export type VetRisk = "none" | "low" | "medium" | "high";
@@ -57,14 +78,31 @@ sponsored by another brand is NOT by itself an affiliation — look for the pers
 personally promoting, being sponsored by, or repping a competitor (bios like
 "@brand ambassador", discount codes, "sponsored by", tagged partnership posts, etc.).
 
-Use the web_search tool to look up the applicant's Instagram handle, their name, and
-location. Search for their handle plus terms like "ambassador", "sponsored", "hockey",
-and competitor names. Prefer primary evidence (their own bio/posts) and cite URLs.
+The applicant is also asked directly on the form: "Are you currently sponsored by, or
+affiliated with, any other hockey brand?" Their answer is provided to you as
+"Self-declared affiliation". Treat this as strong primary evidence:
+- If they NAME a competitor there, that is a confirmed affiliation: competitorAffiliation=true,
+  recommendation="deny", riskLevel="high". You do not need web evidence to confirm what they
+  admitted themselves.
+- If they say "None" (or similar), still do your research — they may be hiding one.
 
-Be careful and precise. Do not invent affiliations. If you cannot find evidence of a
-competitor tie, say so and treat it as clear. Distinguish "found a clear competitor
-affiliation" (high risk, deny) from "couldn't verify much" (review) from "looks clean"
-(approve).
+Use the web_search tool to look up the applicant's Instagram handle, their name, and
+location. Search several ways: the handle plus "ambassador"/"sponsored"/"hockey", the
+person's name plus each competitor brand, and the name plus "hockey ambassador".
+
+IMPORTANT REALITY: Instagram bios and posts are usually NOT readable by web search
+(login-walled), so a competitor tag like "@swifthockey" in their bio often will NOT
+appear in your results. Therefore:
+- Absence of evidence is NOT proof they're clean. Never output "approve" just because you
+  found nothing — if you could not actually inspect their Instagram profile, the correct
+  answer is "review", and your summary MUST say "Could not verify Instagram bio — a human
+  should open the profile and check for competitor tags."
+- Only recommend "approve" when you positively confirmed a clean, established presence
+  with no competitor ties (rare from search alone).
+- Recommend "deny" when you (or their own declaration) confirm a competitor tie.
+- Recommend "review" in every ambiguous or unverifiable case (this will be the common one).
+
+Do not invent affiliations, but do not give false reassurance either.
 
 When done researching, output your verdict as a SINGLE JSON object on the final line,
 wrapped EXACTLY between <VERDICT> and </VERDICT> tags, with this shape:
@@ -90,6 +128,7 @@ function buildPrompt(a: VetRequest): string {
     `Location: ${a.location || "(not provided)"}`,
     `Stated following: ${a.followers || "(not provided)"}`,
     `Stated hockey experience: ${a.experience || "(not provided)"}`,
+    `Self-declared affiliation (their answer to "any other hockey brand?"): ${a.declaredAffiliation?.trim() || "(not answered)"}`,
     `Why they want to be a Tilt ambassador: ${a.reason || "(not provided)"}`,
     "",
     "Research their public presence and report whether they have any competing hockey brand/retailer affiliation.",
@@ -175,6 +214,25 @@ export async function POST(request: NextRequest) {
         { error: "Could not parse a verdict from the agent.", raw: text.slice(0, 2000) },
         { status: 502 }
       );
+    }
+
+    // Safety net: the applicant told us themselves. If they named another brand
+    // and the model somehow didn't flag it, override — a self-declared tie is
+    // the strongest evidence there is.
+    const declared = declaredCompetitor(body.declaredAffiliation);
+    if (declared && !verdict.competitorAffiliation) {
+      const named = COMPETITOR_BRANDS.some((b) =>
+        declared.toLowerCase().includes(b)
+      );
+      verdict.competitorAffiliation = named;
+      verdict.recommendation = named ? "deny" : "review";
+      verdict.riskLevel = named ? "high" : verdict.riskLevel === "none" ? "medium" : verdict.riskLevel;
+      verdict.flags = [
+        { brand: declared, evidence: `Self-declared on the application form: "${declared}"` },
+        ...verdict.flags,
+      ];
+      verdict.summary =
+        `Applicant self-declared an affiliation: "${declared}". ` + (verdict.summary || "");
     }
 
     // Surface a red flag to the HQ feed so it's visible beyond the web admin.
