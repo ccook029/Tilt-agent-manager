@@ -17,12 +17,16 @@ export interface SpecLine {
   hand: "Left" | "Right";
   flex: number;
   curve: string;
+  baseColor: string;
+  decalColor: string;
   qty: number;
 }
 
 export interface GoalieLine {
   paddle: number;
   hand: "Left" | "Right";
+  baseColor: string;
+  decalColor: string;
   qty: number;
 }
 
@@ -34,12 +38,16 @@ export interface ComboRow {
   hand: string;
   flex: number;
   curve: string;
+  baseColor: string;
+  decalColor: string;
   qty: number; // lifetime units for lifetime_orders; available for inventory
 }
 
 export interface GoalieComboRow {
   paddle: number;
   hand: string;
+  baseColor: string;
+  decalColor: string;
   qty: number;
 }
 
@@ -163,7 +171,14 @@ interface Demand {
   availBySize: Record<string, number>;
   specs: Record<
     string,
-    { flex: Record<string, number>; curve: Record<string, number>; hand: Record<string, number>; kick: Record<string, number> }
+    {
+      flex: Record<string, number>;
+      curve: Record<string, number>;
+      hand: Record<string, number>;
+      kick: Record<string, number>;
+      /** Joint base|decal colorway distribution. */
+      colors: Record<string, number>;
+    }
   >;
 }
 
@@ -176,11 +191,15 @@ export function buildDemand(data: OrderDataset): Demand {
     byLevel[o.level] = (byLevel[o.level] || 0) + o.qty;
     const sk = `${o.level}|${o.size}`;
     bySize[sk] = (bySize[sk] || 0) + o.qty;
-    if (!specs[sk]) specs[sk] = { flex: {}, curve: {}, hand: {}, kick: {} };
+    if (!specs[sk]) specs[sk] = { flex: {}, curve: {}, hand: {}, kick: {}, colors: {} };
     specs[sk].flex[o.flex] = (specs[sk].flex[o.flex] || 0) + o.qty;
     if (o.curve) specs[sk].curve[o.curve] = (specs[sk].curve[o.curve] || 0) + o.qty;
     if (o.hand) specs[sk].hand[o.hand] = (specs[sk].hand[o.hand] || 0) + o.qty;
     if (o.kick) specs[sk].kick[o.kick] = (specs[sk].kick[o.kick] || 0) + o.qty;
+    if (o.baseColor || o.decalColor) {
+      const ck = `${o.baseColor}|${o.decalColor}`;
+      specs[sk].colors[ck] = (specs[sk].colors[ck] || 0) + o.qty;
+    }
   }
   for (const o of data.player.inventory) {
     const sk = `${o.level}|${o.size}`;
@@ -189,18 +208,30 @@ export function buildDemand(data: OrderDataset): Demand {
   return { byLevel, bySize, availBySize, specs };
 }
 
-export function stockFlag(
-  data: OrderDataset,
-  level: string,
-  size: number
-): [label: string, tone: "risk" | "hot" | "cover"] {
+export interface StockInfo {
+  label: "STOCKOUT" | "THIN" | "OK" | "COVERED";
+  tone: "risk" | "hot" | "cover";
+  /** Sticks currently on hand at this level+length. */
+  available: number;
+  /** Lifetime units ordered at this level+length (the demand proxy). */
+  lifetime: number;
+  /** Plain-language explanation for tooltips. */
+  explain: string;
+}
+
+export function stockFlag(data: OrderDataset, level: string, size: number): StockInfo {
   let s = 0,
     a = 0;
   for (const o of data.player.lifetime_orders) if (o.level === level && o.size === size) s += o.qty;
   for (const o of data.player.inventory) if (o.level === level && o.size === size) a += o.qty;
-  if (a === 0) return ["STOCKOUT", "risk"];
-  if (s / a > 4) return ["THIN", "hot"];
-  return [a > s * 0.6 ? "COVERED" : "OK", "cover"];
+  const base = `${a} on hand vs ${s} lifetime ordered at ${level} ${size}"`;
+  if (a === 0)
+    return { label: "STOCKOUT", tone: "risk", available: a, lifetime: s, explain: `${base} — nothing left on the shelf.` };
+  if (s / a > 4)
+    return { label: "THIN", tone: "hot", available: a, lifetime: s, explain: `${base} — cover is thin for how fast this spec moves.` };
+  if (a > s * 0.6)
+    return { label: "COVERED", tone: "cover", available: a, lifetime: s, explain: `${base} — plenty on hand relative to demand.` };
+  return { label: "OK", tone: "cover", available: a, lifetime: s, explain: `${base} — reasonable cover, demand is gradually outpacing it.` };
 }
 
 /* ---------- ALLOCATOR ---------- */
@@ -274,7 +305,22 @@ export function allocate(
     for (const [szStr, sw] of sizePicks) {
       const sz = Number(szStr);
       const sk = `${level}|${sz}`;
-      const sp = D.specs[sk] || { flex: {}, curve: {}, hand: {}, kick: {} };
+      const sp = D.specs[sk] || { flex: {}, curve: {}, hand: {}, kick: {}, colors: {} };
+
+      // Colorways: top sellers for this level+size, assigned proportionally
+      // across the size's lines (no extra line explosion).
+      let colorPairs = pickWeighted(sp.colors, c.variety === "high" ? 3 : 2);
+      if (colorPairs.length === 0) colorPairs = [["Black|White", 1]];
+      const colorAssigned = colorPairs.map(() => 0);
+      const pickColor = (q: number): [string, string] => {
+        let best = 0;
+        for (let ci = 1; ci < colorPairs.length; ci++) {
+          if (colorAssigned[ci] / colorPairs[ci][1] < colorAssigned[best] / colorPairs[best][1]) best = ci;
+        }
+        colorAssigned[best] += q;
+        const [base, decal] = colorPairs[best][0].split("|");
+        return [base || "Black", decal || "White"];
+      };
 
       let curveDist = { ...sp.curve };
       if (c.curve_include)
@@ -315,7 +361,8 @@ export function allocate(
                   : carbonPref === "mix" && level === "Senior" && Math.random() < 0.3
                     ? "24K"
                     : "18K";
-              lines.push({ level, size: sz, carbon, kick, hand, flex: Number(fx), curve: cv, qty: q });
+              const [baseColor, decalColor] = pickColor(q);
+              lines.push({ level, size: sz, carbon, kick, hand, flex: Number(fx), curve: cv, baseColor, decalColor, qty: q });
             }
           }
         }
@@ -341,23 +388,29 @@ export function allocate(
   };
 }
 
-/** Goalie allocation: paddle × hand weighted by lifetime demand (with floor). */
+/** Goalie allocation: paddle × hand × colorway weighted by lifetime demand. */
 export function allocateGoalie(data: OrderDataset, qty: number): GoalieLine[] {
   if (qty <= 0) return [];
   const dist: Record<string, number> = {};
   for (const o of data.goalie.lifetime_orders) {
     if (!o.paddle) continue;
-    const k = `${o.paddle}|${o.hand || "Left"}`;
+    const k = `${o.paddle}|${o.hand || "Left"}|${o.baseColor || "Black"}|${o.decalColor || "White"}`;
     dist[k] = (dist[k] || 0) + o.qty;
   }
   if (Object.keys(dist).length === 0) {
-    dist["24|Left"] = 2;
-    dist["25|Right"] = 1;
+    dist["24|Left|Black|White"] = 2;
+    dist["25|Right|White|Black"] = 1;
   }
-  const picks = pickWeighted(dist, 4);
+  const picks = pickWeighted(dist, 6);
   const lines: GoalieLine[] = picks.map(([k, w]) => {
-    const [paddle, hand] = k.split("|");
-    return { paddle: Number(paddle), hand: hand as GoalieLine["hand"], qty: Math.round(qty * w) };
+    const [paddle, hand, baseColor, decalColor] = k.split("|");
+    return {
+      paddle: Number(paddle),
+      hand: hand as GoalieLine["hand"],
+      baseColor: baseColor || "Black",
+      decalColor: decalColor || "White",
+      qty: Math.round(qty * w),
+    };
   });
   // rounding correction
   let diff = qty - lines.reduce((s, l) => s + l.qty, 0);

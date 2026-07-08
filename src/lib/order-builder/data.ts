@@ -17,12 +17,22 @@
 import { fetchAllStickRecords, type StickRecord } from "@/lib/zoho-sheet";
 import type { ComboRow, GoalieComboRow, OrderDataset } from "./allocator";
 
-function normLevel(raw: string): "Junior" | "Intermediate" | "Senior" | null {
+function normLevel(raw: string, size: number): "Junior" | "Intermediate" | "Senior" | null {
   const t = raw.trim().toLowerCase();
   if (!t) return null;
   if (t.startsWith("jr") || t.startsWith("jun")) return "Junior";
   if (t.startsWith("int")) return "Intermediate";
   if (t.startsWith("sr") || t.startsWith("sen")) return "Senior";
+  // "Tier 1" is Tilt's junior model line — the sheet records the model name in
+  // the Level column for those sticks.
+  if (t.includes("tier")) return "Junior";
+  // Last resort: a model name we don't know — infer the level from the length
+  // so a new sheet value degrades demand slightly instead of dropping rows.
+  if (size > 0) {
+    if (size <= 57) return "Junior";
+    if (size <= 63) return "Intermediate";
+    return "Senior";
+  }
   return null;
 }
 function normHand(raw: string): "Left" | "Right" | null {
@@ -44,7 +54,17 @@ function snapFlex(raw: number): { flex: number; snapped: boolean } {
 }
 
 function comboKey(r: Omit<ComboRow, "qty">): string {
-  return [r.level, r.size, r.carbon, r.kick, r.hand, r.flex, r.curve].join("|");
+  return [r.level, r.size, r.carbon, r.kick, r.hand, r.flex, r.curve, r.baseColor, r.decalColor].join("|");
+}
+
+/** Tidy a human-entered color: trim, collapse spaces, Title Case. */
+function normColor(raw: string): string {
+  const t = raw.trim().replace(/\s+/g, " ");
+  if (!t) return "";
+  return t
+    .split(" ")
+    .map((w) => (w.length > 2 ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w.toUpperCase()))
+    .join(" ");
 }
 
 export async function buildOrderDataset(): Promise<OrderDataset> {
@@ -63,11 +83,17 @@ export async function buildOrderDataset(): Promise<OrderDataset> {
     if (cur) cur.qty += 1;
     else map.set(k, { ...row, qty: 1 });
   };
-  const addGoalie = (map: Map<string, GoalieComboRow>, paddle: number, hand: string) => {
-    const k = `${paddle}|${hand}`;
+  const addGoalie = (
+    map: Map<string, GoalieComboRow>,
+    paddle: number,
+    hand: string,
+    baseColor: string,
+    decalColor: string
+  ) => {
+    const k = `${paddle}|${hand}|${baseColor}|${decalColor}`;
     const cur = map.get(k);
     if (cur) cur.qty += 1;
-    else map.set(k, { paddle, hand, qty: 1 });
+    else map.set(k, { paddle, hand, baseColor, decalColor, qty: 1 });
   };
 
   for (const r of records as StickRecord[]) {
@@ -78,18 +104,28 @@ export async function buildOrderDataset(): Promise<OrderDataset> {
       const paddle = Math.round(r.size);
       const hand = normHand(r.hand) ?? "Left";
       if (!paddle) continue;
-      addGoalie(goalieLifetime, paddle, hand);
-      if (available) addGoalie(goalieAvail, paddle, hand);
+      const gBase = normColor(r.base_color);
+      const gDecal = normColor(r.decal_color);
+      addGoalie(goalieLifetime, paddle, hand, gBase, gDecal);
+      if (available) addGoalie(goalieAvail, paddle, hand, gBase, gDecal);
       continue;
     }
 
-    const level = normLevel(r.level);
+    const level = normLevel(r.level, r.size);
     const hand = normHand(r.hand);
     if (!level || !r.size || !r.flex) {
-      warnings.push(
-        `Skipped Player row ${r.row_index} (level="${r.level}", size=${r.size}, flex=${r.flex}) — couldn't normalize.`
-      );
+      const why = !level
+        ? `unrecognized level "${r.level}" with no usable length`
+        : !r.size
+          ? "missing size"
+          : "missing flex";
+      warnings.push(`Skipped Player row ${r.row_index} — ${why}.`);
       continue;
+    }
+    if (!r.level.trim().toLowerCase().match(/^(jr|jun|int|sr|sen|tier)/)) {
+      warnings.push(
+        `Row ${r.row_index}: level "${r.level}" inferred as ${level} from its ${r.size}" length.`
+      );
     }
     const { flex, snapped } = snapFlex(r.flex);
     if (snapped) snappedCount++;
@@ -101,6 +137,8 @@ export async function buildOrderDataset(): Promise<OrderDataset> {
       hand: hand ?? "Left",
       flex,
       curve: r.curve.trim().toUpperCase(),
+      baseColor: normColor(r.base_color),
+      decalColor: normColor(r.decal_color),
     };
     add(playerLifetime, row);
     if (available) add(playerAvail, row);
