@@ -56,6 +56,9 @@ export interface OrderDataset {
   source: string;
   player: { inventory: ComboRow[]; lifetime_orders: ComboRow[] };
   goalie: { inventory: GoalieComboRow[]; lifetime_orders: GoalieComboRow[] };
+  /** Committed custom orders (the admin panel's queue → Zoho custom tabs) —
+   *  these ship regardless of the recommendation, as their own section. */
+  custom: { player: ComboRow[]; goalie: GoalieComboRow[] };
   warnings: string[];
 }
 

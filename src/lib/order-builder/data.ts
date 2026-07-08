@@ -14,7 +14,11 @@
 // Anything that can't be normalized is skipped with a warning — surfaced in
 // the payload so a bad sheet edit fails loudly, not silently.
 // ---------------------------------------------------------------------------
-import { fetchAllStickRecords, type StickRecord } from "@/lib/zoho-sheet";
+import {
+  fetchAllStickRecords,
+  fetchCustomStickRecords,
+  type StickRecord,
+} from "@/lib/zoho-sheet";
 import type { ComboRow, GoalieComboRow, OrderDataset } from "./allocator";
 
 function normLevel(raw: string, size: number): "Junior" | "Intermediate" | "Senior" | null {
@@ -68,7 +72,15 @@ function normColor(raw: string): string {
 }
 
 export async function buildOrderDataset(): Promise<OrderDataset> {
-  const records = await fetchAllStickRecords();
+  const [records, customRecords] = await Promise.all([
+    fetchAllStickRecords(),
+    // Committed custom orders — best-effort: a broken custom tab shouldn't
+    // take the whole builder down, just surface a warning.
+    fetchCustomStickRecords().catch((err) => {
+      console.warn("[order-builder] custom tabs unreadable:", err);
+      return [] as StickRecord[];
+    }),
+  ]);
   const warnings: string[] = [];
   let snappedCount = 0;
 
@@ -76,6 +88,8 @@ export async function buildOrderDataset(): Promise<OrderDataset> {
   const playerAvail = new Map<string, ComboRow>();
   const goalieLifetime = new Map<string, GoalieComboRow>();
   const goalieAvail = new Map<string, GoalieComboRow>();
+  const customPlayer = new Map<string, ComboRow>();
+  const customGoalie = new Map<string, GoalieComboRow>();
 
   const add = (map: Map<string, ComboRow>, row: Omit<ComboRow, "qty">) => {
     const k = comboKey(row);
@@ -144,6 +158,34 @@ export async function buildOrderDataset(): Promise<OrderDataset> {
     if (available) add(playerAvail, row);
   }
 
+  // ── Committed custom orders (admin panel queue → Zoho custom tabs) ──
+  for (const r of customRecords as StickRecord[]) {
+    const isGoalie = r.tab.toLowerCase().includes("goalie");
+    if (isGoalie) {
+      const paddle = Math.round(r.size);
+      if (!paddle) continue;
+      addGoalie(customGoalie, paddle, normHand(r.hand) ?? "Left", normColor(r.base_color), normColor(r.decal_color));
+      continue;
+    }
+    const level = normLevel(r.level, r.size);
+    if (!level || !r.size) {
+      warnings.push(`Skipped custom row ${r.row_index} (level="${r.level}", size=${r.size}) — couldn't normalize.`);
+      continue;
+    }
+    const { flex } = snapFlex(r.flex || 0);
+    add(customPlayer, {
+      level,
+      size: Math.round(r.size),
+      carbon: r.carbon.trim().toUpperCase() || "18K",
+      kick: normKick(r.kick_point),
+      hand: normHand(r.hand) ?? "Left",
+      flex,
+      curve: r.curve.trim().toUpperCase(),
+      baseColor: normColor(r.base_color),
+      decalColor: normColor(r.decal_color),
+    });
+  }
+
   if (snappedCount > 0) {
     warnings.push(`Snapped ${snappedCount} off-increment flex value(s) to the nearest 5.`);
   }
@@ -161,6 +203,10 @@ export async function buildOrderDataset(): Promise<OrderDataset> {
     goalie: {
       inventory: Array.from(goalieAvail.values()),
       lifetime_orders: Array.from(goalieLifetime.values()),
+    },
+    custom: {
+      player: Array.from(customPlayer.values()),
+      goalie: Array.from(customGoalie.values()),
     },
     warnings: trimmed,
   };
