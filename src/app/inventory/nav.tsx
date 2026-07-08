@@ -10,6 +10,7 @@ import { usePathname } from "next/navigation";
 const TABS: { href: string; label: string; exact?: boolean }[] = [
   { href: "/inventory", label: "Inventory", exact: true },
   { href: "/inventory/scan", label: "Scan & Sell" },
+  { href: "/inventory/order-builder", label: "Order Builder" },
 ];
 
 export default function InventoryNav() {

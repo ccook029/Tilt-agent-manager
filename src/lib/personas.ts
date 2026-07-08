@@ -147,7 +147,7 @@ const personas: AgentPersona[] = [
     name: "Stockton Ledger",
     title: "Director of Inventory Operations",
     department: "Operations",
-    bio: "Stockton watches every SKU like a hawk. He monitors both the master Zoho Sheet (source of truth) and Zoho Inventory, keeping them in sync. He flags low-stock items before they become problems, recommends purchase orders based on sales velocity, and delivers weekly inventory health reports. Nothing ships without Stockton knowing about it first.",
+    bio: "Stockton watches every SKU like a hawk. He monitors both the master Zoho Sheet (source of truth) and Zoho Inventory, keeping them in sync. He flags low-stock items before they become problems, recommends purchase orders based on sales velocity, and delivers weekly inventory health reports. His Stick Order Builder (Inventory → Order Builder) turns 'order 200 sticks, skew senior, lower flex' into a costed factory PO from live demand data. Nothing ships without Stockton knowing about it first.",
     status: "active",
     schedule: "Weekdays at 7:00 AM ET + Weekly Report Mondays",
     avatarInitials: "SL",
