@@ -631,12 +631,12 @@ export default function OrderBuilderPage() {
                         </td>
                         <td className="px-2.5 py-1.5">{fmt(unitCost(l))}</td>
                         <td className="px-2.5 py-1.5">{fmt(unitMsrp(l))}</td>
-                        <td className="px-2.5 py-1.5">
+                        <td className="px-2.5 py-1.5 whitespace-nowrap">
                           <span
                             title={stock.explain}
-                            className={`px-1.5 py-0.5 rounded text-[10px] cursor-help ${FLAG_CLS[stock.tone]}`}
+                            className={`inline-block whitespace-nowrap px-1.5 py-0.5 rounded text-[10px] cursor-help ${FLAG_CLS[stock.tone]}`}
                           >
-                            {stock.label} · {stock.available}
+                            {stock.available} on hand
                           </span>
                         </td>
                         <td className="px-2.5 py-1.5">
@@ -689,13 +689,12 @@ export default function OrderBuilderPage() {
           </div>
 
           <p className="text-[11px] text-gray-500 leading-relaxed -mt-1">
-            <span className="font-display uppercase tracking-wide text-gray-400">Stock</span> compares what&apos;s on the shelf right now to how
-            many of that level + length you&apos;ve ever ordered (the number after the dot is on-hand today):{" "}
-            <span className={`px-1 py-0.5 rounded text-[10px] font-mono ${FLAG_CLS.risk}`}>STOCKOUT</span> none left ·{" "}
-            <span className={`px-1 py-0.5 rounded text-[10px] font-mono ${FLAG_CLS.hot}`}>THIN</span> cover is low for how fast it moves ·{" "}
-            <span className={`px-1 py-0.5 rounded text-[10px] font-mono ${FLAG_CLS.cover}`}>OK</span> reasonable cover ·{" "}
-            <span className={`px-1 py-0.5 rounded text-[10px] font-mono ${FLAG_CLS.cover}`}>COVERED</span> plenty on hand — hover any flag for
-            the exact numbers.
+            <span className="font-display uppercase tracking-wide text-gray-400">Stock</span> = how many sticks of that level + length are on
+            the shelf right now. Color is the health vs how fast that spec sells:{" "}
+            <span className={`px-1 py-0.5 rounded text-[10px] font-mono whitespace-nowrap ${FLAG_CLS.risk}`}>red</span> none left ·{" "}
+            <span className={`px-1 py-0.5 rounded text-[10px] font-mono whitespace-nowrap ${FLAG_CLS.hot}`}>amber</span> running thin ·{" "}
+            <span className={`px-1 py-0.5 rounded text-[10px] font-mono whitespace-nowrap ${FLAG_CLS.cover}`}>green</span> healthy. Hover any
+            badge for the exact comparison (on hand vs lifetime ordered).
           </p>
 
           <div className="flex flex-wrap gap-2.5">
