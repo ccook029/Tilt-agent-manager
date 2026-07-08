@@ -216,25 +216,41 @@ export interface StockInfo {
   tone: "risk" | "hot" | "cover";
   /** Sticks currently on hand at this level+length. */
   available: number;
+  /** Sticks on hand matching the exact flex/curve/hand spec (when asked). */
+  exact: number;
   /** Lifetime units ordered at this level+length (the demand proxy). */
   lifetime: number;
   /** Plain-language explanation for tooltips. */
   explain: string;
 }
 
-export function stockFlag(data: OrderDataset, level: string, size: number): StockInfo {
+export function stockFlag(
+  data: OrderDataset,
+  level: string,
+  size: number,
+  /** When provided, also count sticks matching this exact spec. */
+  spec?: { flex: number; curve: string; hand: string }
+): StockInfo {
   let s = 0,
-    a = 0;
+    a = 0,
+    exact = 0;
   for (const o of data.player.lifetime_orders) if (o.level === level && o.size === size) s += o.qty;
-  for (const o of data.player.inventory) if (o.level === level && o.size === size) a += o.qty;
-  const base = `${a} on hand vs ${s} lifetime ordered at ${level} ${size}"`;
+  for (const o of data.player.inventory) {
+    if (o.level === level && o.size === size) {
+      a += o.qty;
+      if (spec && o.flex === spec.flex && o.curve === spec.curve && o.hand === spec.hand) exact += o.qty;
+    }
+  }
+  const base = spec
+    ? `${exact} on hand of this exact spec (${spec.flex} flex ${spec.curve} ${spec.hand[0]}) · ${a} across all ${level} ${size}" · ${s} lifetime ordered at this length`
+    : `${a} on hand vs ${s} lifetime ordered at ${level} ${size}"`;
   if (a === 0)
-    return { label: "STOCKOUT", tone: "risk", available: a, lifetime: s, explain: `${base} — nothing left on the shelf.` };
+    return { label: "STOCKOUT", tone: "risk", available: a, exact, lifetime: s, explain: `${base} — nothing left on the shelf.` };
   if (s / a > 4)
-    return { label: "THIN", tone: "hot", available: a, lifetime: s, explain: `${base} — cover is thin for how fast this spec moves.` };
+    return { label: "THIN", tone: "hot", available: a, exact, lifetime: s, explain: `${base} — cover is thin for how fast this length moves.` };
   if (a > s * 0.6)
-    return { label: "COVERED", tone: "cover", available: a, lifetime: s, explain: `${base} — plenty on hand relative to demand.` };
-  return { label: "OK", tone: "cover", available: a, lifetime: s, explain: `${base} — reasonable cover, demand is gradually outpacing it.` };
+    return { label: "COVERED", tone: "cover", available: a, exact, lifetime: s, explain: `${base} — plenty on hand relative to demand.` };
+  return { label: "OK", tone: "cover", available: a, exact, lifetime: s, explain: `${base} — reasonable cover, demand is gradually outpacing it.` };
 }
 
 /* ---------- ALLOCATOR ---------- */
