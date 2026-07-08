@@ -14,12 +14,50 @@
 // Anything that can't be normalized is skipped with a warning — surfaced in
 // the payload so a bad sheet edit fails loudly, not silently.
 // ---------------------------------------------------------------------------
-import {
-  fetchAllStickRecords,
-  fetchCustomStickRecords,
-  type StickRecord,
-} from "@/lib/zoho-sheet";
+import { fetchAllStickRecords, type StickRecord } from "@/lib/zoho-sheet";
+import { TILTWEB_URL } from "@/lib/staff-tools";
 import type { ComboRow, GoalieComboRow, OrderDataset } from "./allocator";
+
+/**
+ * A pending custom order from the tiltweb admin queue
+ * (GET {tiltweb}/api/modules/custom-orders — status new/downloaded only).
+ */
+interface AdminCustomOrder {
+  kind: "player" | "goalie";
+  player_name: string | null;
+  player_number: string | null;
+  team: string | null;
+  specs: Record<string, unknown>;
+}
+
+/**
+ * Fetch the PENDING custom-order queue from the tiltweb admin (the exact list
+ * shown in /admin/custom-orders that hasn't been marked 'ordered'). This — not
+ * the Zoho custom tabs, which hold all-time history — is what rides the PO.
+ */
+async function fetchAdminCustomQueue(): Promise<AdminCustomOrder[] | null> {
+  const key = process.env.MODULES_SHARED_KEY;
+  if (!key) return null;
+  try {
+    const res = await fetch(`${TILTWEB_URL}/api/modules/custom-orders`, {
+      headers: { authorization: `Bearer ${key}` },
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`tiltweb returned ${res.status}`);
+    const j = (await res.json()) as { ok?: boolean; orders?: AdminCustomOrder[] };
+    if (!j.ok || !Array.isArray(j.orders)) throw new Error("bad payload");
+    return j.orders;
+  } catch (err) {
+    console.warn("[order-builder] admin custom queue unreachable:", err);
+    return null;
+  }
+}
+
+/** Pull the leading number out of spec strings like '56"' or '24" paddle'. */
+function specNum(v: unknown): number {
+  const m = String(v ?? "").match(/\d+/);
+  return m ? Number(m[0]) : 0;
+}
 
 function normLevel(raw: string, size: number): "Junior" | "Intermediate" | "Senior" | null {
   const t = raw.trim().toLowerCase();
@@ -72,14 +110,12 @@ function normColor(raw: string): string {
 }
 
 export async function buildOrderDataset(): Promise<OrderDataset> {
-  const [records, customRecords] = await Promise.all([
+  const [records, adminQueue] = await Promise.all([
     fetchAllStickRecords(),
-    // Committed custom orders — best-effort: a broken custom tab shouldn't
-    // take the whole builder down, just surface a warning.
-    fetchCustomStickRecords().catch((err) => {
-      console.warn("[order-builder] custom tabs unreadable:", err);
-      return [] as StickRecord[];
-    }),
+    // Committed custom orders come from the tiltweb ADMIN QUEUE (the pending
+    // list in /admin/custom-orders) — not the Zoho custom tabs, which hold
+    // all-time history. Best-effort: unreachable → warn, don't block.
+    fetchAdminCustomQueue(),
   ]);
   const warnings: string[] = [];
   let snappedCount = 0;
@@ -158,32 +194,51 @@ export async function buildOrderDataset(): Promise<OrderDataset> {
     if (available) add(playerAvail, row);
   }
 
-  // ── Committed custom orders (admin panel queue → Zoho custom tabs) ──
-  for (const r of customRecords as StickRecord[]) {
-    const isGoalie = r.tab.toLowerCase().includes("goalie");
-    if (isGoalie) {
-      const paddle = Math.round(r.size);
-      if (!paddle) continue;
-      addGoalie(customGoalie, paddle, normHand(r.hand) ?? "Left", normColor(r.base_color), normColor(r.decal_color));
-      continue;
+  // ── Committed custom orders — the tiltweb admin's PENDING queue ──
+  if (adminQueue === null) {
+    warnings.push(
+      "Custom-order queue unreachable (tiltweb /api/modules/custom-orders) — committed customs are NOT included in this run."
+    );
+  } else {
+    for (const o of adminQueue) {
+      const s = o.specs || {};
+      const str = (k: string) => String(s[k] ?? "").trim();
+      if (o.kind === "goalie") {
+        const paddle = specNum(s.paddle ?? s.size);
+        if (!paddle) {
+          warnings.push(`Skipped queued goalie order for ${o.player_name ?? "?"} — no paddle size.`);
+          continue;
+        }
+        addGoalie(
+          customGoalie,
+          paddle,
+          normHand(str("hand")) ?? "Left",
+          normColor(str("baseColor")),
+          normColor(str("decalColor") || str("graphic"))
+        );
+        continue;
+      }
+      const size = specNum(s.size);
+      const level = normLevel(str("level"), size);
+      if (!level || !size) {
+        warnings.push(
+          `Skipped queued custom order for ${o.player_name ?? o.team ?? "?"} — level "${str("level")}", size "${str("size")}".`
+        );
+        continue;
+      }
+      const { flex } = snapFlex(specNum(s.flex));
+      add(customPlayer, {
+        level,
+        size,
+        carbon: (str("carbon") || (str("model").includes("24K") ? "24K" : "18K")).toUpperCase(),
+        kick: normKick(str("kickPoint") || str("kick")),
+        hand: normHand(str("hand")) ?? "Left",
+        flex,
+        curve: str("curve").toUpperCase(),
+        baseColor: normColor(str("baseColor")),
+        decalColor: normColor(str("decalColor") || str("graphic")),
+      });
     }
-    const level = normLevel(r.level, r.size);
-    if (!level || !r.size) {
-      warnings.push(`Skipped custom row ${r.row_index} (level="${r.level}", size=${r.size}) — couldn't normalize.`);
-      continue;
-    }
-    const { flex } = snapFlex(r.flex || 0);
-    add(customPlayer, {
-      level,
-      size: Math.round(r.size),
-      carbon: r.carbon.trim().toUpperCase() || "18K",
-      kick: normKick(r.kick_point),
-      hand: normHand(r.hand) ?? "Left",
-      flex,
-      curve: r.curve.trim().toUpperCase(),
-      baseColor: normColor(r.base_color),
-      decalColor: normColor(r.decal_color),
-    });
   }
 
   if (snappedCount > 0) {
