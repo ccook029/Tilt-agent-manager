@@ -12,6 +12,7 @@ import { getAgentById } from "./agent-registry";
 import { getRunLogsByAgent } from "./store";
 import { renderOrgKnowledge } from "./org-knowledge";
 import { renderCrossAgentSignals } from "./cross-agent";
+import { renderOrderBuilderContext } from "./order-builder/logic";
 import { loadAgentChat, appendAgentChat } from "./agent-chat-store";
 
 // Agents with a dedicated, richer chat surface of their own — the generic
@@ -56,7 +57,12 @@ export async function runAgentConversation(
   const systemPrompt =
     config.systemPrompt +
     (await renderOrgKnowledge().catch(() => "")) +
-    (await renderCrossAgentSignals(config.id).catch(() => ""));
+    (await renderCrossAgentSignals(config.id).catch(() => "")) +
+    // Stockton owns the Order Builder — give him its methodology + live
+    // demand/stock numbers so he can explain how a recommendation was derived.
+    (config.id === "inventory"
+      ? await renderOrderBuilderContext().catch(() => "")
+      : "");
 
   const userMessage = `You are ${config.name}, chatting live with the Tilt team (Chris, Jeremy, or staff). Answer their message directly and specifically, grounded in your recent work below and what you know about Tilt. If you don't have the data, say exactly what you'd run or need — don't invent numbers. Keep it conversational and tight; this is a chat, not an email.
 
