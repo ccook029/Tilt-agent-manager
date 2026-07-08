@@ -51,6 +51,7 @@ export default function OrderBuilderPage() {
   const [constraints, setConstraints] = useState<Constraints>({ ...DEFAULT_CONSTRAINTS });
   const [player, setPlayer] = useState<SpecLine[]>([]);
   const [goalie, setGoalie] = useState<GoalieLine[]>([]);
+  const [includeCustom, setIncludeCustom] = useState(true);
   const [chat, setChat] = useState<ChatMsg[]>([
     {
       who: "tool",
@@ -190,6 +191,14 @@ export default function OrderBuilderPage() {
     }
   }
 
+  // ── committed custom orders (separate section, included in the PO) ──
+  const customPlayer = useMemo(() => data?.custom.player ?? [], [data]);
+  const customGoalie = useMemo(() => data?.custom.goalie ?? [], [data]);
+  const customUnits = useMemo(
+    () => customPlayer.reduce((s, l) => s + l.qty, 0) + customGoalie.reduce((s, g) => s + g.qty, 0),
+    [customPlayer, customGoalie]
+  );
+
   // ── totals ──
   const totals = useMemo(() => {
     let units = 0,
@@ -208,10 +217,25 @@ export default function OrderBuilderPage() {
       gCost += goalieUnitCost(g.paddle) * g.qty;
       gRev += channelPrice(goalieMsrp(g.paddle), "Goalie", channel) * g.qty;
     }
-    const allCost = cost + gCost;
-    const allRev = rev + gRev;
-    return { units, gUnits, cost: allCost, rev: allRev, margin: allRev - allCost };
-  }, [player, goalie, channel]);
+    let cUnits = 0,
+      cCost = 0,
+      cRev = 0;
+    if (includeCustom) {
+      for (const l of customPlayer) {
+        cUnits += l.qty;
+        cCost += unitCost(l as unknown as SpecLine) * l.qty;
+        cRev += channelPrice(unitMsrp(l as unknown as SpecLine), l.level as SpecLine["level"], "dtc") * l.qty;
+      }
+      for (const g of customGoalie) {
+        cUnits += g.qty;
+        cCost += goalieUnitCost(g.paddle) * g.qty;
+        cRev += channelPrice(goalieMsrp(g.paddle), "Goalie", "dtc") * g.qty;
+      }
+    }
+    const allCost = cost + gCost + cCost;
+    const allRev = rev + gRev + cRev;
+    return { units, gUnits, cUnits, cost: allCost, rev: allRev, margin: allRev - allCost };
+  }, [player, goalie, channel, includeCustom, customPlayer, customGoalie]);
 
   const mix = useMemo(() => {
     const by: Record<string, number> = { Senior: 0, Intermediate: 0, Junior: 0, Goalie: 0 };
@@ -234,8 +258,8 @@ export default function OrderBuilderPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         kind,
-        units: totals.units + totals.gUnits,
-        lines: player.length + goalie.length,
+        units: totals.units + totals.gUnits + totals.cUnits,
+        lines: player.length + goalie.length + (includeCustom ? customPlayer.length + customGoalie.length : 0),
         landedCost: totals.cost,
       }),
     }).catch(() => {});
@@ -257,6 +281,19 @@ export default function OrderBuilderPage() {
         cp = channelPrice(mp, "Goalie", channel);
       rows.push(["Goalie", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), g.hand, g.qty, uc, mp, cp.toFixed(2), uc * g.qty, (cp * g.qty).toFixed(2)]);
     }
+    if (includeCustom) {
+      for (const l of customPlayer) {
+        const sl = l as unknown as SpecLine;
+        const uc = unitCost(sl),
+          mp = unitMsrp(sl);
+        rows.push(["Custom-Player", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, csvSafe(l.baseColor), csvSafe(l.decalColor), l.hand, l.qty, uc, mp, mp.toFixed(2), uc * l.qty, (mp * l.qty).toFixed(2)]);
+      }
+      for (const g of customGoalie) {
+        const uc = goalieUnitCost(g.paddle),
+          mp = goalieMsrp(g.paddle);
+        rows.push(["Custom-Goalie", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), g.hand, g.qty, uc, mp, mp.toFixed(2), uc * g.qty, (mp * g.qty).toFixed(2)]);
+      }
+    }
     download("TILT_Order_" + new Date().toISOString().slice(0, 10) + ".csv", rows.map((r) => r.join(",")).join("\n"));
     logExport("csv");
   }
@@ -276,7 +313,22 @@ export default function OrderBuilderPage() {
       tot += ex * g.qty;
       rows.push(["X1 Goalie", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), g.hand, g.qty, ex, ex * g.qty]);
     }
-    rows.push(["", "", "", "", "", "", "", "", "", "TOTAL", player.reduce((s, l) => s + l.qty, 0) + goalie.reduce((s, g) => s + g.qty, 0), "", tot]);
+    let customTotal = 0;
+    if (includeCustom) {
+      for (const l of customPlayer) {
+        const ex = unitCost(l as unknown as SpecLine) - LANDED_ADDER;
+        tot += ex * l.qty;
+        customTotal += l.qty;
+        rows.push(["X1 (CUSTOM)", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, csvSafe(l.baseColor), csvSafe(l.decalColor), l.hand, l.qty, ex, ex * l.qty]);
+      }
+      for (const g of customGoalie) {
+        const ex = goalieUnitCost(g.paddle) - LANDED_ADDER;
+        tot += ex * g.qty;
+        customTotal += g.qty;
+        rows.push(["X1 Goalie (CUSTOM)", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), g.hand, g.qty, ex, ex * g.qty]);
+      }
+    }
+    rows.push(["", "", "", "", "", "", "", "", "", "TOTAL", player.reduce((s, l) => s + l.qty, 0) + goalie.reduce((s, g) => s + g.qty, 0) + customTotal, "", tot]);
     download("TILT_Factory_PO_" + new Date().toISOString().slice(0, 10) + ".csv", rows.map((r) => r.join(",")).join("\n"));
     logExport("po");
   }
@@ -375,6 +427,15 @@ export default function OrderBuilderPage() {
                 />
               </label>
             </div>
+            <label className="mt-2.5 flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={includeCustom}
+                onChange={(e) => setIncludeCustom(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-700 bg-[#181818] accent-amber-400"
+              />
+              Include custom order queue ({customUnits} stick{customUnits === 1 ? "" : "s"})
+            </label>
             <button
               onClick={() => regenerate(data, targetQty, carbonPref, constraints)}
               disabled={!data}
@@ -460,12 +521,16 @@ export default function OrderBuilderPage() {
         <div className="space-y-4 min-w-0">
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5">
             {[
-              ["Units", String(totals.units + totals.gUnits), ""],
+              [
+                "Units",
+                String(totals.units + totals.gUnits + totals.cUnits) + (totals.cUnits ? ` (${totals.cUnits} custom)` : ""),
+                "",
+              ],
               ["Landed Cost (CAD)", fmt(totals.cost), ""],
               ["Revenue @ Channel", fmt(totals.rev), "cy"],
               ["Gross Margin", fmt(totals.margin), "cy"],
               ["Margin %", totals.rev ? Math.round((totals.margin / totals.rev) * 100) + "%" : "0%", ""],
-              ["Lines", String(player.length + goalie.length), ""],
+              ["Lines", String(player.length + goalie.length + (includeCustom ? customPlayer.length + customGoalie.length : 0)), ""],
             ].map(([k, v, tone]) => (
               <div key={k} className="rounded-lg border border-gray-800/70 bg-[#111]/60 px-3 py-2.5">
                 <div className="text-[10px] uppercase tracking-wider text-gray-500 font-display">{k}</div>
@@ -473,6 +538,56 @@ export default function OrderBuilderPage() {
               </div>
             ))}
           </div>
+
+          {includeCustom && customPlayer.length + customGoalie.length > 0 && (
+            <div className="rounded-xl border border-amber-800/60 overflow-hidden">
+              <div className="bg-amber-950/30 px-3 py-2 flex items-center justify-between">
+                <span className="font-display uppercase tracking-wide text-xs text-amber-300">
+                  Committed Custom Orders — ship with this PO ({totals.cUnits} sticks)
+                </span>
+                <span className="text-[10px] text-amber-500/80 font-mono">from the admin custom-orders queue</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs font-mono">
+                  <tbody>
+                    {customPlayer.map((l, i) => (
+                      <tr key={`cp${i}`} className="odd:bg-[#191308]/60 even:bg-[#1f180c]/60 border-b border-amber-900/30">
+                        <td className="px-2.5 py-1.5">{l.level}</td>
+                        <td className="px-2.5 py-1.5">{l.size}&quot;</td>
+                        <td className="px-2.5 py-1.5">{l.carbon}</td>
+                        <td className="px-2.5 py-1.5">{l.kick}</td>
+                        <td className="px-2.5 py-1.5">{l.flex || "—"}</td>
+                        <td className="px-2.5 py-1.5">{l.curve || "—"}</td>
+                        <td className="px-2.5 py-1.5 max-w-[160px] truncate" title={`${l.baseColor} / ${l.decalColor}`}>
+                          {l.baseColor || "—"} / {l.decalColor || "—"}
+                        </td>
+                        <td className="px-2.5 py-1.5">{l.hand[0]}</td>
+                        <td className="px-2.5 py-1.5 text-amber-300">{l.qty}</td>
+                        <td className="px-2.5 py-1.5">{fmt(unitCost(l as unknown as SpecLine))}</td>
+                        <td className="px-2.5 py-1.5" colSpan={3}>
+                          <span className="text-amber-500/80 text-[10px] uppercase">Custom</span>
+                        </td>
+                      </tr>
+                    ))}
+                    {customGoalie.map((g, i) => (
+                      <tr key={`cg${i}`} className="odd:bg-[#191308]/60 even:bg-[#1f180c]/60 border-b border-amber-900/30">
+                        <td className="px-2.5 py-1.5">Goalie</td>
+                        <td className="px-2.5 py-1.5">{g.paddle}&quot; paddle</td>
+                        <td className="px-2.5 py-1.5 text-gray-600" colSpan={4}>—</td>
+                        <td className="px-2.5 py-1.5 max-w-[160px] truncate">{g.baseColor || "—"} / {g.decalColor || "—"}</td>
+                        <td className="px-2.5 py-1.5">{g.hand[0]}</td>
+                        <td className="px-2.5 py-1.5 text-amber-300">{g.qty}</td>
+                        <td className="px-2.5 py-1.5">{fmt(goalieUnitCost(g.paddle))}</td>
+                        <td className="px-2.5 py-1.5" colSpan={3}>
+                          <span className="text-amber-500/80 text-[10px] uppercase">Custom</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div className="rounded-xl border border-gray-800/70 overflow-hidden">
             <div className="overflow-x-auto">
@@ -488,7 +603,7 @@ export default function OrderBuilderPage() {
                 </thead>
                 <tbody>
                   {player.map((l, idx) => {
-                    const stock = stockFlag(data ?? { player: { inventory: [], lifetime_orders: [] }, goalie: { inventory: [], lifetime_orders: [] }, generated_at: "", source: "", warnings: [] }, l.level, l.size);
+                    const stock = stockFlag(data ?? { player: { inventory: [], lifetime_orders: [] }, goalie: { inventory: [], lifetime_orders: [] }, custom: { player: [], goalie: [] }, generated_at: "", source: "", warnings: [] }, l.level, l.size);
                     return (
                       <tr key={idx} className="odd:bg-[#111]/60 even:bg-[#161616]/60 border-b border-gray-800/50">
                         <td className="px-2.5 py-1.5">{l.level}</td>
