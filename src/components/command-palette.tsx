@@ -81,6 +81,7 @@ export function CommandPalette() {
       { id: "studio-sox", label: "Studio: SOX Creator", group: "Navigate", perform: () => router.push("/studio/sox") },
       { id: "inventory", label: "Go to Stick Inventory", group: "Navigate", perform: () => router.push("/inventory") },
       { id: "inventory-scan", label: "Inventory: Scan & Sell", group: "Navigate", perform: () => router.push("/inventory/scan") },
+      { id: "inventory-order-builder", label: "Inventory: Stick Order Builder", group: "Navigate", perform: () => router.push("/inventory/order-builder") },
       { id: "files", label: "Go to Files", group: "Navigate", perform: () => router.push("/files") },
       { id: "staff", label: "Go to Staff Tools", group: "Navigate", perform: () => router.push("/staff") },
       { id: "knowledge", label: "Go to Company Knowledge", group: "Navigate", perform: () => router.push("/knowledge") },
