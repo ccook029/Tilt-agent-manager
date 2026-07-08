@@ -35,21 +35,40 @@ interface AdminCustomOrder {
  * shown in /admin/custom-orders that hasn't been marked 'ordered'). This — not
  * the Zoho custom tabs, which hold all-time history — is what rides the PO.
  */
-async function fetchAdminCustomQueue(): Promise<AdminCustomOrder[] | null> {
+/**
+ * Fetch with the bearer key preserved across redirects. fetch() strips the
+ * Authorization header on cross-origin redirects (e.g. tilthockey.com →
+ * www.tilthockey.com), which turns a valid call into a silent 401 — so we
+ * follow redirects manually and re-attach the key each hop.
+ */
+async function fetchWithKey(url: string, key: string, hops = 0): Promise<Response> {
+  const res = await fetch(url, {
+    headers: { authorization: `Bearer ${key}` },
+    cache: "no-store",
+    redirect: "manual",
+  });
+  if (res.status >= 300 && res.status < 400 && hops < 4) {
+    const loc = res.headers.get("location");
+    if (loc) return fetchWithKey(new URL(loc, url).toString(), key, hops + 1);
+  }
+  return res;
+}
+
+async function fetchAdminCustomQueue(): Promise<
+  { orders: AdminCustomOrder[] } | { error: string }
+> {
   const key = process.env.MODULES_SHARED_KEY;
-  if (!key) return null;
+  if (!key) return { error: "MODULES_SHARED_KEY is not set on the hub" };
   try {
-    const res = await fetch(`${TILTWEB_URL}/api/modules/custom-orders`, {
-      headers: { authorization: `Bearer ${key}` },
-      cache: "no-store",
-    });
-    if (!res.ok) throw new Error(`tiltweb returned ${res.status}`);
+    const res = await fetchWithKey(`${TILTWEB_URL}/api/modules/custom-orders`, key);
+    if (!res.ok) throw new Error(`tiltweb returned ${res.status} from ${res.url || TILTWEB_URL}`);
     const j = (await res.json()) as { ok?: boolean; orders?: AdminCustomOrder[] };
-    if (!j.ok || !Array.isArray(j.orders)) throw new Error("bad payload");
-    return j.orders;
+    if (!j.ok || !Array.isArray(j.orders)) throw new Error("bad payload from tiltweb");
+    return { orders: j.orders };
   } catch (err) {
-    console.warn("[order-builder] admin custom queue unreachable:", err);
-    return null;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[order-builder] admin custom queue unreachable:", msg);
+    return { error: msg };
   }
 }
 
@@ -195,12 +214,12 @@ export async function buildOrderDataset(): Promise<OrderDataset> {
   }
 
   // ── Committed custom orders — the tiltweb admin's PENDING queue ──
-  if (adminQueue === null) {
+  if ("error" in adminQueue) {
     warnings.push(
-      "Custom-order queue unreachable (tiltweb /api/modules/custom-orders) — committed customs are NOT included in this run."
+      `Custom-order queue unreachable (${adminQueue.error}) — committed customs are NOT included in this run.`
     );
   } else {
-    for (const o of adminQueue) {
+    for (const o of adminQueue.orders) {
       const s = o.specs || {};
       const str = (k: string) => String(s[k] ?? "").trim();
       if (o.kind === "goalie") {
