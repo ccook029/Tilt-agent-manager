@@ -242,38 +242,41 @@ export default function OrderBuilderPage() {
   }
   function exportOrderCSV() {
     const rows: (string | number)[][] = [
-      ["Type", "Level", "Length_in", "Carbon", "Kick", "Flex", "Curve", "Hand", "Qty", "Unit_Cost_CAD", "MSRP_CAD", "Channel_Price_CAD", "Line_Cost", "Line_Revenue"],
+      ["Type", "Level", "Length_in", "Carbon", "Kick", "Flex", "Curve", "Base_Color", "Decal_Color", "Hand", "Qty", "Unit_Cost_CAD", "MSRP_CAD", "Channel_Price_CAD", "Line_Cost", "Line_Revenue"],
     ];
+    const csvSafe = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
     for (const l of player) {
       const uc = unitCost(l),
         mp = unitMsrp(l),
         cp = channelPrice(mp, l.level, channel);
-      rows.push(["Player", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, l.hand, l.qty, uc, mp, cp.toFixed(2), uc * l.qty, (cp * l.qty).toFixed(2)]);
+      rows.push(["Player", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, csvSafe(l.baseColor), csvSafe(l.decalColor), l.hand, l.qty, uc, mp, cp.toFixed(2), uc * l.qty, (cp * l.qty).toFixed(2)]);
     }
     for (const g of goalie) {
-      const mp = goalieMsrp(g.paddle),
+      const uc = goalieUnitCost(g.paddle),
+        mp = goalieMsrp(g.paddle),
         cp = channelPrice(mp, "Goalie", channel);
-      rows.push(["Goalie", "Goalie", g.paddle, "", "", "", "", g.hand, g.qty, "", mp, cp.toFixed(2), "", (cp * g.qty).toFixed(2)]);
+      rows.push(["Goalie", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), g.hand, g.qty, uc, mp, cp.toFixed(2), uc * g.qty, (cp * g.qty).toFixed(2)]);
     }
     download("TILT_Order_" + new Date().toISOString().slice(0, 10) + ".csv", rows.map((r) => r.join(",")).join("\n"));
     logExport("csv");
   }
   function exportFactoryPO() {
     const rows: (string | number)[][] = [
-      ["Model", "Level", "Length(inch)", "Carbon", "Kick Point", "Flex", "Curve", "Hand", "Quantity", "Unit Price (CAD)", "Amount (CAD)"],
+      ["Model", "Level", "Length(inch)", "Carbon", "Kick Point", "Flex", "Curve", "Stick Color", "Graphic/Logo", "Hand", "Quantity", "Unit Price (CAD)", "Amount (CAD)"],
     ];
+    const csvSafe = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
     let tot = 0;
     for (const l of player) {
       const ex = unitCost(l) - LANDED_ADDER;
       tot += ex * l.qty;
-      rows.push(["X1", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, l.hand, l.qty, ex, ex * l.qty]);
+      rows.push(["X1", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, csvSafe(l.baseColor), csvSafe(l.decalColor), l.hand, l.qty, ex, ex * l.qty]);
     }
     for (const g of goalie) {
       const ex = goalieUnitCost(g.paddle) - LANDED_ADDER;
       tot += ex * g.qty;
-      rows.push(["X1 Goalie", "Goalie", g.paddle, "18K", "", "", "T31", g.hand, g.qty, ex, ex * g.qty]);
+      rows.push(["X1 Goalie", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), g.hand, g.qty, ex, ex * g.qty]);
     }
-    rows.push(["", "", "", "", "", "", "", "TOTAL", player.reduce((s, l) => s + l.qty, 0) + goalie.reduce((s, g) => s + g.qty, 0), "", tot]);
+    rows.push(["", "", "", "", "", "", "", "", "", "TOTAL", player.reduce((s, l) => s + l.qty, 0) + goalie.reduce((s, g) => s + g.qty, 0), "", tot]);
     download("TILT_Factory_PO_" + new Date().toISOString().slice(0, 10) + ".csv", rows.map((r) => r.join(",")).join("\n"));
     logExport("po");
   }
@@ -476,7 +479,7 @@ export default function OrderBuilderPage() {
               <table className="w-full text-xs font-mono">
                 <thead>
                   <tr className="bg-black text-left">
-                    {["Level", "Len", "Carbon", "Kick", "Flex", "Curve", "Hand", "Qty", "Unit Cost", "MSRP", "Stock", ""].map((h) => (
+                    {["Level", "Len", "Carbon", "Kick", "Flex", "Curve", "Colors (base / decal)", "Hand", "Qty", "Unit Cost", "MSRP", "Stock", ""].map((h) => (
                       <th key={h} className="px-2.5 py-2 font-display uppercase tracking-wide text-[11px] border-b-2 border-[#00d6ff]">
                         {h}
                       </th>
@@ -485,7 +488,7 @@ export default function OrderBuilderPage() {
                 </thead>
                 <tbody>
                   {player.map((l, idx) => {
-                    const [flag, tone] = stockFlag(data ?? { player: { inventory: [], lifetime_orders: [] }, goalie: { inventory: [], lifetime_orders: [] }, generated_at: "", source: "", warnings: [] }, l.level, l.size);
+                    const stock = stockFlag(data ?? { player: { inventory: [], lifetime_orders: [] }, goalie: { inventory: [], lifetime_orders: [] }, generated_at: "", source: "", warnings: [] }, l.level, l.size);
                     return (
                       <tr key={idx} className="odd:bg-[#111]/60 even:bg-[#161616]/60 border-b border-gray-800/50">
                         <td className="px-2.5 py-1.5">{l.level}</td>
@@ -494,6 +497,9 @@ export default function OrderBuilderPage() {
                         <td className="px-2.5 py-1.5">{l.kick}</td>
                         <td className="px-2.5 py-1.5">{l.flex}</td>
                         <td className="px-2.5 py-1.5">{l.curve}</td>
+                        <td className="px-2.5 py-1.5 max-w-[160px] truncate" title={`${l.baseColor} / ${l.decalColor}`}>
+                          {l.baseColor || "—"} / {l.decalColor || "—"}
+                        </td>
                         <td className="px-2.5 py-1.5">{l.hand[0]}</td>
                         <td className="px-2.5 py-1.5">
                           <input
@@ -511,7 +517,12 @@ export default function OrderBuilderPage() {
                         <td className="px-2.5 py-1.5">{fmt(unitCost(l))}</td>
                         <td className="px-2.5 py-1.5">{fmt(unitMsrp(l))}</td>
                         <td className="px-2.5 py-1.5">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] ${FLAG_CLS[tone]}`}>{flag}</span>
+                          <span
+                            title={stock.explain}
+                            className={`px-1.5 py-0.5 rounded text-[10px] cursor-help ${FLAG_CLS[stock.tone]}`}
+                          >
+                            {stock.label} · {stock.available}
+                          </span>
                         </td>
                         <td className="px-2.5 py-1.5">
                           <button onClick={() => setPlayer(player.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-300">
@@ -527,6 +538,9 @@ export default function OrderBuilderPage() {
                       <td className="px-2.5 py-1.5">{g.paddle}&quot; paddle</td>
                       <td className="px-2.5 py-1.5 text-gray-600" colSpan={4}>
                         —
+                      </td>
+                      <td className="px-2.5 py-1.5 max-w-[160px] truncate" title={`${g.baseColor} / ${g.decalColor}`}>
+                        {g.baseColor || "—"} / {g.decalColor || "—"}
                       </td>
                       <td className="px-2.5 py-1.5">{g.hand[0]}</td>
                       <td className="px-2.5 py-1.5">
@@ -549,7 +563,7 @@ export default function OrderBuilderPage() {
                   ))}
                   {player.length + goalie.length === 0 && (
                     <tr>
-                      <td colSpan={12} className="px-3 py-10 text-center text-gray-600">
+                      <td colSpan={13} className="px-3 py-10 text-center text-gray-600">
                         {data ? "Set a target quantity and hit Generate." : "Waiting for Stockton data…"}
                       </td>
                     </tr>
@@ -559,6 +573,16 @@ export default function OrderBuilderPage() {
             </div>
           </div>
 
+          <p className="text-[11px] text-gray-500 leading-relaxed -mt-1">
+            <span className="font-display uppercase tracking-wide text-gray-400">Stock</span> compares what&apos;s on the shelf right now to how
+            many of that level + length you&apos;ve ever ordered (the number after the dot is on-hand today):{" "}
+            <span className={`px-1 py-0.5 rounded text-[10px] font-mono ${FLAG_CLS.risk}`}>STOCKOUT</span> none left ·{" "}
+            <span className={`px-1 py-0.5 rounded text-[10px] font-mono ${FLAG_CLS.hot}`}>THIN</span> cover is low for how fast it moves ·{" "}
+            <span className={`px-1 py-0.5 rounded text-[10px] font-mono ${FLAG_CLS.cover}`}>OK</span> reasonable cover ·{" "}
+            <span className={`px-1 py-0.5 rounded text-[10px] font-mono ${FLAG_CLS.cover}`}>COVERED</span> plenty on hand — hover any flag for
+            the exact numbers.
+          </p>
+
           <div className="flex flex-wrap gap-2.5">
             <button onClick={exportOrderCSV} disabled={!player.length} className="rounded-lg bg-[#00d6ff] px-3.5 py-2 font-display uppercase text-xs font-bold text-[#06232b] hover:bg-[#00a6c9] disabled:opacity-40">
               ⬇ Order CSV
@@ -567,7 +591,7 @@ export default function OrderBuilderPage() {
               ⬇ Factory PO (Huizhou format)
             </button>
             <button
-              onClick={() => setPlayer([...player, { level: "Senior", size: 66, carbon: "18K", kick: "Mid", hand: "Left", flex: 85, curve: "T92", qty: 1 }])}
+              onClick={() => setPlayer([...player, { level: "Senior", size: 66, carbon: "18K", kick: "Mid", hand: "Left", flex: 85, curve: "T92", baseColor: "Black", decalColor: "White", qty: 1 }])}
               className="rounded-lg border border-[#00d6ff]/60 px-3.5 py-2 font-display uppercase text-xs font-bold text-[#00d6ff] hover:bg-[#00d6ff]/10"
             >
               + Add Line
