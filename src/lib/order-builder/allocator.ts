@@ -94,9 +94,9 @@ export const CURVES = ["T92", "T28", "T88", "T91A", "T90", "T02"];
 export const GOALIE_PADDLES = [21, 22, 23, 24, 25, 26, 27];
 
 /* ---------- ECONOMICS (CAD) ----------
-   COGS = factory ex-ship + air landed. Mid-weight-tier defaults — weight-per-
-   SKU is an OPEN DECISION; update here when locked. Goalie factory cost is NOT
-   locked either: goalie lines show MSRP but are excluded from cost/margin. */
+   COGS = factory ex-ship + air landed. Player costs use the standard tiers
+   (JR 48–52" / JR 54"+ / INT / SR, with 24K premium). Goalie costs come from
+   the July 2026 Huizhou PI, averaged per paddle length. */
 export const LANDED_ADDER = 7;
 export const COGS = {
   jrShort: { k18: 53, k24: 58 }, // 48–52"
@@ -104,6 +104,24 @@ export const COGS = {
   int: { k18: 85, k24: 93 },
   sr: { k18: 85, k24: 93 },
 };
+/** Goalie ex-ship CAD by paddle length — from the Huizhou PI (18K, T31). */
+export const GOALIE_COGS: Record<number, number> = {
+  21: 122,
+  22: 122,
+  23: 123,
+  24: 124,
+  25: 131,
+  26: 130,
+  27: 132,
+};
+/** Landed goalie unit cost; nearest known paddle when off-list. */
+export function goalieUnitCost(paddle: number): number {
+  const known = Object.keys(GOALIE_COGS).map(Number);
+  const nearest = known.reduce((best, p) =>
+    Math.abs(p - paddle) < Math.abs(best - paddle) ? p : best
+  );
+  return GOALIE_COGS[nearest] + LANDED_ADDER;
+}
 export const MSRP: Record<SpecLine["level"], Record<"18K" | "24K", number>> = {
   Junior: { "18K": 165, "24K": 185 },
   Intermediate: { "18K": 215, "24K": 235 },

@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
   await postSignal({
     source: "order-builder",
     headline: `Factory ${body.kind === "csv" ? "order CSV" : "PO"} drafted — ${units} sticks`,
-    detail: `${body.lines ?? "?"} lines · ~$${Math.round(cost).toLocaleString("en-CA")} CAD landed (player sticks; verify Huizhou headers before sending).`,
+    detail: `${body.lines ?? "?"} lines · ~$${Math.round(cost).toLocaleString("en-CA")} CAD landed.`,
   });
   return NextResponse.json({ ok: true });
 }

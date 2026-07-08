@@ -14,6 +14,7 @@ import {
   buildDemand,
   channelPrice,
   goalieMsrp,
+  goalieUnitCost,
   stockFlag,
   unitCost,
   unitMsrp,
@@ -200,12 +201,16 @@ export default function OrderBuilderPage() {
       rev += channelPrice(unitMsrp(l), l.level, channel) * l.qty;
     }
     let gUnits = 0,
-      gRev = 0;
+      gRev = 0,
+      gCost = 0;
     for (const g of goalie) {
       gUnits += g.qty;
+      gCost += goalieUnitCost(g.paddle) * g.qty;
       gRev += channelPrice(goalieMsrp(g.paddle), "Goalie", channel) * g.qty;
     }
-    return { units, cost, rev, gUnits, gRev, margin: rev - cost };
+    const allCost = cost + gCost;
+    const allRev = rev + gRev;
+    return { units, gUnits, cost: allCost, rev: allRev, margin: allRev - allCost };
   }, [player, goalie, channel]);
 
   const mix = useMemo(() => {
@@ -254,7 +259,6 @@ export default function OrderBuilderPage() {
     logExport("csv");
   }
   function exportFactoryPO() {
-    // Huizhou-style columns — VERIFY headers against the last real PI before sending.
     const rows: (string | number)[][] = [
       ["Model", "Level", "Length(inch)", "Carbon", "Kick Point", "Flex", "Curve", "Hand", "Quantity", "Unit Price (CAD)", "Amount (CAD)"],
     ];
@@ -265,7 +269,9 @@ export default function OrderBuilderPage() {
       rows.push(["X1", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, l.hand, l.qty, ex, ex * l.qty]);
     }
     for (const g of goalie) {
-      rows.push(["X1 Goalie", "Goalie", g.paddle, "", "", "", "", g.hand, g.qty, "TBD", "TBD"]);
+      const ex = goalieUnitCost(g.paddle) - LANDED_ADDER;
+      tot += ex * g.qty;
+      rows.push(["X1 Goalie", "Goalie", g.paddle, "18K", "", "", "T31", g.hand, g.qty, ex, ex * g.qty]);
     }
     rows.push(["", "", "", "", "", "", "", "TOTAL", player.reduce((s, l) => s + l.qty, 0) + goalie.reduce((s, g) => s + g.qty, 0), "", tot]);
     download("TILT_Factory_PO_" + new Date().toISOString().slice(0, 10) + ".csv", rows.map((r) => r.join(",")).join("\n"));
@@ -453,9 +459,9 @@ export default function OrderBuilderPage() {
             {[
               ["Units", String(totals.units + totals.gUnits), ""],
               ["Landed Cost (CAD)", fmt(totals.cost), ""],
-              ["Revenue @ Channel", fmt(totals.rev + totals.gRev), "cy"],
-              ["Gross Margin*", fmt(totals.margin), "cy"],
-              ["Margin %*", totals.rev ? Math.round((totals.margin / totals.rev) * 100) + "%" : "0%", ""],
+              ["Revenue @ Channel", fmt(totals.rev), "cy"],
+              ["Gross Margin", fmt(totals.margin), "cy"],
+              ["Margin %", totals.rev ? Math.round((totals.margin / totals.rev) * 100) + "%" : "0%", ""],
               ["Lines", String(player.length + goalie.length), ""],
             ].map(([k, v, tone]) => (
               <div key={k} className="rounded-lg border border-gray-800/70 bg-[#111]/60 px-3 py-2.5">
@@ -536,7 +542,7 @@ export default function OrderBuilderPage() {
                           className="w-16 bg-[#181818] border border-gray-800 rounded px-1.5 py-1 text-right"
                         />
                       </td>
-                      <td className="px-2.5 py-1.5 text-gray-600">TBD</td>
+                      <td className="px-2.5 py-1.5">{fmt(goalieUnitCost(g.paddle))}</td>
                       <td className="px-2.5 py-1.5">{fmt(goalieMsrp(g.paddle))}</td>
                       <td className="px-2.5 py-1.5" colSpan={2} />
                     </tr>
@@ -572,10 +578,9 @@ export default function OrderBuilderPage() {
           </div>
 
           <p className="text-[11px] text-gray-600 font-mono leading-relaxed border-t border-gray-800/70 pt-3">
-            *Cost/margin cover player sticks only — goalie factory cost isn&apos;t locked yet (goalie revenue shown, cost TBD). COGS = mid-weight-tier
-            factory CAD + ${LANDED_ADDER} air landed; weight-per-SKU still open — update the COGS block in{" "}
-            <span className="text-gray-500">src/lib/order-builder/allocator.ts</span> when locked. Channel pricing: DTC=MSRP, Team=-15%,
-            Wholesale=-30%, SFS=SR-48/INT-43/JR-45 (goalie at SR tier). ⚠ Verify Factory PO headers against the latest Huizhou PI before sending.
+            COGS (factory CAD + ${LANDED_ADDER} air landed): JR 48–52&quot; $53 · JR 54&quot;+ $58 · INT/SR $85 (24K premium applied) · goalie
+            per paddle from the Huizhou PI ($122–$132). Channel pricing: DTC=MSRP, Team=-15%, Wholesale=-30%, SFS=SR-48/INT-43/JR-45 (goalie
+            at SR tier). Edit economics in <span className="text-gray-500">src/lib/order-builder/allocator.ts</span>.
           </p>
         </div>
       </div>
