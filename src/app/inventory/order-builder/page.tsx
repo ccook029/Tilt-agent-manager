@@ -603,7 +603,12 @@ export default function OrderBuilderPage() {
                 </thead>
                 <tbody>
                   {player.map((l, idx) => {
-                    const stock = stockFlag(data ?? { player: { inventory: [], lifetime_orders: [] }, goalie: { inventory: [], lifetime_orders: [] }, custom: { player: [], goalie: [] }, generated_at: "", source: "", warnings: [] }, l.level, l.size);
+                    const stock = stockFlag(
+                      data ?? { player: { inventory: [], lifetime_orders: [] }, goalie: { inventory: [], lifetime_orders: [] }, custom: { player: [], goalie: [] }, generated_at: "", source: "", warnings: [] },
+                      l.level,
+                      l.size,
+                      { flex: l.flex, curve: l.curve, hand: l.hand }
+                    );
                     return (
                       <tr key={idx} className="odd:bg-[#111]/60 even:bg-[#161616]/60 border-b border-gray-800/50">
                         <td className="px-2.5 py-1.5">{l.level}</td>
@@ -636,7 +641,7 @@ export default function OrderBuilderPage() {
                             title={stock.explain}
                             className={`inline-block whitespace-nowrap px-1.5 py-0.5 rounded text-[10px] cursor-help ${FLAG_CLS[stock.tone]}`}
                           >
-                            {stock.available} on hand
+                            {stock.exact} exact · {stock.available} @ {l.size}&quot;
                           </span>
                         </td>
                         <td className="px-2.5 py-1.5">
@@ -689,8 +694,9 @@ export default function OrderBuilderPage() {
           </div>
 
           <p className="text-[11px] text-gray-500 leading-relaxed -mt-1">
-            <span className="font-display uppercase tracking-wide text-gray-400">Stock</span> = how many sticks of that level + length are on
-            the shelf right now. Color is the health vs how fast that spec sells:{" "}
+            <span className="font-display uppercase tracking-wide text-gray-400">Stock</span> = &quot;N exact&quot; is sticks on hand matching that
+            row&apos;s exact flex/curve/hand; the second number is everything on hand at that level + length. Color is the health vs how fast
+            that length sells:{" "}
             <span className={`px-1 py-0.5 rounded text-[10px] font-mono whitespace-nowrap ${FLAG_CLS.risk}`}>red</span> none left ·{" "}
             <span className={`px-1 py-0.5 rounded text-[10px] font-mono whitespace-nowrap ${FLAG_CLS.hot}`}>amber</span> running thin ·{" "}
             <span className={`px-1 py-0.5 rounded text-[10px] font-mono whitespace-nowrap ${FLAG_CLS.cover}`}>green</span> healthy. Hover any
