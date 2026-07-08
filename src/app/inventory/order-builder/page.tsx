@@ -60,6 +60,7 @@ export default function OrderBuilderPage() {
   ]);
   const [chatInput, setChatInput] = useState("");
   const [steering, setSteering] = useState(false);
+  const [logicBusy, setLogicBusy] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
 
@@ -245,6 +246,43 @@ export default function OrderBuilderPage() {
     return { by, tot };
   }, [player, goalie, totals]);
 
+  // ── Order Logic PDF — Stockton explains how this order was derived ──
+  async function downloadOrderLogic() {
+    if (logicBusy || player.length + goalie.length === 0) return;
+    setLogicBusy(true);
+    try {
+      const res = await fetch("/api/inventory/order-builder/logic-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          player,
+          goalie,
+          targetQty,
+          channel,
+          carbonPref,
+          constraints,
+          includeCustom,
+          totals: { units: totals.units + totals.gUnits + totals.cUnits, cost: totals.cost, rev: totals.rev, margin: totals.margin },
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error || "Couldn't generate the Order Logic PDF.");
+        return;
+      }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `TILT_Order_Logic_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      alert("Network error generating the Order Logic PDF.");
+    } finally {
+      setLogicBusy(false);
+    }
+  }
+
   // ── exports ──
   function download(name: string, text: string) {
     const a = document.createElement("a");
@@ -347,21 +385,31 @@ export default function OrderBuilderPage() {
             Stockton-linked factory order recommendations — steer it in plain language.
           </p>
         </div>
-        <span
-          className={`font-mono text-[11px] px-2.5 py-1 rounded border ${
-            data
-              ? "border-emerald-700 text-emerald-400"
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => void downloadOrderLogic()}
+            disabled={logicBusy || player.length + goalie.length === 0}
+            title="Stockton writes a PDF memo explaining how this order was derived — attach it to the PO."
+            className="rounded-lg border border-[#00d6ff]/60 px-3.5 py-1.5 font-display uppercase text-xs font-bold text-[#00d6ff] hover:bg-[#00d6ff]/10 disabled:opacity-40"
+          >
+            {logicBusy ? "Stockton is writing…" : "⬇ Order Logic (PDF)"}
+          </button>
+          <span
+            className={`font-mono text-[11px] px-2.5 py-1 rounded border ${
+              data
+                ? "border-emerald-700 text-emerald-400"
+                : dataError
+                  ? "border-red-800 text-red-400"
+                  : "border-gray-700 text-gray-500"
+            }`}
+          >
+            {data
+              ? `STOCKTON LIVE · ${data.generated_at.slice(0, 16).replace("T", " ")}`
               : dataError
-                ? "border-red-800 text-red-400"
-                : "border-gray-700 text-gray-500"
-          }`}
-        >
-          {data
-            ? `STOCKTON LIVE · ${data.generated_at.slice(0, 16).replace("T", " ")}`
-            : dataError
-              ? "DATA ERROR"
-              : "LOADING…"}
-        </span>
+                ? "DATA ERROR"
+                : "LOADING…"}
+          </span>
+        </div>
       </div>
 
       {dataError && (
