@@ -198,9 +198,15 @@ function normalizeColumn(col: string): keyof StickRecord | null {
 
 /**
  * Parse raw sheet rows into typed StickRecord objects.
- * Skips rows without a serial number (blank/header rows).
+ * Inventory tabs skip rows without a serial number (blank/header rows);
+ * custom-order tabs have no serial column, so they pass requireSerial=false
+ * and skip only rows with neither a level nor a size.
  */
-function parseStickRecords(rows: SheetRow[], tab: string): StickRecord[] {
+function parseStickRecords(
+  rows: SheetRow[],
+  tab: string,
+  requireSerial = true
+): StickRecord[] {
   const sticks: StickRecord[] = [];
 
   for (const row of rows) {
@@ -235,8 +241,13 @@ function parseStickRecords(rows: SheetRow[], tab: string): StickRecord[] {
       }
     }
 
-    // Skip rows without a serial number — blank or header rows
-    if (!stick.serial_number) continue;
+    if (requireSerial) {
+      // Skip rows without a serial number — blank or header rows.
+      if (!stick.serial_number) continue;
+    } else if (!stick.level && !stick.size) {
+      // No serial column on this tab — skip only genuinely blank rows.
+      continue;
+    }
 
     sticks.push(stick);
   }
@@ -277,7 +288,8 @@ export async function fetchCustomStickRecords(): Promise<StickRecord[]> {
   for (const tab of CUSTOM_TABS) {
     try {
       const rows = await fetchSheetRows(tab);
-      const sticks = parseStickRecords(rows, tab);
+      // Custom tabs have no Serial column — don't require one.
+      const sticks = parseStickRecords(rows, tab, false);
       allSticks.push(...sticks);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
