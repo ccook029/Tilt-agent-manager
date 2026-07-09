@@ -214,6 +214,20 @@ export async function buildOrderDataset(): Promise<OrderDataset> {
   }
 
   // ── Committed custom orders — the tiltweb admin's PENDING queue ──
+  // Names/numbers stay on each row (they go on the stick → factory PO), so
+  // aggregation keys include them: same spec, different name = separate line.
+  const addCustom = (row: Omit<ComboRow, "qty">) => {
+    const k = comboKey(row) + `|${row.playerName ?? ""}|${row.playerNumber ?? ""}`;
+    const cur = customPlayer.get(k);
+    if (cur) cur.qty += 1;
+    else customPlayer.set(k, { ...row, qty: 1 });
+  };
+  const addCustomGoalie = (row: Omit<GoalieComboRow, "qty">) => {
+    const k = `${row.paddle}|${row.hand}|${row.baseColor}|${row.decalColor}|${row.playerName ?? ""}|${row.playerNumber ?? ""}`;
+    const cur = customGoalie.get(k);
+    if (cur) cur.qty += 1;
+    else customGoalie.set(k, { ...row, qty: 1 });
+  };
   if ("error" in adminQueue) {
     warnings.push(
       `Custom-order queue unreachable (${adminQueue.error}) — committed customs are NOT included in this run.`
@@ -222,19 +236,22 @@ export async function buildOrderDataset(): Promise<OrderDataset> {
     for (const o of adminQueue.orders) {
       const s = o.specs || {};
       const str = (k: string) => String(s[k] ?? "").trim();
+      const playerName = (o.player_name ?? "").trim();
+      const playerNumber = (o.player_number ?? "").trim();
       if (o.kind === "goalie") {
         const paddle = specNum(s.paddle ?? s.size);
         if (!paddle) {
           warnings.push(`Skipped queued goalie order for ${o.player_name ?? "?"} — no paddle size.`);
           continue;
         }
-        addGoalie(
-          customGoalie,
+        addCustomGoalie({
           paddle,
-          normHand(str("hand")) ?? "Left",
-          normColor(str("baseColor")),
-          normColor(str("decalColor") || str("graphic"))
-        );
+          hand: normHand(str("hand")) ?? "Left",
+          baseColor: normColor(str("baseColor")),
+          decalColor: normColor(str("decalColor") || str("graphic")),
+          playerName,
+          playerNumber,
+        });
         continue;
       }
       const size = specNum(s.size);
@@ -246,7 +263,7 @@ export async function buildOrderDataset(): Promise<OrderDataset> {
         continue;
       }
       const { flex } = snapFlex(specNum(s.flex));
-      add(customPlayer, {
+      addCustom({
         level,
         size,
         carbon: (str("carbon") || (str("model").includes("24K") ? "24K" : "18K")).toUpperCase(),
@@ -256,6 +273,8 @@ export async function buildOrderDataset(): Promise<OrderDataset> {
         curve: str("curve").toUpperCase(),
         baseColor: normColor(str("baseColor")),
         decalColor: normColor(str("decalColor") || str("graphic")),
+        playerName,
+        playerNumber,
       });
     }
   }

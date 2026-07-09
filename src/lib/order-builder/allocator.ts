@@ -40,6 +40,9 @@ export interface ComboRow {
   curve: string;
   baseColor: string;
   decalColor: string;
+  /** Custom orders only: the name/number that goes on the stick (factory PO). */
+  playerName?: string;
+  playerNumber?: string;
   qty: number; // lifetime units for lifetime_orders; available for inventory
 }
 
@@ -48,6 +51,9 @@ export interface GoalieComboRow {
   hand: string;
   baseColor: string;
   decalColor: string;
+  /** Custom orders only: the name/number that goes on the stick (factory PO). */
+  playerName?: string;
+  playerNumber?: string;
   qty: number;
 }
 
