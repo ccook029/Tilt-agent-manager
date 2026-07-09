@@ -304,32 +304,32 @@ export default function OrderBuilderPage() {
   }
   function exportOrderCSV() {
     const rows: (string | number)[][] = [
-      ["Type", "Level", "Length_in", "Carbon", "Kick", "Flex", "Curve", "Base_Color", "Decal_Color", "Hand", "Qty", "Unit_Cost_CAD", "MSRP_CAD", "Channel_Price_CAD", "Line_Cost", "Line_Revenue"],
+      ["Type", "Level", "Length_in", "Carbon", "Kick", "Flex", "Curve", "Base_Color", "Decal_Color", "Player_Name", "Player_Number", "Hand", "Qty", "Unit_Cost_CAD", "MSRP_CAD", "Channel_Price_CAD", "Line_Cost", "Line_Revenue"],
     ];
     const csvSafe = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
     for (const l of player) {
       const uc = unitCost(l),
         mp = unitMsrp(l),
         cp = channelPrice(mp, l.level, channel);
-      rows.push(["Player", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, csvSafe(l.baseColor), csvSafe(l.decalColor), l.hand, l.qty, uc, mp, cp.toFixed(2), uc * l.qty, (cp * l.qty).toFixed(2)]);
+      rows.push(["Player", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, csvSafe(l.baseColor), csvSafe(l.decalColor), "", "", l.hand, l.qty, uc, mp, cp.toFixed(2), uc * l.qty, (cp * l.qty).toFixed(2)]);
     }
     for (const g of goalie) {
       const uc = goalieUnitCost(g.paddle),
         mp = goalieMsrp(g.paddle),
         cp = channelPrice(mp, "Goalie", channel);
-      rows.push(["Goalie", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), g.hand, g.qty, uc, mp, cp.toFixed(2), uc * g.qty, (cp * g.qty).toFixed(2)]);
+      rows.push(["Goalie", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), "", "", g.hand, g.qty, uc, mp, cp.toFixed(2), uc * g.qty, (cp * g.qty).toFixed(2)]);
     }
     if (includeCustom) {
       for (const l of customPlayer) {
         const sl = l as unknown as SpecLine;
         const uc = unitCost(sl),
           mp = unitMsrp(sl);
-        rows.push(["Custom-Player", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, csvSafe(l.baseColor), csvSafe(l.decalColor), l.hand, l.qty, uc, mp, mp.toFixed(2), uc * l.qty, (mp * l.qty).toFixed(2)]);
+        rows.push(["Custom-Player", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, csvSafe(l.baseColor), csvSafe(l.decalColor), csvSafe(l.playerName ?? ""), csvSafe(l.playerNumber ?? ""), l.hand, l.qty, uc, mp, mp.toFixed(2), uc * l.qty, (mp * l.qty).toFixed(2)]);
       }
       for (const g of customGoalie) {
         const uc = goalieUnitCost(g.paddle),
           mp = goalieMsrp(g.paddle);
-        rows.push(["Custom-Goalie", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), g.hand, g.qty, uc, mp, mp.toFixed(2), uc * g.qty, (mp * g.qty).toFixed(2)]);
+        rows.push(["Custom-Goalie", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), csvSafe(g.playerName ?? ""), csvSafe(g.playerNumber ?? ""), g.hand, g.qty, uc, mp, mp.toFixed(2), uc * g.qty, (mp * g.qty).toFixed(2)]);
       }
     }
     download("TILT_Order_" + new Date().toISOString().slice(0, 10) + ".csv", rows.map((r) => r.join(",")).join("\n"));
@@ -337,19 +337,19 @@ export default function OrderBuilderPage() {
   }
   function exportFactoryPO() {
     const rows: (string | number)[][] = [
-      ["Model", "Level", "Length(inch)", "Carbon", "Kick Point", "Flex", "Curve", "Stick Color", "Graphic/Logo", "Hand", "Quantity", "Unit Price (CAD)", "Amount (CAD)"],
+      ["Model", "Level", "Length(inch)", "Carbon", "Kick Point", "Flex", "Curve", "Stick Color", "Graphic/Logo", "Player Name", "Player Number", "Hand", "Quantity", "Unit Price (CAD)", "Amount (CAD)"],
     ];
     const csvSafe = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
     let tot = 0;
     for (const l of player) {
       const ex = unitCost(l) - LANDED_ADDER;
       tot += ex * l.qty;
-      rows.push(["X1", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, csvSafe(l.baseColor), csvSafe(l.decalColor), l.hand, l.qty, ex, ex * l.qty]);
+      rows.push(["X1", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, csvSafe(l.baseColor), csvSafe(l.decalColor), "", "", l.hand, l.qty, ex, ex * l.qty]);
     }
     for (const g of goalie) {
       const ex = goalieUnitCost(g.paddle) - LANDED_ADDER;
       tot += ex * g.qty;
-      rows.push(["X1 Goalie", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), g.hand, g.qty, ex, ex * g.qty]);
+      rows.push(["X1 Goalie", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), "", "", g.hand, g.qty, ex, ex * g.qty]);
     }
     let customTotal = 0;
     if (includeCustom) {
@@ -357,16 +357,16 @@ export default function OrderBuilderPage() {
         const ex = unitCost(l as unknown as SpecLine) - LANDED_ADDER;
         tot += ex * l.qty;
         customTotal += l.qty;
-        rows.push(["X1 (CUSTOM)", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, csvSafe(l.baseColor), csvSafe(l.decalColor), l.hand, l.qty, ex, ex * l.qty]);
+        rows.push(["X1 (CUSTOM)", l.level, l.size, l.carbon, l.kick, l.flex, l.curve, csvSafe(l.baseColor), csvSafe(l.decalColor), csvSafe(l.playerName ?? ""), csvSafe(l.playerNumber ?? ""), l.hand, l.qty, ex, ex * l.qty]);
       }
       for (const g of customGoalie) {
         const ex = goalieUnitCost(g.paddle) - LANDED_ADDER;
         tot += ex * g.qty;
         customTotal += g.qty;
-        rows.push(["X1 Goalie (CUSTOM)", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), g.hand, g.qty, ex, ex * g.qty]);
+        rows.push(["X1 Goalie (CUSTOM)", "Goalie", g.paddle, "18K", "", "", "T31", csvSafe(g.baseColor), csvSafe(g.decalColor), csvSafe(g.playerName ?? ""), csvSafe(g.playerNumber ?? ""), g.hand, g.qty, ex, ex * g.qty]);
       }
     }
-    rows.push(["", "", "", "", "", "", "", "", "", "TOTAL", player.reduce((s, l) => s + l.qty, 0) + goalie.reduce((s, g) => s + g.qty, 0) + customTotal, "", tot]);
+    rows.push(["", "", "", "", "", "", "", "", "", "", "", "TOTAL", player.reduce((s, l) => s + l.qty, 0) + goalie.reduce((s, g) => s + g.qty, 0) + customTotal, "", tot]);
     download("TILT_Factory_PO_" + new Date().toISOString().slice(0, 10) + ".csv", rows.map((r) => r.join(",")).join("\n"));
     logExport("po");
   }
@@ -613,7 +613,9 @@ export default function OrderBuilderPage() {
                         <td className="px-2.5 py-1.5 text-amber-300">{l.qty}</td>
                         <td className="px-2.5 py-1.5">{fmt(unitCost(l as unknown as SpecLine))}</td>
                         <td className="px-2.5 py-1.5" colSpan={3}>
-                          <span className="text-amber-500/80 text-[10px] uppercase">Custom</span>
+                          <span className="text-amber-500/80 text-[10px] uppercase">
+                            Custom{l.playerName ? ` — ${l.playerName}${l.playerNumber ? ` #${l.playerNumber}` : ""}` : ""}
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -627,7 +629,9 @@ export default function OrderBuilderPage() {
                         <td className="px-2.5 py-1.5 text-amber-300">{g.qty}</td>
                         <td className="px-2.5 py-1.5">{fmt(goalieUnitCost(g.paddle))}</td>
                         <td className="px-2.5 py-1.5" colSpan={3}>
-                          <span className="text-amber-500/80 text-[10px] uppercase">Custom</span>
+                          <span className="text-amber-500/80 text-[10px] uppercase">
+                            Custom{g.playerName ? ` — ${g.playerName}${g.playerNumber ? ` #${g.playerNumber}` : ""}` : ""}
+                          </span>
                         </td>
                       </tr>
                     ))}
