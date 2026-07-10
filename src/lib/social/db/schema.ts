@@ -267,6 +267,70 @@ export const sockDesigns = pgTable("sock_designs", {
 });
 
 /**
+ * org_stick_deals — organization bulk stick programs (e.g. Lucan Irish). The
+ * founder gives the org name, logo, terms (member discount / org kickback),
+ * order deadline and the org's private tiltweb ordering link; the agent
+ * generates the full pitch package in one shot:
+ *   - the B2B pitch one-pager PDF for the org (ALL terms, incl. the MAP note:
+ *     the discount may be emailed to members but never posted publicly),
+ *   - the member email (full detail incl. the discount),
+ *   - the MAP-SAFE social caption + code-composited graphics (4:5, 1:1, 9:16)
+ *     that never mention numbers — "check your email" energy only.
+ * Ordering/payment/kickback tracking live in tiltweb (/org/<slug>); this table
+ * is the design engine's record.
+ */
+export const orgStickDeals = pgTable("org_stick_deals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Organization name, e.g. "Lucan Irish". */
+  orgName: text("org_name").notNull(),
+  /** The org's private ordering page on tiltweb, e.g. https://tilthockey.com/org/lucan-irish. */
+  orderUrl: text("order_url"),
+  /** Uploaded org logo / crest in Blob. */
+  logoUrl: text("logo_url"),
+  /** Org accent hex (#RRGGBB) — logo-card border on the graphic + PDF accents. */
+  accentColor: text("accent_color"),
+  /** Member discount % on sticks (shown ONLY in the pitch PDF + member email). */
+  discountPct: integer("discount_pct").notNull().default(15),
+  /** Org kickback % of net member sales (pitch PDF only). */
+  kickbackPct: integer("kickback_pct").notNull().default(10),
+  /** Last day members can order. */
+  deadline: date("deadline").notNull(),
+  /** Bulk delivery to the org — typically deadline + 6 weeks. */
+  deliveryDate: date("delivery_date"),
+  /** Org contact the pitch addresses, e.g. "Sean, Club President". */
+  contactName: text("contact_name"),
+  /** Optional founder note folded into the generation. */
+  note: text("note"),
+  // ── Generated: MAP-safe social post ──
+  copy: text("copy"),
+  hashtags: jsonb("hashtags").$type<string[]>().notNull().default([]),
+  cta: text("cta"),
+  /** Short sentence typeset ON the graphic itself (no emoji/hashtags/numbers). */
+  graphicLine: text("graphic_line"),
+  /** The finished composited graphics in Blob. */
+  imageUrl: text("image_url"),
+  imageUrlSquare: text("image_url_square"),
+  imageUrlStory: text("image_url_story"),
+  // ── Generated: member email (full detail, discount included) ──
+  emailSubject: text("email_subject"),
+  emailBody: text("email_body"),
+  // ── Generated: org pitch one-pager ──
+  /** Structured pitch content (headline, intro, terms bullets, MAP note, closing). */
+  pitch: jsonb("pitch").$type<OrgDealPitch | null>().default(null),
+  /** The rendered pitch PDF in Blob. */
+  pitchPdfUrl: text("pitch_pdf_url"),
+  /** Free-form design feedback the founder wants folded into the next render. */
+  revisionNote: text("revision_note"),
+  status: postStatusEnum("status").notNull().default("needs_review"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
  * studio_assets — freeform, on-brand content generated in the Studio (desktop
  * backgrounds, phone wallpapers, posters, banners, …). Unlike `posts`, these are
  * not tied to the social plan/calendar; they're one-off brand pieces the founder
@@ -341,6 +405,18 @@ export type NewFundraiser = typeof fundraisers.$inferInsert;
 
 export type SockDesign = typeof sockDesigns.$inferSelect;
 export type NewSockDesign = typeof sockDesigns.$inferInsert;
+
+/** Structured content of the org pitch one-pager (rendered to PDF). */
+export type OrgDealPitch = {
+  headline: string;
+  intro: string;
+  bullets: { title: string; detail: string }[];
+  mapNote: string;
+  closing: string;
+};
+
+export type OrgStickDeal = typeof orgStickDeals.$inferSelect;
+export type NewOrgStickDeal = typeof orgStickDeals.$inferInsert;
 
 export type StudioAsset = typeof studioAssets.$inferSelect;
 export type NewStudioAsset = typeof studioAssets.$inferInsert;

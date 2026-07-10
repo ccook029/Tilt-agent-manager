@@ -64,6 +64,13 @@
       "when": 1783025104539,
       "tag": "0008_announcement_partner_details",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783685530404,
+      "tag": "0009_org_stick_deals",
+      "breakpoints": true
     }
   ]
 }

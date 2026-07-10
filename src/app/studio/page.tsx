@@ -48,6 +48,14 @@ const TOOLS: {
     accent: "text-emerald-400 border-emerald-900/60",
   },
   {
+    href: "/studio/orgs",
+    name: "Org Stick Programs",
+    blurb:
+      "The organization pitch engine: name + crest + terms in, the full package out — org pitch PDF, member email, and MAP-safe social graphics, all pointing at the club's private ordering page.",
+    tag: "Native",
+    accent: "text-sky-400 border-sky-900/60",
+  },
+  {
     href: "/studio/sox",
     name: "SOX Creator",
     blurb:

@@ -51,6 +51,15 @@ export type PartnerGraphicInput = {
   layout?: Partial<PartnerLayout> | null;
   width?: number;
   height?: number;
+  /**
+   * Text overrides so other boards (org stick programs) can reuse this exact
+   * layout with their own wording. Defaults preserve the partner announcement.
+   */
+  eyebrow?: string;
+  headlineTop?: string;
+  headlineBottom?: string;
+  /** Full pill text; default "WITH {NAME}". */
+  pillText?: string;
 };
 
 const SCALE_H: Record<LogoScale, number> = { sm: 0.55, md: 0.72, lg: 0.9 };
@@ -234,10 +243,11 @@ export async function composePartnerGraphic(input: PartnerGraphicInput): Promise
     `<text x="${cx}" y="${fy + Math.round(size * 0.04) + 3}" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${size}" letter-spacing="${ls}" fill="#000000" fill-opacity="0.38">${t}</text>`;
 
   // --- Eyebrow kicker + accent rule, to anchor the top. ---
+  const eyebrow = (input.eyebrow ?? "OFFICIAL PARTNERSHIP").toUpperCase();
   const eb = Math.round(Math.min(W * 0.046, H * 0.038));
   let y = Math.round(H * 0.055) + eb;
   texts.push(
-    `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="600" font-size="${eb}" letter-spacing="${Math.round(eb * 0.5)}" fill="${cyan}">OFFICIAL PARTNERSHIP</text>`,
+    `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="600" font-size="${eb}" letter-spacing="${Math.round(eb * 0.5)}" fill="${cyan}">${xmlEscape(eyebrow)}</text>`,
   );
   const ruleW = Math.round(W * 0.13);
   const ruleY = y + Math.round(eb * 0.55);
@@ -245,22 +255,24 @@ export async function composePartnerGraphic(input: PartnerGraphicInput): Promise
     `<rect x="${cx - Math.round(ruleW / 2)}" y="${ruleY}" width="${ruleW}" height="3" rx="1.5" fill="${cyan}" fill-opacity="0.8"/>`,
   );
 
-  // --- Headline: WE'RE (white) / TEAMING UP (cyan), with soft depth. ---
-  const size1 = fitFont("WE'RE", Math.round(W * 0.8), Math.round(Math.min(W * 0.14, H * 0.12)), 0.62);
+  // --- Headline: top line (white) / bottom line (cyan), with soft depth. ---
+  const headTop = (input.headlineTop ?? "WE'RE").toUpperCase();
+  const headBottom = (input.headlineBottom ?? "TEAMING UP").toUpperCase();
+  const size1 = fitFont(headTop, Math.round(W * 0.8), Math.round(Math.min(W * 0.14, H * 0.12)), 0.62);
   y = ruleY + Math.round(H * 0.022) + size1;
   texts.push(
-    shadow("WE&apos;RE", cx, y, size1, 2),
-    `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${size1}" letter-spacing="2" fill="#ffffff">WE&apos;RE</text>`,
+    shadow(xmlEscape(headTop), cx, y, size1, 2),
+    `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${size1}" letter-spacing="2" fill="#ffffff">${xmlEscape(headTop)}</text>`,
   );
-  const size2 = fitFont("TEAMING UP", Math.round(W * 0.92), Math.round(Math.min(W * 0.155, H * 0.135)), 0.62);
+  const size2 = fitFont(headBottom, Math.round(W * 0.92), Math.round(Math.min(W * 0.155, H * 0.135)), 0.62);
   y += Math.round(size2 * 1.04);
   texts.push(
-    shadow("TEAMING UP", cx, y, size2, 2),
-    `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${size2}" letter-spacing="2" fill="${cyan}">TEAMING UP</text>`,
+    shadow(xmlEscape(headBottom), cx, y, size2, 2),
+    `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${size2}" letter-spacing="2" fill="${cyan}">${xmlEscape(headBottom)}</text>`,
   );
 
-  // --- Cyan pill: WITH {NAME}. ---
-  const pillText = `WITH ${input.name.toUpperCase()}`;
+  // --- Cyan pill: WITH {NAME} (or the caller's override). ---
+  const pillText = (input.pillText ?? `WITH ${input.name}`).toUpperCase();
   const pf = fitFont(pillText, Math.round(W * 0.72), Math.round(Math.min(W * 0.056, H * 0.048)), 0.56);
   const pillH = Math.round(pf * 2);
   const pillW = Math.min(Math.round(W * 0.88), Math.round(pillText.length * pf * 0.56 + pf * 2.4));
