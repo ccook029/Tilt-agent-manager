@@ -105,7 +105,9 @@ function cardFor(
   lh: number,
   accent?: string | null,
 ): { svg: Buffer; w: number; h: number; pad: number } {
-  const pad = Math.round(Math.max(lw, lh) * 0.14);
+  // Generous padding: trimLogo strips the logo's own margins, so the card has
+  // to give them back — a tight card reads as the mark blown up to fit.
+  const pad = Math.round(Math.max(lw, lh) * 0.24);
   const w = lw + pad * 2;
   const h = lh + pad * 2;
   const sw = accent ? Math.max(5, Math.round(pad * 0.3)) : 0;
@@ -337,8 +339,10 @@ export async function composePartnerGraphic(input: PartnerGraphicInput): Promise
 
   const maxH = Math.round(Math.min(zoneH * SCALE_H[layout.logoScale], H * 0.2));
   const maxW = Math.round(W * SCALE_W[layout.logoScale]);
+  // The mark sits at ~82% of the box and the card pads the rest — the logo
+  // should look like itself with air around it, not zoomed in to fill.
   const logoFit = await sharp(await trimLogo(input.partnerLogo))
-    .resize(maxW, maxH, { fit: "inside" })
+    .resize(Math.round(maxW * 0.82), Math.round(maxH * 0.82), { fit: "inside" })
     .png()
     .toBuffer();
   const lmeta = await sharp(logoFit).metadata();
