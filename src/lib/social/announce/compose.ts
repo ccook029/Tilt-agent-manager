@@ -96,27 +96,80 @@ function checkerSvg(W: number, H: number): string {
 }
 
 /**
- * White rounded card with the (already trimmed+fitted) logo centered in it.
- * When a partner accent color is set, the card gets a border in that color —
- * the one consistent place partner colors appear on the layout.
+ * Sample the color the logo actually lives on — the border pixels of the
+ * (already trimmed) upload — so the card behind it can match instead of
+ * forcing white. A mark drawn on black gets a black card; a transparent PNG
+ * keeps the classic white card.
+ */
+export async function logoCardFill(trimmedLogo: Buffer): Promise<string> {
+  try {
+    const { data, info } = await sharp(trimmedLogo)
+      .resize(48, 48, { fit: "fill" })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const coords: Array<[number, number]> = [];
+    for (let x = 0; x < info.width; x++) coords.push([x, 0], [x, info.height - 1]);
+    for (let y = 1; y < info.height - 1; y++) coords.push([0, y], [info.width - 1, y]);
+    // Modal bucket, not a plain average: border pixels that touch the mark
+    // itself would tint the card (white bg + blue logo → bluish card). The
+    // dominant coarse color bucket wins; its own average is the fill.
+    const buckets = new Map<number, { r: number; g: number; b: number; n: number }>();
+    let opaque = 0, transparent = 0;
+    for (const [x, y] of coords) {
+      const i = (y * info.width + x) * 4;
+      if (data[i + 3] < 32) { transparent++; continue; }
+      opaque++;
+      const key = ((data[i] >> 4) << 8) | ((data[i + 1] >> 4) << 4) | (data[i + 2] >> 4);
+      const bk = buckets.get(key) ?? { r: 0, g: 0, b: 0, n: 0 };
+      bk.r += data[i]; bk.g += data[i + 1]; bk.b += data[i + 2]; bk.n++;
+      buckets.set(key, bk);
+    }
+    // A mark that floats on transparency has no background of its own — the
+    // white card stays, matching how these logos ship on light collateral.
+    if (!opaque || transparent > opaque) return "#ffffff";
+    const top = [...buckets.values()].sort((a, b) => b.n - a.n)[0];
+    const hex = (v: number) => Math.round(v / top.n).toString(16).padStart(2, "0");
+    return `#${hex(top.r)}${hex(top.g)}${hex(top.b)}`;
+  } catch {
+    return "#ffffff";
+  }
+}
+
+function relLuminance(hex: string): number {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
+}
+
+/**
+ * Rounded card in the logo's own background color (sampled by logoCardFill)
+ * with the trimmed+fitted logo centered in it. When a partner accent color is
+ * set, the card gets a border in that color — the one consistent place partner
+ * colors appear on the layout. Dark cards get a faint hairline instead so they
+ * still read as a card against the dark canvas.
  */
 function cardFor(
   lw: number,
   lh: number,
   accent?: string | null,
+  fill = "#ffffff",
 ): { svg: Buffer; w: number; h: number; pad: number } {
   // Generous padding: trimLogo strips the logo's own margins, so the card has
   // to give them back — a tight card reads as the mark blown up to fit.
   const pad = Math.round(Math.max(lw, lh) * 0.24);
   const w = lw + pad * 2;
   const h = lh + pad * 2;
-  const sw = accent ? Math.max(5, Math.round(pad * 0.3)) : 0;
-  const stroke = accent
-    ? `<rect x="${sw / 2}" y="${sw / 2}" width="${w - sw}" height="${h - sw}" rx="${Math.round(pad * 1.2)}" fill="none" stroke="${accent}" stroke-width="${sw}"/>`
-    : "";
+  const rx = Math.round(pad * 1.2);
+  let stroke = "";
+  if (accent) {
+    const sw = Math.max(5, Math.round(pad * 0.3));
+    stroke = `<rect x="${sw / 2}" y="${sw / 2}" width="${w - sw}" height="${h - sw}" rx="${rx}" fill="none" stroke="${accent}" stroke-width="${sw}"/>`;
+  } else if (relLuminance(fill) < 80) {
+    stroke = `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="${rx}" fill="none" stroke="#3d434b" stroke-width="2"/>`;
+  }
   const svg = Buffer.from(
     `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">` +
-      `<rect width="${w}" height="${h}" rx="${Math.round(pad * 1.2)}" fill="#ffffff"/>${stroke}</svg>`,
+      `<rect width="${w}" height="${h}" rx="${rx}" fill="${fill}"/>${stroke}</svg>`,
   );
   return { svg, w, h, pad };
 }
@@ -341,14 +394,16 @@ export async function composePartnerGraphic(input: PartnerGraphicInput): Promise
   const maxW = Math.round(W * SCALE_W[layout.logoScale]);
   // The mark sits at ~82% of the box and the card pads the rest — the logo
   // should look like itself with air around it, not zoomed in to fill.
-  const logoFit = await sharp(await trimLogo(input.partnerLogo))
+  const trimmed = await trimLogo(input.partnerLogo);
+  const cardFill = await logoCardFill(trimmed);
+  const logoFit = await sharp(trimmed)
     .resize(Math.round(maxW * 0.82), Math.round(maxH * 0.82), { fit: "inside" })
     .png()
     .toBuffer();
   const lmeta = await sharp(logoFit).metadata();
   const lw = lmeta.width ?? maxW;
   const lh = lmeta.height ?? maxH;
-  const card = cardFor(lw, lh, accent);
+  const card = cardFor(lw, lh, accent, cardFill);
 
   // Lockup: [partner card] × [dark TILT plate of the same size].
   let tiltCard: { buf: Buffer; logo: Buffer; lw: number; lh: number } | null = null;
