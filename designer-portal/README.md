@@ -9,9 +9,10 @@ passcode, so the designer never needs their own Gemini account. The Gemini
 
 ## Features
 
-- **Passcode login** — one shared passcode (`PORTAL_PASSCODE`), 30-day
-  signed httpOnly session cookie. The portal fails closed until the passcode
-  is configured.
+- **Per-user login** — users are `email:password` pairs in the
+  `PORTAL_USERS` env var (no database); a shared `PORTAL_PASSCODE` also
+  works as a fallback. Sessions are 30-day signed httpOnly cookies. The
+  portal fails closed until at least one login is configured.
 - **Design mode (Nano Banana)** — text-to-image and image editing with the
   Gemini image model, with an aspect-ratio picker (1:1, 4:5, 3:4, 16:9, 9:16).
 - **Chat mode** — plain Gemini text chat for briefs, copy, and ideas.
@@ -35,22 +36,24 @@ manager, so the designer only ever gets access to this portal.
    | Variable | Required | Notes |
    | --- | --- | --- |
    | `GEMINI_API_KEY` | ✅ | Same Google AI key the agent manager uses |
-   | `PORTAL_PASSCODE` | ✅ | The passcode you give the designer — make it long |
+   | `PORTAL_USERS` | ✅ | `email:password` pairs, comma-separated — e.g. `gino@example.com:long-password` |
+   | `PORTAL_PASSCODE` | optional | Shared team passcode that works alongside `PORTAL_USERS` |
    | `PORTAL_SESSION_SECRET` | recommended | Dedicated cookie-signing secret; rotate to force re-login |
    | `GEMINI_IMAGE_MODEL` | optional | Default `gemini-3-pro-image-preview` |
    | `GEMINI_TEXT_MODEL` | optional | Default `gemini-2.5-flash` |
    | `GEMINI_API_BASE` | optional | Default `https://generativelanguage.googleapis.com/v1beta` |
 
 4. Deploy, then optionally attach a domain like `design.tilthockey.com`.
-5. Send the designer the URL + passcode. That's it — no Google account needed
-   on their side.
+5. Send the designer the URL + their email/password. That's it — no Google
+   account needed on their side. To revoke access, remove their entry from
+   `PORTAL_USERS` and rotate `PORTAL_SESSION_SECRET`.
 
 ## Local development
 
 ```bash
 cd designer-portal
 npm install
-cp .env.example .env.local   # fill in GEMINI_API_KEY + PORTAL_PASSCODE
+cp .env.example .env.local   # fill in GEMINI_API_KEY + PORTAL_USERS
 npm run dev
 ```
 
@@ -64,5 +67,5 @@ npm run dev
   database, no blob storage.
 - **Request size**: history sent to Gemini is trimmed (last 12 messages,
   images only from the last 4) to stay under Vercel's request-body limit.
-- **Sessions**: 30 days. Rotate `PORTAL_PASSCODE` / `PORTAL_SESSION_SECRET`
-  to lock the portal or force re-login.
+- **Sessions**: 30 days. Rotate `PORTAL_SESSION_SECRET` (or the credential
+  vars) to lock the portal or force everyone to log in again.

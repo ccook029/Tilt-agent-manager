@@ -13,8 +13,8 @@ export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
 
-  const ok = await verifyPortalToken(req.cookies.get(PORTAL_COOKIE)?.value);
-  if (ok) return NextResponse.next();
+  const user = await verifyPortalToken(req.cookies.get(PORTAL_COOKIE)?.value);
+  if (user !== null) return NextResponse.next();
 
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });

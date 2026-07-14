@@ -85,6 +85,7 @@ export default function Portal() {
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [user, setUser] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -93,6 +94,10 @@ export default function Portal() {
 
   useEffect(() => {
     listConversations().then(setConvos).catch(() => setConvos([]));
+    fetch("/api/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { user?: string } | null) => setUser(d?.user ?? null))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -318,6 +323,11 @@ export default function Portal() {
         </nav>
 
         <div className="border-t border-tilt-line p-3">
+          {user && (
+            <p className="truncate px-3 pb-1 text-xs text-neutral-500" title={user}>
+              {user}
+            </p>
+          )}
           <button
             type="button"
             onClick={() => void logout()}

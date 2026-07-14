@@ -6,6 +6,7 @@ import { useState } from "react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
   const [passcode, setPasscode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -19,7 +20,7 @@ export default function LoginPage() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ passcode }),
+        body: JSON.stringify({ email, passcode }),
       });
       if (res.ok) {
         router.replace("/");
@@ -57,20 +58,35 @@ export default function LoginPage() {
           className="rounded-2xl border border-tilt-line bg-tilt-panel p-6 shadow-[0_0_60px_rgba(0,191,255,0.07)]"
         >
           <label
+            htmlFor="email"
+            className="mb-2 block text-sm font-medium text-neutral-300"
+          >
+            Email
+          </label>
+          <input
+            id="email"
+            type="email"
+            autoFocus
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="mb-4 w-full rounded-lg border border-tilt-line bg-tilt-black px-3 py-2.5 text-base text-white placeholder-neutral-500 outline-none transition-colors duration-200 focus:border-tilt-cyan"
+            placeholder="you@example.com"
+          />
+          <label
             htmlFor="passcode"
             className="mb-2 block text-sm font-medium text-neutral-300"
           >
-            Passcode
+            Password
           </label>
           <input
             id="passcode"
             type="password"
-            autoFocus
             autoComplete="current-password"
             value={passcode}
             onChange={(e) => setPasscode(e.target.value)}
             className="mb-4 w-full rounded-lg border border-tilt-line bg-tilt-black px-3 py-2.5 text-base text-white placeholder-neutral-500 outline-none transition-colors duration-200 focus:border-tilt-cyan"
-            placeholder="Enter the team passcode"
+            placeholder="Enter your password"
           />
           {error && (
             <p role="alert" className="mb-4 text-sm text-red-400">
