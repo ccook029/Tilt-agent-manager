@@ -22,7 +22,7 @@ function isChatMessage(m: unknown): m is ChatMessage {
 }
 
 export async function POST(req: Request) {
-  let body: { messages?: unknown; mode?: unknown; aspectRatio?: unknown };
+  let body: { messages?: unknown; mode?: unknown; aspectRatio?: unknown; imageSize?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -38,9 +38,10 @@ export async function POST(req: Request) {
 
   const mode: GenerateMode = body.mode === "chat" ? "chat" : "design";
   const aspectRatio = typeof body.aspectRatio === "string" ? body.aspectRatio : undefined;
+  const imageSize = typeof body.imageSize === "string" ? body.imageSize : undefined;
 
   try {
-    const parts = await generate({ messages, mode, aspectRatio });
+    const parts = await generate({ messages, mode, aspectRatio, imageSize });
     return NextResponse.json({ parts });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Generation failed.";

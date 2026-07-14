@@ -9,7 +9,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMessage, ChatPart } from "@/lib/gemini";
-import { prepareImage, type PreparedImage } from "@/lib/images";
+import { prepareImage, shrinkDataUrlIfLarge, type PreparedImage } from "@/lib/images";
 import {
   deleteConversation,
   listConversations,
@@ -35,6 +35,7 @@ import {
 type Mode = "design" | "chat";
 
 const ASPECTS = ["Auto", "1:1", "4:5", "3:4", "16:9", "9:16"] as const;
+const QUALITIES = ["1K", "2K", "4K"] as const;
 const MAX_ATTACHMENTS = 6;
 // Keep request bodies under Vercel's ~4.5MB cap: send a bounded window of
 // history and only keep inline images from the most recent exchanges.
@@ -47,16 +48,27 @@ const SUGGESTIONS = [
   "Design a bold Instagram story background — black carbon texture with electric cyan streaks",
 ];
 
-function trimForApi(messages: ChatMessage[]): ChatMessage[] {
+async function trimForApi(messages: ChatMessage[]): Promise<ChatMessage[]> {
   const recent = messages.slice(-HISTORY_MESSAGES);
   const imageCutoff = Math.max(0, recent.length - HISTORY_MESSAGES_WITH_IMAGES);
-  return recent.map((m, i) => {
-    if (i >= imageCutoff) return m;
-    const parts: ChatPart[] = m.parts.map((p) =>
-      "image" in p ? { text: "(image from earlier in the conversation, omitted)" } : p
-    );
-    return { ...m, parts };
-  });
+  return Promise.all(
+    recent.map(async (m, i) => {
+      if (i < imageCutoff) {
+        const parts: ChatPart[] = m.parts.map((p) =>
+          "image" in p ? { text: "(image from earlier in the conversation, omitted)" } : p
+        );
+        return { ...m, parts };
+      }
+      // Kept images (including 2K/4K generations being re-edited) are shrunk
+      // client-side so the request stays under the body-size cap.
+      const parts: ChatPart[] = await Promise.all(
+        m.parts.map(async (p) =>
+          "image" in p ? { image: { dataUrl: await shrinkDataUrlIfLarge(p.image.dataUrl) } } : p
+        )
+      );
+      return { ...m, parts };
+    })
+  );
 }
 
 function titleFrom(messages: ChatMessage[]): string {
@@ -81,6 +93,7 @@ export default function Portal() {
   const [attachments, setAttachments] = useState<PreparedImage[]>([]);
   const [mode, setMode] = useState<Mode>("design");
   const [aspect, setAspect] = useState<(typeof ASPECTS)[number]>("Auto");
+  const [quality, setQuality] = useState<(typeof QUALITIES)[number]>("2K");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -172,9 +185,10 @@ export default function Portal() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          messages: trimForApi(next),
+          messages: await trimForApi(next),
           mode,
           aspectRatio: mode === "design" && aspect !== "Auto" ? aspect : undefined,
+          imageSize: mode === "design" ? quality : undefined,
         }),
       });
 
@@ -205,7 +219,7 @@ export default function Portal() {
     } finally {
       setBusy(false);
     }
-  }, [activeId, aspect, attachments, busy, input, messages, mode, router]);
+  }, [activeId, aspect, attachments, busy, input, messages, mode, quality, router]);
 
   const editImage = useCallback((dataUrl: string) => {
     setAttachments((prev) =>
@@ -601,20 +615,36 @@ export default function Portal() {
                 </div>
 
                 {mode === "design" && (
-                  <label className="flex items-center gap-1.5 text-xs text-neutral-400">
-                    <span>Aspect</span>
-                    <select
-                      value={aspect}
-                      onChange={(e) => setAspect(e.target.value as (typeof ASPECTS)[number])}
-                      className="cursor-pointer rounded-lg border border-tilt-line bg-tilt-black px-2 py-1.5 text-xs text-neutral-200 outline-none transition-colors duration-200 hover:border-tilt-cyan/50"
-                    >
-                      {ASPECTS.map((a) => (
-                        <option key={a} value={a}>
-                          {a}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <>
+                    <label className="flex items-center gap-1.5 text-xs text-neutral-400">
+                      <span>Aspect</span>
+                      <select
+                        value={aspect}
+                        onChange={(e) => setAspect(e.target.value as (typeof ASPECTS)[number])}
+                        className="cursor-pointer rounded-lg border border-tilt-line bg-tilt-black px-2 py-1.5 text-xs text-neutral-200 outline-none transition-colors duration-200 hover:border-tilt-cyan/50"
+                      >
+                        {ASPECTS.map((a) => (
+                          <option key={a} value={a}>
+                            {a}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-neutral-400">
+                      <span>Quality</span>
+                      <select
+                        value={quality}
+                        onChange={(e) => setQuality(e.target.value as (typeof QUALITIES)[number])}
+                        className="cursor-pointer rounded-lg border border-tilt-line bg-tilt-black px-2 py-1.5 text-xs text-neutral-200 outline-none transition-colors duration-200 hover:border-tilt-cyan/50"
+                      >
+                        {QUALITIES.map((q) => (
+                          <option key={q} value={q}>
+                            {q}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </>
                 )}
 
                 <button

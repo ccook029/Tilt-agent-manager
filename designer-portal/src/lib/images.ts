@@ -20,6 +20,32 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+/**
+ * Shrinks an already-in-conversation image (e.g. a 2K/4K generation being fed
+ * back for an edit) so the outgoing request stays under Vercel's body cap.
+ * No-op for images that are already small enough.
+ */
+const MAX_SEND_CHARS = 1_800_000; // base64 chars ≈ 1.35MB raw
+
+export async function shrinkDataUrlIfLarge(dataUrl: string): Promise<string> {
+  if (dataUrl.length <= MAX_SEND_CHARS) return dataUrl;
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const bitmap = await createImageBitmap(blob);
+    const scale = Math.min(1, MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return dataUrl;
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    return canvas.toDataURL("image/jpeg", 0.9);
+  } catch {
+    return dataUrl;
+  }
+}
+
 export async function prepareImage(file: File): Promise<PreparedImage> {
   if (!file.type.startsWith("image/")) {
     throw new Error(`"${file.name}" isn't an image.`);

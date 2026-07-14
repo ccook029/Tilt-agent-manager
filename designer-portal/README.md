@@ -16,7 +16,10 @@ passcode, so the designer never needs their own Gemini account. The Gemini
   `PORTAL_PASSCODE` works as a further fallback. Sessions are 30-day signed
   httpOnly cookies. The portal fails closed until a login is configured.
 - **Design mode (Nano Banana)** — text-to-image and image editing with the
-  Gemini image model, with an aspect-ratio picker (1:1, 4:5, 3:4, 16:9, 9:16).
+  Gemini image model, with aspect-ratio (1:1, 4:5, 3:4, 16:9, 9:16) and
+  quality (1K/2K/4K, default 2K) pickers. The API renders 1K unless asked —
+  the quality picker is what matches the Gemini app's output. Higher
+  quality costs more per image.
 - **Chat mode** — plain Gemini text chat for briefs, copy, and ideas.
 - **Uploads** — attach button, drag & drop anywhere, or paste from the
   clipboard. Big images are downscaled client-side before sending.

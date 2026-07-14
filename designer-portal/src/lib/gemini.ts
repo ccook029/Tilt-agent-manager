@@ -27,6 +27,9 @@ export type ChatMessage = {
 export type GenerateMode = "design" | "chat";
 
 const ASPECT_RATIOS = new Set(["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"]);
+// Output resolution for the image model. The API defaults to 1K unless asked;
+// the Gemini app renders Nano Banana Pro at 2K/4K, so the portal exposes this.
+const IMAGE_SIZES = new Set(["1K", "2K", "4K"]);
 
 type WirePart =
   | { text: string }
@@ -45,6 +48,7 @@ export async function generate(params: {
   messages: ChatMessage[];
   mode: GenerateMode;
   aspectRatio?: string;
+  imageSize?: string;
 }): Promise<ChatPart[]> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
@@ -65,8 +69,15 @@ export async function generate(params: {
   const generationConfig: Record<string, unknown> = {};
   if (params.mode === "design") {
     generationConfig.responseModalities = ["IMAGE", "TEXT"];
+    const imageConfig: Record<string, unknown> = {};
     if (params.aspectRatio && ASPECT_RATIOS.has(params.aspectRatio)) {
-      generationConfig.imageConfig = { aspectRatio: params.aspectRatio };
+      imageConfig.aspectRatio = params.aspectRatio;
+    }
+    if (params.imageSize && IMAGE_SIZES.has(params.imageSize)) {
+      imageConfig.imageSize = params.imageSize;
+    }
+    if (Object.keys(imageConfig).length > 0) {
+      generationConfig.imageConfig = imageConfig;
     }
   }
 
