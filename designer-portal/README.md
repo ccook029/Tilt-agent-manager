@@ -10,9 +10,11 @@ passcode, so the designer never needs their own Gemini account. The Gemini
 ## Features
 
 - **Per-user login** — users are `email:password` pairs in the
-  `PORTAL_USERS` env var (no database); a shared `PORTAL_PASSCODE` also
-  works as a fallback. Sessions are 30-day signed httpOnly cookies. The
-  portal fails closed until at least one login is configured.
+  `PORTAL_USERS` env var (no database). With `TILTWEB_URL` set, existing
+  Tilt OS staff can also sign in with the same credentials they use for the
+  agent manager (verified against tiltweb, same as `os-auth`). A shared
+  `PORTAL_PASSCODE` works as a further fallback. Sessions are 30-day signed
+  httpOnly cookies. The portal fails closed until a login is configured.
 - **Design mode (Nano Banana)** — text-to-image and image editing with the
   Gemini image model, with an aspect-ratio picker (1:1, 4:5, 3:4, 16:9, 9:16).
 - **Chat mode** — plain Gemini text chat for briefs, copy, and ideas.
@@ -37,6 +39,8 @@ manager, so the designer only ever gets access to this portal.
    | --- | --- | --- |
    | `GEMINI_API_KEY` | ✅ | Same Google AI key the agent manager uses |
    | `PORTAL_USERS` | ✅ | `email:password` pairs, comma-separated — e.g. `gino@example.com:long-password` |
+   | `TILTWEB_URL` | optional | Lets Tilt OS staff sign in with their existing credentials — copy from the agent manager project |
+   | `TILT_OS_SESSION_SECRET` | optional | Verifies tiltweb's login tokens (recommended with `TILTWEB_URL`) — copy from the agent manager project |
    | `PORTAL_PASSCODE` | optional | Shared team passcode that works alongside `PORTAL_USERS` |
    | `PORTAL_SESSION_SECRET` | recommended | Dedicated cookie-signing secret; rotate to force re-login |
    | `GEMINI_IMAGE_MODEL` | optional | Default `gemini-3-pro-image-preview` |

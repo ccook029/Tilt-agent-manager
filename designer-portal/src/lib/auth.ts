@@ -36,7 +36,11 @@ export function portalUsers(): PortalUser[] {
 
 /** The portal is locked until at least one login is configured. */
 export function portalConfigured(): boolean {
-  return portalUsers().length > 0 || Boolean(process.env.PORTAL_PASSCODE);
+  return (
+    portalUsers().length > 0 ||
+    Boolean(process.env.PORTAL_PASSCODE) ||
+    Boolean(process.env.TILTWEB_URL) // Tilt OS staff login (see tilt-os.ts)
+  );
 }
 
 function sessionSecret(): string {
@@ -46,7 +50,8 @@ function sessionSecret(): string {
   const secret =
     process.env.PORTAL_SESSION_SECRET ||
     process.env.PORTAL_PASSCODE ||
-    process.env.PORTAL_USERS;
+    process.env.PORTAL_USERS ||
+    process.env.TILT_OS_SESSION_SECRET;
   if (!secret) throw new Error("No portal login is configured");
   return secret;
 }
