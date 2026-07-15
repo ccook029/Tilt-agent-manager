@@ -38,9 +38,11 @@ export default function AgentDetailPage() {
   const isCfo = agentId === "accounting-manager";
   const isPenny = agentId === "accounting";
   const isExternal = persona?.external === true;
+  // Staffed employees who take work orders through their boss (no run/chat).
+  const isStaff = Boolean(persona?.assignHref);
   // Every other internal agent gets the generic "talk to them" chat.
   const isGenericChat =
-    Boolean(persona) && !isExternal && !isMaya && !isCfo && !isPenny;
+    Boolean(persona) && !isExternal && !isStaff && !isMaya && !isCfo && !isPenny;
 
   const [logs, setLogs] = useState<RunLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,6 +54,7 @@ export default function AgentDetailPage() {
   const [activeTab, setActiveTab] = useState<"history" | "files" | "chat" | "ledger">(
     isMaya || isCfo || isPenny || isGenericChat ? "chat" : "history"
   );
+  const firstName = persona?.name?.split(" ")[0] ?? "This teammate";
   // Non-owners may not open the CFO/Penny agents (their routes are gated too).
   const [acctAllowed, setAcctAllowed] = useState(true);
   useEffect(() => {
@@ -221,7 +224,17 @@ export default function AgentDetailPage() {
               </svg>
             </a>
           )}
-          {!isExternal && (
+          {/* Staffed employees are handed work through their boss — link to
+              the department's assign-work surface instead of Run/Open. */}
+          {isStaff && persona?.assignHref && (
+            <Link
+              href={persona.assignHref}
+              className="px-4 py-2 bg-[#0094b8] hover:bg-[#00a8d1] rounded-lg text-sm font-semibold text-white transition-colors"
+            >
+              Assign work
+            </Link>
+          )}
+          {!isExternal && !isStaff && (
             <button
               onClick={triggerRun}
               disabled={running}
@@ -298,11 +311,11 @@ export default function AgentDetailPage() {
         </div>
       )}
 
-      {/* Linked design tools — in-house handoff targets (e.g. Catalog Builder) */}
+      {/* Tools & workspaces this person works in. */}
       {persona?.tools && persona.tools.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Design Tools
+            Tools &amp; Workspaces
           </h3>
           <div className="flex flex-wrap gap-2">
             {persona.tools.map((tool) => (
@@ -346,6 +359,27 @@ export default function AgentDetailPage() {
               Questions
             </Link>
             .
+          </p>
+        </div>
+      ) : isStaff ? (
+        <div className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-6">
+          <p className="text-sm text-gray-300">
+            {firstName} is on the{" "}
+            <Link href={persona?.assignHref ?? "/org"} className="text-[#00d6ff] hover:underline">
+              {persona?.department}
+            </Link>{" "}
+            team and takes work through their boss.
+          </p>
+          <p className="mt-2 text-sm text-gray-500 leading-relaxed">
+            Give {firstName} something to do with the{" "}
+            <span className="font-medium text-[#00d6ff]">Assign work</span>{" "}
+            button above (or let the boss dispatch the whole team from the Org
+            page). {firstName}&apos;s draft goes through their boss&apos;s review, then
+            lands in your{" "}
+            <Link href="/review" className="text-[#00d6ff] hover:underline">
+              Review queue
+            </Link>{" "}
+            for your approval. Their tools are listed above.
           </p>
         </div>
       ) : isExternal ? (
