@@ -65,6 +65,11 @@ const departments: Department[] = [
         href: "/studio/sox",
         description: "Team sock renders",
       },
+      {
+        label: "Promo Video Builder",
+        href: "/studio/promo",
+        description: "Branded motion-graphics promo videos from a cut spec",
+      },
     ],
   },
   {
