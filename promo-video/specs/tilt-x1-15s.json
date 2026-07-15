@@ -1,0 +1,61 @@
+{
+  "name": "tilt-x1-15s",
+  "fps": 30,
+  "brand": { "cyan": "#00bfff", "black": "#0d0d0d" },
+  "audio": { "mode": "accents", "hits": [0.55, 1.1] },
+  "scenes": [
+    {
+      "type": "typeOpen", "dur": 1.9,
+      "kicker": "Tilt Hockey", "logo": "assets/logo.png",
+      "line1": "Built", "line2": "Different."
+    },
+    {
+      "type": "footage", "dur": 1.6, "textPos": "bottom",
+      "shots": [{ "file": "shoot/seg-v1a.webm", "in": 0.2, "ramp": [0.7, 0.75, 1.5] }],
+      "callout": "Real ice &middot; real players"
+    },
+    {
+      "type": "macroPan", "dur": 2.0,
+      "image": "assets/shaft.png",
+      "big": ["Pure", "|Carbon.|"],
+      "callout": "Response Rezin"
+    },
+    {
+      "type": "footage", "dur": 1.8, "textPos": "bottom",
+      "shots": [{ "file": "shoot/seg-v3b.webm", "in": 0.2, "ramp": [0.9, 0.55, 1.35] }],
+      "big": ["Built", "to |rip.|"]
+    },
+    {
+      "type": "productStills", "dur": 2.0,
+      "stills": ["shoot/stills/pd1.jpg", "shoot/stills/pd2.jpg", "shoot/stills/pd3.jpg"],
+      "big": ["Every", "|detail.|"],
+      "callout": "Tilt Core Energy Spine"
+    },
+    {
+      "type": "stillsWall", "dur": 2.2,
+      "flash": [
+        "shoot/stills/w01.jpg", "shoot/stills/w02.jpg", "shoot/stills/w04.jpg",
+        "shoot/stills/w06.jpg", "shoot/stills/w07.jpg", "shoot/stills/w09.jpg",
+        "shoot/stills/w11.jpg", "shoot/stills/w12.jpg"
+      ],
+      "hold": "shoot/stills/group.jpg",
+      "big": ["Don't be", "a |sheep.|"],
+      "callout": "The Tilt crew"
+    },
+    {
+      "type": "hero", "dur": 1.7,
+      "image": "assets/x1-holo.png",
+      "chip": "Tilt Hockey",
+      "name": ["Tilt", "|X1.|"],
+      "sub": "Real carbon &middot; zero compromise"
+    },
+    {
+      "type": "endCard", "dur": 1.8,
+      "logo": "assets/logo.png",
+      "cta": "Shop the X1",
+      "handle": "tilthockey.com &nbsp;&middot;&nbsp; @tilthockey"
+    }
+  ],
+  "transitions": ["glitch", "rgbsplit", "glitch", "rgbsplit", "zoomblur", "zoomblur", "rgbsplit"],
+  "output": { "file": "tilt-x1-15s.mp4", "vertical": true, "posterAt": 12.9 }
+}
