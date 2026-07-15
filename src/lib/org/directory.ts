@@ -6,10 +6,10 @@
 // the engine actually enforces. Leadership (Chris Cook, Jeremy Elliott)
 // remains in personas.ts — humans sit above every reportsTo: null position.
 //
-// Marketing is defined here but staffed in Phase 2 (staffed: false): the
-// engine refuses to run their work orders until their prompt profiles land in
-// employee-configs.ts, yet the org chart, review routing, and department
-// ledger are already real.
+// Marketing is fully staffed (Phase 2): director + video, posts/images, SEO,
+// and publisher hires each have a prompt profile in employee-configs.ts. A
+// position with staffed: false exists in the org chart but the engine refuses
+// to run its work orders until its profile lands.
 // ---------------------------------------------------------------------------
 import type { Department, Employee } from "./types";
 
@@ -82,7 +82,7 @@ const employees: Employee[] = [
     enabled: true,
   },
 
-  // ---- Marketing (positions defined now, staffed in Phase 2) --------------
+  // ---- Marketing (staffed: director + creators + SEO + publisher) ---------
   {
     id: "marketing-director",
     name: "Harper Slate",
@@ -93,7 +93,7 @@ const employees: Employee[] = [
     skills: ["review", "content-calendar", "campaign-planning", "brand-voice"],
     charter:
       "Owns the content calendar and the brand bar. Dispatches work orders to the marketing team, reviews every deliverable against the brand knowledge base and department policy before it reaches Chris, and escalates only true judgment calls. Weekly direction is grounded in Sloane's competitor-social intel and Dana's analytics.",
-    staffed: false,
+    staffed: true,
     enabled: true,
   },
   {
@@ -106,7 +106,7 @@ const employees: Employee[] = [
     skills: ["video-script", "shot-list", "video-brief", "reel-concept"],
     charter:
       "Produces video content for IG Reels, TikTok, and Facebook: scripts, shot lists, and render briefs driven from the Social Studio asset library, filing gaps when footage is missing.",
-    staffed: false,
+    staffed: true,
     enabled: true,
   },
   {
@@ -119,7 +119,7 @@ const employees: Employee[] = [
     skills: ["post-copy", "image-brief", "carousel", "caption-pack"],
     charter:
       "Writes post copy and produces imagery through the Social Studio render pipeline, filling the content plan's slots with on-brand posts.",
-    staffed: false,
+    staffed: true,
     enabled: true,
   },
   {
@@ -132,7 +132,7 @@ const employees: Employee[] = [
     skills: ["seo-audit", "keyword-plan", "content-brief", "ai-search-optimization"],
     charter:
       "Keeps tilthockey.com visible where buyers actually look: classic Google SEO (technical health, keywords, content briefs) and AI-search optimization — making Tilt the answer ChatGPT, Claude, Perplexity, and Google AI Overviews give for hockey-gear questions.",
-    staffed: false,
+    staffed: true,
     enabled: true,
   },
   {
@@ -145,7 +145,7 @@ const employees: Employee[] = [
     skills: ["publish-instagram", "publish-tiktok", "publish-facebook", "posting-schedule"],
     charter:
       "Takes the approved queue live on Instagram, TikTok, and Facebook at the right times. Until the platform APIs are wired (Phase 3), preps everything so posting is one tap.",
-    staffed: false,
+    staffed: true,
     enabled: true,
   },
   {

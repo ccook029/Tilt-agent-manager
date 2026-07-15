@@ -40,6 +40,7 @@ import {
   buildDefaultSystemPrompt,
   getEmployeeProfile,
 } from "./employee-configs";
+import { renderDepartmentContext } from "./department-context";
 import type {
   Department,
   Employee,
@@ -140,7 +141,8 @@ async function buildWorkerSystemPrompt(
     profile?.systemPrompt ?? buildDefaultSystemPrompt(employee, department);
   const knowledge = await renderOrgKnowledge().catch(() => "");
   const signals = await renderCrossAgentSignals(employee.id).catch(() => "");
-  return base + knowledge + signals;
+  const deptContext = await renderDepartmentContext(employee).catch(() => "");
+  return base + knowledge + signals + deptContext;
 }
 
 function buildWorkerUserMessage(
@@ -198,11 +200,14 @@ function buildWorkerUserMessage(
   return parts.join("\n");
 }
 
-function buildManagerSystemPrompt(
+async function buildManagerSystemPrompt(
   manager: Employee,
   department: Department
-): string {
-  return `You are ${manager.name}, ${manager.title} at Tilt Hockey Inc., the boss of the ${department.name} department.
+): Promise<string> {
+  const profile = getEmployeeProfile(manager.id);
+  const base =
+    profile?.managerSystemPrompt ??
+    `You are ${manager.name}, ${manager.title} at Tilt Hockey Inc., the boss of the ${department.name} department.
 
 DEPARTMENT MISSION: ${department.mission}
 
@@ -213,6 +218,9 @@ YOUR ROLE IN THIS REVIEW: a member of your team has submitted a deliverable for 
 - The owner currently keeps the final approve trigger on ALL shipped work — your approval sends it to his queue, it does not publish anything. So approve when the work meets YOUR bar; don't escalate just to be safe.
 
 TONE: direct, specific, brief. Reference exact parts of the deliverable.`;
+  const knowledge = await renderOrgKnowledge().catch(() => "");
+  const deptContext = await renderDepartmentContext(manager).catch(() => "");
+  return base + knowledge + deptContext;
 }
 
 function buildManagerUserMessage(
@@ -365,7 +373,7 @@ export async function runWorkOrder(id: string): Promise<RunWorkOrderResult> {
         status: "in_review",
       }))!;
       const reviewRes = await callClaude({
-        systemPrompt: buildManagerSystemPrompt(reviewer, department),
+        systemPrompt: await buildManagerSystemPrompt(reviewer, department),
         userMessage: buildManagerUserMessage(
           order,
           employee,

@@ -20,11 +20,25 @@ export default function OwnerNav() {
   if (!show) return null;
 
   return (
-    <Link
-      href="/strategy"
-      className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
-    >
-      Strategy
-    </Link>
+    <>
+      <Link
+        href="/review"
+        className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+      >
+        Review
+      </Link>
+      <Link
+        href="/org"
+        className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+      >
+        Org
+      </Link>
+      <Link
+        href="/strategy"
+        className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+      >
+        Strategy
+      </Link>
+    </>
   );
 }

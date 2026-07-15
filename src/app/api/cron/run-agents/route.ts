@@ -24,6 +24,7 @@ import { runResearchScan } from "@/lib/pipelines/materials-rd";
 import { runInnovation } from "@/lib/pipelines/product-design";
 import { runDispatchedTask } from "@/lib/accounting-loop";
 import { runSocialPlanWeekly } from "@/lib/pipelines/social-plan";
+import { runMarketingWeekly } from "@/lib/pipelines/marketing";
 import { sendMorningBrief } from "@/lib/morning-brief";
 
 export const maxDuration = 300;
@@ -81,6 +82,17 @@ function getScheduledTasks(now: Date): PipelineTask[] {
     tasks.push({ name: "Competitor Social", run: () => runSocialIntelReport() });
     tasks.push({ name: "Inventory Weekly", run: () => runInventoryWeeklyReport() });
     tasks.push({ name: "Product Design Innovation", run: () => runInnovation() });
+
+    // Marketing week: Harper dispatches work orders to the team, each runs
+    // through the engine and lands in Chris's approval queue. Runs AFTER
+    // Competitor Social so Sloane's fresh intel is in Harper's context.
+    // Opt-in (one Claude call per piece + review) via MARKETING_CRON=true.
+    if (process.env.MARKETING_CRON === "true") {
+      tasks.push({
+        name: "Marketing Weekly Dispatch",
+        run: () => runMarketingWeekly(),
+      });
+    }
   }
 
   // Wednesday (day 3): Competitor Intel
