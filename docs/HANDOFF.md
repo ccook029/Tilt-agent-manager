@@ -1,96 +1,65 @@
-# Org OS — Handoff & Decisions Needed
+# Org OS — Handoff & Current State
 
-Chris — the redesign is built through Phase 3 on branch
-`claude/laughing-mccarthy-kko3ha`. This is what's done, what I need from you to
-switch it fully on, and the calls that are yours to make. Nothing here posts,
-spends, or changes a live system until you say so — the whole thing is
-propose-only and env-gated by default.
+Chris — the redesign is built through Phase 4 on branch
+`claude/laughing-mccarthy-kko3ha`. Your earlier decisions are locked in:
+publisher targets IG + TikTok + Facebook; you keep the approve trigger;
+marketing dispatch is **on-demand** (the "Run marketing week" button on
+/review) until the cadence feels normal, then we schedule it every ~3 days;
+Harper caps at 4 pieces per dispatch; workers run Claude Sonnet 5 and boss
+reviews run Claude Opus 4.8.
 
-## What's built and working now
+## What's built
 
-- **The org is real.** Departments, employees, and reporting lines are data
-  the system enforces (`/org` shows the chart). Finance (Sterling ← Penny) is
-  untouched and still works.
-- **The department engine.** Any employee drafts → their boss reviews
-  (approve / send back with feedback, up to 2 redos / escalate) → approved
-  work waits for **your** approve trigger. You never lost the final say.
-- **Marketing is staffed.** Harper Slate (Director) + Cutter (video), Indy
-  (posts/images), Sage (SEO + AI-search), Piper (publisher), plus Remy and
-  Sloane. Harper plans the week and dispatches work orders; every piece is
-  reviewed against the brand bar before it reaches you.
-- **Your consoles.** `/review` (approve/send-back/reject + answer questions,
-  across every department), `/publish` (connection status + one-tap posting of
-  approved content), `/org` (the chart). All in the top nav (owner-only).
-- **The publisher.** Instagram, TikTok, and Facebook adapters are built and
-  wired; they just need credentials.
+- **The org** — departments, employees, reporting lines (`/org`), with the
+  worker → boss review → your-approve-trigger engine behind every work order.
+- **Marketing staffed** — Harper (Director) + Cutter (video), Indy
+  (posts/images), Sage (SEO + AI-search), Piper (publisher), Remy, Sloane.
+- **Your consoles** — `/review` (approve & ship / send back / reject +
+  answer escalations + Run marketing week), `/publish` (platform status,
+  approved queue, one-tap posting), `/org` (the chart).
+- **Ship → publish is one pipeline** — approving a content work order in
+  /review creates approved Studio posts; once media is rendered they appear
+  in /publish for posting.
+- **Publisher adapters** for Instagram, Facebook (Meta Graph) and TikTok
+  (Content Posting API) — live as soon as credentials are added.
+- **Search Console integration** — code is ready; needs the 2-step hookup
+  below.
+- **Every answer you give becomes standing policy** per department, so
+  questions are never asked twice.
 
-## What I need FROM YOU to turn it fully on
+## Your to-do list (all in docs/PUBLISHER_SETUP.md, step by step)
 
-### 1. Google Search Console (for Sage, the SEO employee)
-Check whether tilthockey.com is verified: go to **search.google.com/search-console**,
-sign in with the business Google account, and look at the property dropdown
-top-left. Tell me:
-- Is `tilthockey.com` listed? (If yes — is it under the account tied to your
-  GA4, or a different login?)
-- If not listed, do you want me to walk you through the one-time DNS or
-  GA-tag verification?
+1. **Search Console (5 min):** add the GA4 service account email as a user in
+   Search Console, and set `GSC_SITE_URL` in Vercel. → Sage gets real Google
+   query data.
+2. **Meta (30-60 min):** follow Part 1 of PUBLISHER_SETUP.md → three env vars
+   → Instagram + Facebook go live on /publish.
+3. **TikTok (start now, approval takes days-weeks):** follow Part 2 —
+   create the developer app and submit for Direct Post review early.
+4. **Vercel env check:** if `CLAUDE_MODEL` is pinned in Vercel it overrides
+   the new Sonnet 5 default — clear it (or set it to `claude-sonnet-5`).
+   Optionally set `CLAUDE_MANAGER_MODEL=claude-opus-4-8` explicitly (that's
+   already the code default).
 
-Sage works from GA4 today; Search Console gives her real search-query data,
-which makes the SEO briefs much sharper.
+## How to use it day-to-day
 
-### 2. Platform credentials for going live (Instagram / TikTok / Facebook)
-The publisher is a safe no-op until these are set in Vercel. To post for real:
+1. Open **/review** → tap **Run marketing week**. Harper plans, the team
+   drafts, she reviews; a few minutes later approved pieces are waiting.
+2. For each piece: **Approve & ship** (content pieces become approved Studio
+   posts), **Send back** with a note (the creator redoes it), or **Reject**.
+3. Answer anything under "Needs your decision" — each answer becomes
+   department policy.
+4. Render media for shipped posts in the Studio, then post from **/publish**.
+5. When you're comfortable: say the word and I'll wire the every-3-days
+   schedule (`MARKETING_CRON` infrastructure is already in the cron).
 
-- **Instagram + Facebook (Meta):** you'll need a Meta Business app with a
-  long-lived Page access token (scopes: `instagram_content_publish`,
-  `pages_manage_posts`, `pages_read_engagement`), your IG Business account id,
-  and your Facebook Page id → `META_ACCESS_TOKEN`, `META_IG_USER_ID`,
-  `META_FB_PAGE_ID`. The IG account must be a Business/Creator account linked
-  to the Page.
-- **TikTok:** a developer app approved for **Direct Post**, a user token with
-  `video.publish`, and the media domain verified → `TIKTOK_ACCESS_TOKEN`.
-  Note TikTok only accepts **video**.
+## Next (Phase 5 candidates, in priority order)
 
-**Question:** do you already have a Meta Business app and TikTok developer
-account, or do you want me to write a step-by-step setup guide for each? These
-approvals (especially TikTok Direct Post) can take days, so worth starting
-early.
-
-### 3. Turn on the Marketing weekly cadence?
-Set `MARKETING_CRON=true` in Vercel to have Harper dispatch the week every
-Monday automatically. Until then, run it on demand from `/api/marketing/run`
-(or I can add a button). **Do you want it automatic, or on-demand while you get
-comfortable?**
-
-## Decisions that are yours (my recommendation in each)
-
-1. **Model tiers.** Workers run on `CLAUDE_MODEL`; bosses can run a stronger
-   model via `CLAUDE_MANAGER_MODEL`. Your default `CLAUDE_MODEL` is still
-   `claude-sonnet-4-6`. *Recommendation: point workers at Sonnet and set
-   `CLAUDE_MANAGER_MODEL` to a top model so reviews are sharp. Want me to bump
-   the default `CLAUDE_MODEL` to a current model across the board?*
-2. **Publishing gate.** Right now: nothing publishes without you tapping it,
-   even after Harper approves. *Recommendation: keep it this way for the first
-   month, then "graduate" Harper to auto-publish low-risk pillars once you
-   trust the output. The graduation tracking already exists.* **Confirm you
-   want the manual gate to start.**
-3. **How many pieces per week?** Harper is capped at 4 dispatched pieces per
-   run by default (cost/time guard), against a brand cadence of IG 5 / TikTok
-   4 / FB 3. *Recommendation: start at 4, raise once you see quality.* **What
-   weekly volume do you actually want?**
-4. **The two-approval seam (Phase 4).** Today a marketing work order is text;
-   the publisher posts rendered Studio posts. They aren't yet the same object,
-   so approving in `/review` doesn't auto-create a publishable post. *This is
-   the top Phase 4 item — connecting work orders to the render pipeline so
-   "ship" produces a ready-to-post piece.* **Confirm that's the priority next.**
-
-## Suggested next steps (Phase 4), in priority order
-
-1. Connect approved marketing work orders → Studio `posts` (copy + render
-   brief → render → media), so ship→publish is one flow.
-2. Roll the engine to Operations (Stockton) and Product/R&D (Maya ← Rex).
-3. Add best-time scheduling + the `scheduled` post status.
-4. Graduate Harper to auto-publish selected pillars once trust is earned.
-5. Migrate Finance onto the engine (last, since it works today).
-
-Reply on the numbered items and I'll fix/adjust and keep building.
+1. Auto-render on ship (post package → render pipeline without the manual
+   Studio step).
+2. The every-3-days marketing schedule once you're comfortable.
+3. TikTok OAuth callback + automatic token refresh.
+4. Graduation: let Harper ship low-risk pillars without your tap (ledger
+   already tracks readiness).
+5. Best-time scheduling + the `scheduled` post status.
+6. Migrate Finance onto the engine (last — it works today).
