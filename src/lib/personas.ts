@@ -27,10 +27,16 @@ export interface AgentPersona {
   external?: boolean;
   launchUrl?: string;
   /**
-   * Design / creative tools this agent hands work off to. Rendered as a
-   * "Design Tools" panel on the agent's detail page. Internal hrefs (e.g.
-   * /api/catalog/launch) inject access keys server-side; external links open
-   * the vendor app in a new tab.
+   * Staffed employees who receive WORK ORDERS through their boss (not a
+   * runnable/chattable agent). When set, the detail page shows an "Assign
+   * work" action pointing here (e.g. /org#marketing) plus their tools panel,
+   * instead of a Run/Chat surface.
+   */
+  assignHref?: string;
+  /**
+   * Tools / workspaces this person works in. Rendered as a "Tools" panel on
+   * the detail page. Internal hrefs (e.g. /api/catalog/launch) inject access
+   * keys server-side; external links open in a new tab.
    */
   tools?: { label: string; href: string; description?: string; external?: boolean }[];
 }
@@ -209,8 +215,12 @@ const personas: AgentPersona[] = [
     avatarColor: "bg-rose-600",
     avatarAccent: "ring-rose-400",
     runEndpoint: "/org",
-    external: true,
-    launchUrl: "/org",
+    assignHref: "/org#marketing",
+    tools: [
+      { label: "Social Studio", href: "/studio/social", description: "Content plan, posts, gaps, renders" },
+      { label: "Publish Console", href: "/publish", description: "Approved queue → IG, TikTok, Facebook" },
+      { label: "Review Queue", href: "/review", description: "Approve, send back, answer escalations" },
+    ],
   },
   {
     agentId: "video-creator",
@@ -224,8 +234,11 @@ const personas: AgentPersona[] = [
     avatarColor: "bg-orange-600",
     avatarAccent: "ring-orange-400",
     runEndpoint: "/org",
-    external: true,
-    launchUrl: "/org",
+    assignHref: "/org#marketing",
+    tools: [
+      { label: "Promo Video Builder", href: "/studio/promo", description: "Branded motion-graphics promo videos" },
+      { label: "Social Studio", href: "/studio/social", description: "Asset library, plan, and reel renders" },
+    ],
   },
   {
     agentId: "content-creator",
@@ -239,8 +252,11 @@ const personas: AgentPersona[] = [
     avatarColor: "bg-fuchsia-600",
     avatarAccent: "ring-fuchsia-400",
     runEndpoint: "/org",
-    external: true,
-    launchUrl: "/org",
+    assignHref: "/org#marketing",
+    tools: [
+      { label: "Social Studio", href: "/studio/social", description: "Draft posts, briefs, and renders" },
+      { label: "Announcement Creator", href: "/studio/announcements", description: "Partner & ambassador announcement art" },
+    ],
   },
   {
     agentId: "seo-specialist",
@@ -254,8 +270,10 @@ const personas: AgentPersona[] = [
     avatarColor: "bg-lime-700",
     avatarAccent: "ring-lime-400",
     runEndpoint: "/org",
-    external: true,
-    launchUrl: "/org",
+    assignHref: "/org#marketing",
+    tools: [
+      { label: "Reports & Files", href: "/files", description: "SEO audits and content briefs land here" },
+    ],
   },
   {
     agentId: "social-publisher",
@@ -269,8 +287,10 @@ const personas: AgentPersona[] = [
     avatarColor: "bg-violet-600",
     avatarAccent: "ring-violet-400",
     runEndpoint: "/publish",
-    external: true,
-    launchUrl: "/publish",
+    assignHref: "/org#marketing",
+    tools: [
+      { label: "Publish Console", href: "/publish", description: "Approved queue → IG, TikTok, Facebook" },
+    ],
   },
   {
     agentId: "competitor-social",
