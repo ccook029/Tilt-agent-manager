@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* "BC" (Barlow Condensed) @font-face rules are injected by initEngine from
+     SPEC.fontsBase — ./fonts/ next to this file by default. */
+  .missing { position: absolute; inset: 0; background: #101416;
+    border: 3px dashed #21343c; display: flex; align-items: center; justify-content: center; }
+  .missing span { font-family: "BC", sans-serif; font-weight: 500; font-size: 26px;
+    letter-spacing: 4px; color: #33525e; text-transform: uppercase; text-align: center;
+    padding: 0 60px; word-break: break-all; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: #000; }
+  #stage { position: relative; width: 1080px; height: 1350px; overflow: hidden;
+    background: #0d0d0d; font-family: "BC", sans-serif; }
+  .scene { position: absolute; inset: 0; display: none; overflow: hidden; }
+
+  .carbon { position: absolute; inset: 0;
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,0.02) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(255,255,255,0.02) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.02) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.02) 75%);
+    background-size: 8px 8px; background-position: 0 0, 0 4px, 4px -4px, -4px 0; }
+  .glow { position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 115%, rgba(0,191,255,0.16) 0%, transparent 62%); }
+  .callout { font-weight: 500; font-size: 34px; letter-spacing: 8px; text-transform: uppercase; }
+  .vignette { position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 46%, transparent 52%, rgba(0,0,0,0.34) 100%); }
+  .scrim-b { position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(6,8,9,0.82) 0%, rgba(6,8,9,0.35) 22%, transparent 45%); }
+  .scrim-t { position: absolute; inset: 0;
+    background: linear-gradient(to bottom, rgba(6,8,9,0.80) 0%, rgba(6,8,9,0.32) 26%, transparent 50%); }
+
+  .fillmedia { position: absolute; inset: 0; display: none; }
+  .fillmedia video, .fillmedia img { position: absolute; left: 0; top: 0;
+    width: 1080px; height: 1350px; object-fit: cover;
+    filter: contrast(1.07) saturate(1.14) brightness(1.01); }
+  .fillmedia.mono img { filter: grayscale(1) contrast(1.18) brightness(0.92); }
+  .fillmedia.mono .tint { position: absolute; inset: 0; background: var(--cy);
+    mix-blend-mode: color; opacity: 0.55; }
+  .fillmedia.mono .tone { position: absolute; inset: 0; background: rgba(6,10,12,0.22); }
+
+  .bigtype { position: absolute; left: 70px; font-weight: 800; font-size: 170px;
+    line-height: 0.9; color: #fff; text-transform: uppercase; }
+  .bigtype .cy { color: var(--cy); }
+  .tick { position: absolute; left: 74px; height: 6px; width: 0; background: var(--cy); }
+  .co { position: absolute; left: 74px; color: #e8edf0; }
+
+  /* typeOpen */
+  .t-line { position: absolute; left: 70px; font-weight: 800; font-size: 270px;
+    line-height: 0.86; letter-spacing: -2px; color: #fff; text-transform: uppercase;
+    transform-origin: left center; top: 385px; }
+  .t-line2 { top: 645px; color: var(--cy); font-size: 200px; }
+  .t-kicker { position: absolute; top: 300px; left: 76px; font-weight: 500; font-size: 34px;
+    letter-spacing: 10px; color: #9aa3ab; text-transform: uppercase; }
+  .t-corner { position: absolute; top: 64px; left: 70px; width: 170px; }
+
+  /* macroPan (white) */
+  .mp { background: #f4f5f6; }
+  .mp-wrap { position: absolute; left: -140px; top: -200px; width: 1400px; height: 1800px; }
+  .mp-img { position: absolute; width: 640px; left: 640px;
+    filter: drop-shadow(0 30px 60px rgba(0,0,0,0.25)); }
+  .mp-big { position: absolute; left: 70px; top: 430px; font-weight: 800; font-size: 200px;
+    line-height: 0.88; color: #0d0d0d; text-transform: uppercase; }
+  .mp-big .cy { color: #00a6e0; }
+  .mp-co { position: absolute; left: 74px; top: 880px; color: #333; }
+  .mp-tick { position: absolute; left: 74px; top: 850px; height: 6px; background: var(--cy); width: 0; }
+
+  /* typeWall */
+  .tw { background: #0d0d0d; }
+  .tw-row { position: absolute; white-space: nowrap; font-weight: 800; font-size: 250px;
+    line-height: 1; color: #1d2226; text-transform: uppercase; letter-spacing: 2px; }
+  .tw-row.hot { color: var(--cy); } .tw-row.white { color: #f2f2f2; }
+  .tw-panel { position: absolute; top: -200px; left: 640px; width: 900px; height: 1800px;
+    background: #f4f5f6; transform: skewX(-10deg); box-shadow: -30px 0 80px rgba(0,0,0,0.55); }
+  .tw-diag { position: absolute; top: 330px; left: 430px; width: 1150px;
+    transform: rotate(14deg); filter: drop-shadow(0 30px 50px rgba(0,0,0,0.28)); }
+
+  /* hero (white) */
+  .hero { background: #f4f5f6; }
+  .hero-img { position: absolute; top: 130px; left: -80px; width: 1350px;
+    filter: drop-shadow(0 40px 70px rgba(0,0,0,0.30)); }
+  .hero-name { position: absolute; left: 70px; top: 800px; font-weight: 800; font-size: 190px;
+    line-height: 0.88; color: #0d0d0d; text-transform: uppercase; letter-spacing: -2px; }
+  .hero-name .cy { color: #00a6e0; }
+  .hero-chip { position: absolute; left: 76px; top: 722px; background: var(--cy); color: #001018;
+    font-weight: 700; font-size: 36px; letter-spacing: 6px; text-transform: uppercase; padding: 10px 26px; }
+  .hero-sub { position: absolute; left: 76px; top: 1190px; color: #444; }
+
+  /* endCard */
+  .ec { background: #0d0d0d; }
+  .ec-logo { position: absolute; left: 50%; top: 520px; width: 640px; margin-left: -320px; }
+  .ec-rule { position: absolute; left: 50%; top: 740px; height: 6px; background: var(--cy);
+    width: 0; transform: translateX(-50%); }
+  .ec-tag { position: absolute; left: 0; right: 0; top: 790px; text-align: center;
+    font-weight: 500; font-size: 44px; letter-spacing: 12px; color: #cfd6db; text-transform: uppercase; }
+  .ec-cta { position: absolute; left: 0; right: 0; top: 940px; text-align: center; }
+  .ec-cta .chip { background: var(--cy); color: #001018; font-weight: 700; font-size: 34px;
+    letter-spacing: 6px; text-transform: uppercase; padding: 14px 34px; }
+  .ec-handle { position: absolute; left: 0; right: 0; top: 1060px; text-align: center;
+    font-weight: 500; font-size: 30px; letter-spacing: 7px; color: #7f8a92; text-transform: uppercase; }
+
+  #flash { position: absolute; inset: 0; background: var(--cy); opacity: 0; pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+  #grain { position: absolute; inset: -140px; opacity: 0.05; pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="grain"></div>
+  <div id="flash"></div>
+  <div id="fade"></div>
+</div>
+
+<script>
+  // ---- Deterministic scene engine.
+  // CLI: build.js injects window.SPEC before load (addInitScript) -> auto-boots.
+  // Web: the studio preview calls initEngine(spec) (same-origin iframe) or
+  // posts {type:"tilt-promo-spec", spec} — media it can't serve shows a
+  // labelled placeholder tile instead of failing.
+  // Media paths resolve as: SPEC.map[src] ?? SPEC.baseUrl + src.
+  const stage = document.getElementById("stage");
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const P = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+  const outExpo = (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x));
+  const outCubic = (x) => 1 - Math.pow(1 - x, 3);
+  const ramp = (l, r) => (r ? r[1] * Math.min(l, r[0]) + r[2] * Math.max(0, l - r[0]) : l);
+  function shake(t, t0, amp) {
+    const d = t - t0;
+    if (d < 0 || d > 0.5) return { x: 0, y: 0 };
+    const k = amp * Math.exp(-d * 9);
+    return { x: Math.sin(d * 95) * k, y: Math.cos(d * 83) * k * 0.7 };
+  }
+  // "Built |to rip.|" -> pipes mark the accent span
+  const rich = (line) => line.replace(/\|([^|]*)\|/g, '<span class="cy">$1</span>');
+  const bigHTML = (lines) => lines.map(rich).join("<br>");
+
+  let S = null, els = [], starts = [], END = 0, zoomCuts = [];
+
+  function resolve(src) {
+    if (!src) return src;
+    if (S.map && S.map[src]) return S.map[src];
+    if (/^(https?:|file:|data:|\/)/.test(src)) return src;
+    return (S.baseUrl || "") + src;
+  }
+  function placeholderOnError(mediaEl, wrap, label) {
+    mediaEl.addEventListener("error", () => {
+      if (wrap.querySelector(".missing")) return;
+      wrap.dataset.missing = "1";
+      const d = document.createElement("div");
+      d.className = "missing";
+      d.innerHTML = `<span>${label}</span>`;
+      wrap.appendChild(d);
+    }, { once: true });
+  }
+
+  window.initEngine = function (spec) {
+    S = spec;
+    window.SPEC = spec;
+    els = []; starts = []; zoomCuts = [];
+    document.documentElement.style.setProperty("--cy", (S.brand && S.brand.cyan) || "#00bfff");
+    // fonts (idempotent)
+    if (!document.getElementById("bcfonts")) {
+      const fb = S.fontsBase || "fonts/";
+      const st = document.createElement("style");
+      st.id = "bcfonts";
+      st.textContent = [[700, "Bold"], [800, "ExtraBold"], [500, "Medium"]]
+        .map(([w, n]) => `@font-face { font-family: "BC"; src: url("${fb}BarlowCondensed-${n}.ttf"); font-weight: ${w}; }`)
+        .join("\n");
+      document.head.appendChild(st);
+    }
+    // reset any previous build
+    for (const el of Array.from(stage.querySelectorAll(".scene"))) el.remove();
+
+  S.scenes.forEach((sc, i) => {
+    const el = document.createElement("div");
+    el.className = "scene";
+    el.id = `sc${i}`;
+    const h = { root: el };
+    const add = (cls, tag = "div", html = "") => {
+      const d = document.createElement(tag);
+      d.className = cls;
+      if (html) d.innerHTML = html;
+      el.appendChild(d);
+      return d;
+    };
+    if (sc.type === "typeOpen") {
+      add("carbon"); add("glow");
+      if (sc.logo) { h.corner = add("t-corner", "img"); h.corner.src = resolve(sc.logo); }
+      if (sc.kicker) h.kicker = add("t-kicker", "div", sc.kicker);
+      h.l1 = add("t-line", "div", rich(sc.line1));
+      h.l2 = add("t-line t-line2", "div", rich(sc.line2));
+    } else if (sc.type === "footage") {
+      h.shots = sc.shots.map((shot) => {
+        const w = document.createElement("div");
+        w.className = "fillmedia";
+        const v = document.createElement("video");
+        v.src = resolve(shot.file); v.muted = true; v.preload = "auto";
+        placeholderOnError(v, w, `footage<br>${shot.file}`);
+        w.appendChild(v); el.appendChild(w);
+        return { w, v };
+      });
+      add("vignette");
+      add(sc.textPos === "top" ? "scrim-t" : "scrim-b");
+      if (sc.big) { h.big = add("bigtype", "div", bigHTML(sc.big));
+        h.big.style.top = sc.textPos === "top" ? "120px" : "950px"; }
+      // tick + callout sit opposite the big type so they never collide with it
+      const accTop = sc.big ? sc.textPos !== "top" : sc.textPos === "top";
+      h.tick = add("tick");
+      h.tick.style.top = accTop ? "170px" : "1180px";
+      if (sc.callout) { h.co = add("co callout", "div", sc.callout);
+        h.co.style.top = accTop ? "200px" : "1210px"; }
+    } else if (sc.type === "macroPan") {
+      el.classList.add("mp");
+      h.wrap = add("mp-wrap");
+      h.img = document.createElement("img");
+      h.img.className = "mp-img"; h.img.src = resolve(sc.image); h.wrap.appendChild(h.img);
+      h.big = add("mp-big", "div", bigHTML(sc.big));
+      h.tick = add("mp-tick");
+      if (sc.callout) h.co = add("mp-co callout", "div", sc.callout);
+    } else if (sc.type === "productStills") {
+      h.stills = sc.stills.map((src) => {
+        const w = document.createElement("div");
+        w.className = "fillmedia";
+        const im = document.createElement("img"); im.src = resolve(src);
+        placeholderOnError(im, w, `still<br>${src}`);
+        w.appendChild(im); el.appendChild(w);
+        return w;
+      });
+      add("vignette"); add("scrim-t"); add("scrim-b");
+      h.big = add("bigtype", "div", bigHTML(sc.big)); h.big.style.top = "120px";
+      h.tick = add("tick"); h.tick.style.top = "1180px";
+      if (sc.callout) { h.co = add("co callout", "div", sc.callout); h.co.style.top = "1210px"; }
+    } else if (sc.type === "typeWall") {
+      el.classList.add("tw");
+      h.rows = sc.rows.map((r, k) => {
+        const d = add(`tw-row ${r.style || ""}`, "div", Array(4).fill(r.text).join(" &nbsp; "));
+        d.style.top = `${60 + k * 270}px`;
+        return d;
+      });
+      h.panel = add("tw-panel");
+      if (sc.panelImage) { h.diag = add("tw-diag", "img"); h.diag.src = resolve(sc.panelImage); }
+    } else if (sc.type === "stillsWall") {
+      h.flash = sc.flash.map((src) => {
+        const w = document.createElement("div");
+        w.className = "fillmedia mono";
+        const im = document.createElement("img"); im.src = resolve(src);
+        placeholderOnError(im, w, `still<br>${src}`);
+        w.appendChild(im);
+        const tint = document.createElement("div"); tint.className = "tint"; w.appendChild(tint);
+        const tone = document.createElement("div"); tone.className = "tone"; w.appendChild(tone);
+        el.appendChild(w);
+        return w;
+      });
+      h.hold = document.createElement("div"); h.hold.className = "fillmedia";
+      const him = document.createElement("img"); him.src = resolve(sc.hold);
+      placeholderOnError(him, h.hold, `still<br>${sc.hold}`);
+      h.hold.appendChild(him); el.appendChild(h.hold);
+      add("vignette"); add("scrim-b");
+      h.tick = add("tick"); h.tick.style.top = "170px";
+      if (sc.callout) { h.co = add("co callout", "div", sc.callout); h.co.style.top = "200px"; }
+      h.big = add("bigtype", "div", bigHTML(sc.big)); h.big.style.top = "950px";
+    } else if (sc.type === "hero") {
+      el.classList.add("hero");
+      h.img = add("hero-img", "img"); h.img.src = resolve(sc.image);
+      if (sc.chip) h.chip = add("hero-chip", "div", sc.chip);
+      h.name = add("hero-name", "div", bigHTML(sc.name));
+      if (sc.sub) h.sub = add("hero-sub callout", "div", sc.sub);
+    } else if (sc.type === "endCard") {
+      el.classList.add("ec");
+      add("carbon"); add("glow");
+      h.logo = add("ec-logo", "img"); h.logo.src = resolve(sc.logo);
+      h.rule = add("ec-rule");
+      if (sc.tag) h.tag = add("ec-tag", "div", sc.tag);
+      if (sc.cta) h.cta = add("ec-cta", "div", `<span class="chip">${sc.cta}</span>`);
+      if (sc.handle) h.handle = add("ec-handle", "div", sc.handle);
+    }
+    stage.insertBefore(el, document.getElementById("grain"));
+    els.push(h);
+  });
+
+  // scene start times from durations
+  let acc = 0;
+  for (const sc of S.scenes) { starts.push(acc); acc += sc.dur; }
+  END = acc;
+  zoomCuts = (S.transitions || []).map((fx, i) => (fx === "zoomblur" ? starts[i + 1] : null))
+    .filter((x) => x !== null);
+  }; // end initEngine
+
+  function setVideo(shot, entry, local) {
+    const { w, v } = entry;
+    w.style.display = "block";
+    if (w.dataset.missing || v.error) return Promise.resolve();
+    const target = (shot.in || 0) + ramp(local, shot.ramp);
+    return new Promise((resolve) => {
+      if (Math.abs(v.currentTime - target) < 1 / 240 && v.readyState >= 2) return resolve();
+      let tmr;
+      const done = () => { clearTimeout(tmr); resolve(); };
+      v.addEventListener("seeked", done, { once: true });
+      tmr = setTimeout(done, 1500);
+      v.currentTime = target;
+    });
+  }
+
+  window.seek = async function (t) {
+    if (!S) return;
+    els.forEach((h) => { h.root.style.display = "none"; });
+    document.querySelectorAll(".fillmedia").forEach((w) => (w.style.display = "none"));
+
+    document.getElementById("grain").style.transform =
+      `translate(${(t * 137) % 120 - 60}px, ${(t * 91) % 120 - 60}px)`;
+
+    let flash = 0;
+    for (const c of zoomCuts) {
+      const d = Math.abs(t - c);
+      if (d < 0.07) flash = Math.max(flash, 1 - d / 0.07);
+    }
+    document.getElementById("flash").style.opacity = (flash * 0.55).toFixed(3);
+    document.getElementById("fade").style.opacity = P(t, END - 0.35, END).toFixed(3);
+
+    let i = S.scenes.length - 1;
+    while (i > 0 && t < starts[i]) i--;
+    const sc = S.scenes[i], h = els[i], lt = clamp(t - starts[i], 0, sc.dur), dur = sc.dur;
+    h.root.style.display = "block";
+
+    if (sc.type === "typeOpen") {
+      const k = P(lt, 0.05, 0.5);
+      if (h.kicker) { h.kicker.style.opacity = k;
+        h.kicker.style.letterSpacing = `${10 + (1 - outCubic(k)) * 26}px`; }
+      if (h.corner) h.corner.style.opacity = P(lt, 0.05, 0.4);
+      const p1 = outExpo(P(lt, 0.42, 0.95)), s1 = shake(lt, 0.62, 14);
+      h.l1.style.opacity = p1 > 0 ? 1 : 0;
+      h.l1.style.transform = `translate(${s1.x}px, ${(1 - p1) * 140 + s1.y}px) scale(${1.5 - 0.5 * p1})`;
+      const p2 = outExpo(P(lt, 0.95, 1.5)), s2 = shake(lt, 1.18, 14);
+      h.l2.style.opacity = p2 > 0 ? 1 : 0;
+      h.l2.style.transform = `translate(${s2.x}px, ${(1 - p2) * 140 + s2.y}px) scale(${1.5 - 0.5 * p2})`;
+    } else if (sc.type === "footage") {
+      let off = 0, si = 0;
+      for (; si < sc.shots.length - 1 && lt >= off + sc.shots[si].dur; si++) off += sc.shots[si].dur;
+      const entry = h.shots[si];
+      entry.w.style.transform = `scale(${1.03 + (lt / dur) * 0.05})`;
+      await setVideo(sc.shots[si], entry, lt - off);
+      if (h.tick) h.tick.style.width = `${outCubic(P(lt, 0.3, 0.85)) * 420}px`;
+      if (h.co) h.co.style.opacity = P(lt, 0.45, 0.9);
+      if (h.big) {
+        const pb = outExpo(P(lt, 0.35, 0.95));
+        h.big.style.opacity = pb;
+        h.big.style.transform =
+          `translateY(${(1 - pb) * (sc.textPos === "top" ? -90 : 120)}px)`;
+      }
+    } else if (sc.type === "macroPan") {
+      const pan = P(lt, 0, dur);
+      h.wrap.style.transform =
+        `translateY(${-pan * 560}px) rotate(${-16 + pan * 4}deg) scale(${1.06 - pan * 0.06})`;
+      const pb = outExpo(P(lt, 0.15, 0.75));
+      h.big.style.opacity = pb;
+      h.big.style.transform = `translateX(${(1 - pb) * -120}px)`;
+      h.tick.style.width = `${outCubic(P(lt, 0.5, 1.1)) * 420}px`;
+      if (h.co) h.co.style.opacity = P(lt, 0.75, 1.2);
+    } else if (sc.type === "productStills") {
+      const N = sc.stills.length, seg = dur / N;
+      const idx = Math.min(N - 1, Math.floor(lt / seg));
+      const w = h.stills[idx];
+      w.style.display = "block";
+      const loc = (lt - idx * seg) / seg;
+      w.style.transform =
+        `scale(${1.05 + loc * 0.10}) translateX(${(idx % 2 ? -1 : 1) * (10 + loc * 26)}px)`;
+      h.tick.style.width = `${outCubic(P(lt, 0.3, 0.8)) * 420}px`;
+      if (h.co) h.co.style.opacity = P(lt, 0.2, 0.6);
+      const pb = outExpo(P(lt, dur * 0.52, dur * 0.84));
+      h.big.style.opacity = pb;
+      h.big.style.transform = `translateY(${(1 - pb) * -80}px)`;
+    } else if (sc.type === "typeWall") {
+      const speeds = [-230, 300, -370, 260, -300];
+      h.rows.forEach((d, k) => {
+        d.style.transform = `translateX(${-700 + lt * speeds[k % speeds.length]}px)`;
+      });
+      const pp = outExpo(P(lt, 0.55, 1.25));
+      h.panel.style.transform = `skewX(-10deg) translateX(${(1 - pp) * 1000}px)`;
+      if (h.diag) {
+        h.diag.style.opacity = pp > 0.15 ? 1 : 0;
+        h.diag.style.transform = `rotate(14deg) translate(${(1 - pp) * 900}px, ${(1 - pp) * -160}px)`;
+      }
+    } else if (sc.type === "stillsWall") {
+      const FL = sc.flashDur || 0.1333, N = sc.flash.length, wallEnd = FL * N;
+      if (lt < wallEnd) {
+        const idx = Math.min(N - 1, Math.floor(lt / FL));
+        const w = h.flash[idx];
+        w.style.display = "block";
+        w.style.transform = `scale(${idx % 2 ? 1.07 : 1.0}) rotate(${(idx % 2 ? 1 : -1) * 1.1}deg)`;
+        h.tick.style.width = "0px";
+        if (h.co) h.co.style.opacity = 0;
+        h.big.style.opacity = 0;
+      } else {
+        const gl = lt - wallEnd;
+        h.hold.style.display = "block";
+        h.hold.style.transform = `scale(${1.12 - outCubic(P(gl, 0, 0.8)) * 0.1})`;
+        h.tick.style.width = `${outCubic(P(gl, 0.15, 0.55)) * 420}px`;
+        if (h.co) h.co.style.opacity = P(gl, 0.25, 0.6);
+        const pb = outExpo(P(gl, 0.05, 0.55));
+        h.big.style.opacity = pb;
+        h.big.style.transform = `translateY(${(1 - pb) * 120}px)`;
+      }
+    } else if (sc.type === "hero") {
+      const ph = outExpo(P(lt, 0, 0.8));
+      h.img.style.transform =
+        `translate(${(1 - ph) * 620}px, ${(1 - ph) * -100}px) rotate(${(1 - ph) * 9}deg) scale(${1.12 - ph * 0.12})`;
+      if (h.chip) {
+        const pc = outExpo(P(lt, 0.4, 0.85));
+        h.chip.style.opacity = pc;
+        h.chip.style.transform = `translateY(${(1 - pc) * 60}px)`;
+      }
+      const pn = outExpo(P(lt, 0.55, 1.15));
+      h.name.style.opacity = pn;
+      h.name.style.transform = `translateY(${(1 - pn) * 160}px)`;
+      if (h.sub) h.sub.style.opacity = P(lt, 0.95, 1.35);
+    } else if (sc.type === "endCard") {
+      const pl = outExpo(P(lt, 0.05, 0.6));
+      h.logo.style.opacity = pl;
+      h.logo.style.transform = `scale(${0.82 + pl * 0.18})`;
+      h.rule.style.width = `${outCubic(P(lt, 0.35, 0.85)) * 560}px`;
+      if (h.tag) {
+        const pt = P(lt, 0.5, 1.0);
+        h.tag.style.opacity = pt;
+        h.tag.style.letterSpacing = `${12 + (1 - outCubic(pt)) * 18}px`;
+      }
+      if (h.cta) {
+        const pc = outExpo(P(lt, 0.65, 1.1));
+        h.cta.style.opacity = pc;
+        h.cta.style.transform = `translateY(${(1 - pc) * 40}px)`;
+      }
+      if (h.handle) h.handle.style.opacity = P(lt, 0.9, 1.35);
+    }
+  };
+
+  if (window.SPEC) window.initEngine(window.SPEC);
+  window.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "tilt-promo-spec" && e.data.spec) {
+      window.initEngine(e.data.spec);
+      window.seek(0);
+    }
+  });
+</script>
+</body>
+</html>

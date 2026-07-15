@@ -32,6 +32,14 @@ const TOOLS: {
     accent: "text-[#00d6ff] border-cyan-900/60",
   },
   {
+    href: "/studio/promo",
+    name: "Promo Video Builder",
+    blurb:
+      "Spec-driven promo videos from the real shoot library — edit a JSON cut spec, scrub the live comp in the browser, and render the finished MP4 (4:5 + 9:16 + poster) with one command.",
+    tag: "Native",
+    accent: "text-[#00d6ff] border-cyan-900/60",
+  },
+  {
     href: "/studio/catalog",
     name: "Catalog Builder",
     blurb:
