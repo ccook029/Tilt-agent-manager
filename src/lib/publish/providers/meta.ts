@@ -134,7 +134,7 @@ async function publishFacebook(req: PublishRequest): Promise<PublishResult> {
 function metaProvider(platform: Platform): PublishProvider {
   return {
     platform,
-    status(): ProviderStatus {
+    async status(): Promise<ProviderStatus> {
       const missing: string[] = [];
       if (!token()) missing.push("META_ACCESS_TOKEN");
       if (platform === "instagram" && !process.env.META_IG_USER_ID)
@@ -151,7 +151,7 @@ function metaProvider(platform: Platform): PublishProvider {
       };
     },
     async publish(req: PublishRequest): Promise<PublishResult> {
-      const st = this.status();
+      const st = await this.status();
       if (!st.connected) {
         return { ok: false, platform, error: st.detail };
       }

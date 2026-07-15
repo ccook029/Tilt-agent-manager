@@ -117,18 +117,25 @@ Auth: everything sits behind the Tilt OS middleware like the rest of HQ.
    boss reviews on Claude Opus 4.8, with `samplingParams()` in `models.ts`
    stripping `temperature` on models that reject it; "Run marketing week"
    button on `/review` (on-demand dispatch per Chris — cron stays opt-in).
-5. **Next** — graduation (a trusted boss ships without the owner trigger —
+5. **Automation** ✅ — auto-render on ship (shipped content is asset-matched
+   via the planner's ranking and static images render immediately, so pieces
+   arrive in /publish with media; reels render on the Studio's Shotstack
+   pass); every-N-days dispatch cadence (`org/dispatch-cadence.ts`, KV-backed;
+   `MARKETING_CRON=true` + `MARKETING_CRON_EVERY_DAYS`, manual runs reset the
+   clock); TikTok OAuth (`/api/publish/tiktok/auth` + `/callback`, tokens in
+   KV with auto-refresh, one-click Connect on /publish).
+6. **Next** — graduation (a trusted boss ships without the owner trigger —
    the ledger already tracks readiness); best-time scheduling + the
-   `scheduled` post status; TikTok token auto-refresh + OAuth callback;
-   rolling richer work-order use to Operations and Product/R&D; migrating
-   Finance onto the engine last (it works today; needs engine tool use).
+   `scheduled` post status; rolling richer work-order use to Operations and
+   Product/R&D; migrating Finance onto the engine last (it works today;
+   needs engine tool use).
 
 ## Remaining seams (documented, not yet built)
 
-- **Renders still human-assisted.** A shipped post package lands in the
-  Studio as an approved post with a render brief; the render pipeline (or
-  the Studio UI) attaches media before it becomes publishable. Auto-render
-  on ship is a Phase 5 candidate.
+- **Reels don't render inline on ship** (Shotstack submit/poll is too slow
+  for the ship request) — they render on the Studio's next reel pass.
+- **Unmatched content needs founder footage.** When the asset library lacks
+  what a piece needs, the ship note says so; match or upload in the Studio.
 - **Platform credentials** gate live posting — see `docs/PUBLISHER_SETUP.md`.
 
 ## Migration notes

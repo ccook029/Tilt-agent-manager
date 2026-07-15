@@ -25,6 +25,7 @@ import { runInnovation } from "@/lib/pipelines/product-design";
 import { runDispatchedTask } from "@/lib/accounting-loop";
 import { runSocialPlanWeekly } from "@/lib/pipelines/social-plan";
 import { runMarketingWeekly } from "@/lib/pipelines/marketing";
+import { isDispatchDue } from "@/lib/org/dispatch-cadence";
 import { sendMorningBrief } from "@/lib/morning-brief";
 
 export const maxDuration = 300;
@@ -42,7 +43,7 @@ function getISOWeekNumber(date: Date): number {
   return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
-function getScheduledTasks(now: Date): PipelineTask[] {
+async function getScheduledTasks(now: Date): Promise<PipelineTask[]> {
   const tasks: PipelineTask[] = [];
   const day = now.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
   const hour = now.getUTCHours();
@@ -82,14 +83,22 @@ function getScheduledTasks(now: Date): PipelineTask[] {
     tasks.push({ name: "Competitor Social", run: () => runSocialIntelReport() });
     tasks.push({ name: "Inventory Weekly", run: () => runInventoryWeeklyReport() });
     tasks.push({ name: "Product Design Innovation", run: () => runInnovation() });
+  }
 
-    // Marketing week: Harper dispatches work orders to the team, each runs
-    // through the engine and lands in Chris's approval queue. Runs AFTER
-    // Competitor Social so Sloane's fresh intel is in Harper's context.
-    // Opt-in (one Claude call per piece + review) via MARKETING_CRON=true.
-    if (process.env.MARKETING_CRON === "true") {
+  // Marketing dispatch: Harper plans and dispatches to the team; each piece
+  // runs through the engine and lands in Chris's approval queue. Opt-in via
+  // MARKETING_CRON=true, cadence every MARKETING_CRON_EVERY_DAYS days
+  // (default 3). Manual "Run marketing week" button runs reset the clock, so
+  // the automation never double-dispatches right after a hand-run. Weekdays
+  // only — content review shouldn't demand Chris's weekend.
+  if (process.env.MARKETING_CRON === "true" && day >= 1 && day <= 5) {
+    const everyDays = Math.max(
+      1,
+      Number(process.env.MARKETING_CRON_EVERY_DAYS ?? 3) || 3
+    );
+    if (await isDispatchDue("marketing", everyDays).catch(() => false)) {
       tasks.push({
-        name: "Marketing Weekly Dispatch",
+        name: "Marketing Dispatch",
         run: () => runMarketingWeekly(),
       });
     }
@@ -129,7 +138,7 @@ export async function GET(request: NextRequest) {
 
   const now = new Date();
   const day = now.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-  const tasks = getScheduledTasks(now);
+  const tasks = await getScheduledTasks(now);
 
   if (tasks.length === 0) {
     return NextResponse.json({

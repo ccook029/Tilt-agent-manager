@@ -16,6 +16,7 @@ import { renderPolicyBlock } from "../org/ledger";
 import { getEmployeesByDepartment } from "../org/directory";
 import { createWorkOrder } from "../org/work-orders";
 import { runWorkOrder } from "../org/engine";
+import { recordDispatch } from "../org/dispatch-cadence";
 import { postSignal } from "../signals";
 import { saveRunLogs } from "../store";
 
@@ -138,6 +139,9 @@ export async function runMarketingWeekly(
   const maxPieces = opts.maxPieces ?? 4;
   const run = opts.run ?? true;
   const startedAt = new Date();
+
+  // Manual and scheduled runs both reset the every-N-days cadence clock.
+  await recordDispatch(DEPARTMENT_ID).catch(() => {});
 
   const { pieces, planText } = await planWeek(maxPieces);
 

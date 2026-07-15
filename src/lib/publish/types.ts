@@ -39,7 +39,8 @@ export interface ProviderStatus {
 
 export interface PublishProvider {
   platform: Platform;
-  status(): ProviderStatus;
+  /** Async because some providers check stored OAuth tokens (KV). */
+  status(): Promise<ProviderStatus>;
   publish(req: PublishRequest): Promise<PublishResult>;
 }
 

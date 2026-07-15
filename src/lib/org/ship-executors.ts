@@ -16,6 +16,11 @@
 import { db } from "../social/db";
 import { posts } from "../social/db/schema";
 import { hasDatabase } from "../social/env";
+import { listAssets } from "../social/queries";
+import { getActiveKbConfig } from "../social/kb/config";
+import { rankCandidates, coerceRenderKind } from "../social/planner/assetMatch";
+import { renderStaticPost } from "../social/render/pipeline";
+import type { PostSlot } from "../social/planner/schedule";
 import { normalizePlatform } from "../publish/types";
 import type { WorkOrder } from "./types";
 
@@ -64,7 +69,27 @@ export function parsePostPackage(text: string): PostPackageItem[] {
   }
 }
 
-/** Marketing: shipped content becomes approved Studio posts. */
+/** Match a shipped piece to the best library asset so it can actually render.
+ * Reuses the planner's ranking; returns null when nothing in the library fits. */
+async function matchAsset(item: PostPackageItem) {
+  const [library, kb] = await Promise.all([
+    listAssets({ limit: 500 }),
+    getActiveKbConfig(),
+  ]);
+  const pillar = kb.pillars.find((p) => p.key === (item.pillar ?? "product"));
+  const slot: PostSlot = {
+    date: item.scheduledDate ?? new Date().toISOString().slice(0, 10),
+    pillarId: pillar?.id ?? 4,
+    pillarKey: pillar?.key ?? "product",
+    pillarName: pillar?.name ?? "Product",
+    platforms: [],
+    formatHint: item.format === "reel" || item.format === "carousel" ? item.format : "static",
+  };
+  return rankCandidates(slot, library)[0]?.asset ?? null;
+}
+
+/** Marketing: shipped content becomes approved Studio posts, asset-matched and
+ * (for static images) rendered immediately so they land in /publish with media. */
 async function shipMarketingOrder(order: WorkOrder): Promise<string | null> {
   const draft = order.rounds[order.rounds.length - 1]?.draft ?? "";
   const items = parsePostPackage(draft);
@@ -74,23 +99,54 @@ async function shipMarketingOrder(order: WorkOrder): Promise<string | null> {
   }
 
   let created = 0;
+  let rendered = 0;
+  let unmatched = 0;
   for (const item of items) {
-    await db.insert(posts).values({
-      scheduledDate: item.scheduledDate ?? null,
-      platform: normalizePlatform(item.platform)!,
-      pillar: item.pillar ?? "product",
-      format: item.format ?? null,
-      copy: item.copy,
-      hashtags: item.hashtags,
-      cta: item.cta ?? null,
-      // Chris's ship IS the approval — straight to the approved queue.
-      // It becomes publishable once the render pipeline attaches media.
-      status: "approved",
-      editBrief: item.renderBrief ?? null,
-    });
+    const asset = await matchAsset(item).catch(() => null);
+    const renderKind = asset
+      ? coerceRenderKind(item.format === "reel" ? "shotstack" : "nano", asset)
+      : null;
+
+    const inserted = await db
+      .insert(posts)
+      .values({
+        scheduledDate: item.scheduledDate ?? null,
+        platform: normalizePlatform(item.platform)!,
+        pillar: item.pillar ?? "product",
+        format: item.format ?? null,
+        copy: item.copy,
+        hashtags: item.hashtags,
+        cta: item.cta ?? null,
+        // Chris's ship IS the approval — straight to the approved queue.
+        status: "approved",
+        assetId: asset?.id ?? null,
+        renderKind,
+        editBrief: item.renderBrief ?? null,
+      })
+      .returning();
     created += 1;
+    if (!asset) unmatched += 1;
+
+    // Best-effort immediate render for static images (nano). Reels render via
+    // the Studio's Shotstack pass — submit/poll is too slow to inline here.
+    const post = inserted[0];
+    if (post && renderKind === "nano") {
+      const result = await renderStaticPost(post).catch(() => null);
+      if (result?.renderUrl) rendered += 1;
+    }
   }
-  return `${created} approved Studio post${created === 1 ? "" : "s"} created — they appear in /publish once rendered.`;
+
+  const parts = [
+    `${created} approved Studio post${created === 1 ? "" : "s"} created`,
+  ];
+  if (rendered > 0) parts.push(`${rendered} rendered and ready in /publish`);
+  if (unmatched > 0)
+    parts.push(
+      `${unmatched} need${unmatched === 1 ? "s" : ""} footage the library lacks — match or upload in the Studio`
+    );
+  if (created - rendered - unmatched > 0)
+    parts.push("video pieces render on the Studio's next reel pass");
+  return `${parts.join("; ")}.`;
 }
 
 /**

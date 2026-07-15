@@ -26,12 +26,13 @@ import { hasDatabase } from "@/lib/social/env";
 export const maxDuration = 300;
 
 export async function GET() {
-  const [queue, log] = await Promise.all([
+  const [queue, log, connections] = await Promise.all([
     hasDatabase() ? listPublishablePosts().catch(() => []) : Promise.resolve([]),
     getPublishLog(30).catch(() => []),
+    getConnectionStatus(),
   ]);
   return NextResponse.json({
-    connections: getConnectionStatus(),
+    connections,
     databaseConfigured: hasDatabase(),
     queue: queue.map((p) => ({
       id: p.id,

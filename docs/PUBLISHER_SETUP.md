@@ -83,14 +83,19 @@ so start it early and let it run in the background.
    app for review. In the review form, describe it honestly: "Posts Tilt
    Hockey's own marketing videos to Tilt Hockey's own TikTok account,
    human-approved before posting."
-5. **Authorize the Tilt account.** Once approved, use the app's **Login Kit**
-   authorization link (I'll wire the OAuth callback when we get there — ping
-   me at this step) to log in as the Tilt TikTok account and grant
-   `video.publish`. That produces the access token + refresh token.
-6. **Add to Vercel:** `TIKTOK_ACCESS_TOKEN`. Leave `TIKTOK_PRIVACY_LEVEL`
-   unset at first — posts go up as **SELF_ONLY** (only the account sees
-   them) so you can safely test end-to-end; flip it to
-   `PUBLIC_TO_EVERYONE` when you're happy.
+5. **Add the redirect URI.** In the app's Login Kit settings, set the
+   redirect URI to exactly:
+   `https://YOUR-HQ-DOMAIN/api/publish/tiktok/callback`
+   (your deployed Tilt HQ domain).
+6. **Add the app keys to Vercel:** `TIKTOK_CLIENT_KEY` and
+   `TIKTOK_CLIENT_SECRET` (both shown on the app's page) → redeploy.
+7. **Connect (one click).** Once TikTok approves the app, open **/publish**
+   and tap **Connect TikTok** on the TikTok card — log in as the Tilt
+   account, approve, and you land back on /publish with the card green.
+   Tokens auto-refresh from then on; no manual token handling.
+8. Leave `TIKTOK_PRIVACY_LEVEL` unset at first — posts go up as
+   **SELF_ONLY** (only the account sees them) so you can safely test
+   end-to-end; set it to `PUBLIC_TO_EVERYONE` when you're happy.
 
 **Gotchas**
 - Unaudited apps can ONLY post SELF_ONLY. Public posting requires the audit

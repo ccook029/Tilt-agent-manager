@@ -117,7 +117,7 @@ export async function publishApprovedPosts(
   if (!hasDatabase()) {
     return { ...base, skipped: "Studio database not configured." };
   }
-  if (!anyPlatformConnected()) {
+  if (!(await anyPlatformConnected())) {
     return {
       ...base,
       skipped: "No platform connected — add Meta / TikTok credentials.",

@@ -53,13 +53,25 @@ reviews run Claude Opus 4.8.
 5. When you're comfortable: say the word and I'll wire the every-3-days
    schedule (`MARKETING_CRON` infrastructure is already in the cron).
 
-## Next (Phase 5 candidates, in priority order)
+## Phase 5 (built — 2026-07-15)
 
-1. Auto-render on ship (post package → render pipeline without the manual
-   Studio step).
-2. The every-3-days marketing schedule once you're comfortable.
-3. TikTok OAuth callback + automatic token refresh.
-4. Graduation: let Harper ship low-risk pillars without your tap (ledger
+1. **Auto-render on ship** ✅ — shipping a content piece now matches it to
+   the best library asset and renders static images immediately; it lands in
+   /publish with media attached. Reels render on the Studio's next video
+   pass. If the library lacks the footage, the ship confirmation tells you.
+2. **The every-3-days schedule** ✅ (still off) — when you're ready, set
+   `MARKETING_CRON=true` in Vercel (and optionally
+   `MARKETING_CRON_EVERY_DAYS`, default 3). Weekdays only, and your manual
+   button runs reset the clock so it never double-fires.
+3. **TikTok is now one-click** ✅ — once TikTok approves the app, you just
+   add `TIKTOK_CLIENT_KEY`/`TIKTOK_CLIENT_SECRET` and tap **Connect TikTok**
+   on /publish. Tokens refresh themselves. (PUBLISHER_SETUP.md Part 2
+   updated.)
+
+## Next (Phase 6 candidates, in priority order)
+
+1. Graduation: let Harper ship low-risk pillars without your tap (ledger
    already tracks readiness).
-5. Best-time scheduling + the `scheduled` post status.
-6. Migrate Finance onto the engine (last — it works today).
+2. Best-time scheduling + the `scheduled` post status.
+3. Roll richer work-order use to Operations and Product/R&D.
+4. Migrate Finance onto the engine (last — it works today).

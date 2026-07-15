@@ -34,12 +34,12 @@ export interface PublishLogEntry extends PublishResult {
   sourceId?: string;
 }
 
-export function getConnectionStatus(): ProviderStatus[] {
-  return PLATFORMS.map((p) => providers[p].status());
+export async function getConnectionStatus(): Promise<ProviderStatus[]> {
+  return Promise.all(PLATFORMS.map((p) => providers[p].status()));
 }
 
-export function anyPlatformConnected(): boolean {
-  return getConnectionStatus().some((s) => s.connected);
+export async function anyPlatformConnected(): Promise<boolean> {
+  return (await getConnectionStatus()).some((s) => s.connected);
 }
 
 async function appendLog(entry: PublishLogEntry): Promise<void> {

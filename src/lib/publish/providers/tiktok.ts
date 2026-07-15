@@ -24,20 +24,23 @@ import type {
   PublishResult,
 } from "../types";
 
+import {
+  getValidAccessToken,
+  getStoredTokens,
+  tiktokAppConfigured,
+} from "../tiktok-store";
+
 const BASE = "https://open.tiktokapis.com/v2";
 
-function token(): string | undefined {
-  return process.env.TIKTOK_ACCESS_TOKEN;
-}
-
 async function ttPost(
+  token: string,
   path: string,
   body: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   const res = await fetch(`${BASE}/${path}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token()}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json; charset=UTF-8",
     },
     body: JSON.stringify(body),
@@ -53,20 +56,43 @@ async function ttPost(
 
 export const tiktokProvider: PublishProvider = {
   platform: "tiktok",
-  status(): ProviderStatus {
+  async status(): Promise<ProviderStatus> {
+    const privacy = process.env.TIKTOK_PRIVACY_LEVEL ?? "SELF_ONLY";
+    if (process.env.TIKTOK_ACCESS_TOKEN) {
+      return {
+        platform: "tiktok",
+        connected: true,
+        detail: `connected (env token, privacy ${privacy})`,
+      };
+    }
+    const stored = await getStoredTokens().catch(() => null);
+    if (stored) {
+      const refreshDead = Date.now() >= stored.refreshExpiresAt;
+      return {
+        platform: "tiktok",
+        connected: !refreshDead,
+        detail: refreshDead
+          ? "session expired — reconnect via the Connect button"
+          : `connected (OAuth, auto-refresh, privacy ${privacy})`,
+      };
+    }
     return {
       platform: "tiktok",
-      connected: Boolean(token()),
-      detail: token()
-        ? `connected (Content Posting API, privacy ${
-            process.env.TIKTOK_PRIVACY_LEVEL ?? "SELF_ONLY"
-          })`
-        : "set TIKTOK_ACCESS_TOKEN",
+      connected: false,
+      detail: tiktokAppConfigured()
+        ? "app configured — tap Connect to authorize the Tilt account"
+        : "set TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET (see docs/PUBLISHER_SETUP.md)",
     };
   },
   async publish(req: PublishRequest): Promise<PublishResult> {
-    if (!token()) {
-      return { ok: false, platform: "tiktok", error: "set TIKTOK_ACCESS_TOKEN" };
+    const token = await getValidAccessToken();
+    if (!token) {
+      return {
+        ok: false,
+        platform: "tiktok",
+        error:
+          "TikTok not connected (or session expired) — connect via /publish.",
+      };
     }
     if (!req.mediaUrl || req.mediaType !== "video") {
       return {
@@ -76,7 +102,7 @@ export const tiktokProvider: PublishProvider = {
       };
     }
     try {
-      const init = await ttPost("post/publish/video/init/", {
+      const init = await ttPost(token, "post/publish/video/init/", {
         post_info: {
           title: req.caption.slice(0, 2200),
           privacy_level: process.env.TIKTOK_PRIVACY_LEVEL ?? "SELF_ONLY",
