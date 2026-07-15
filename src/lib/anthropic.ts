@@ -1,4 +1,4 @@
-import { CLAUDE_MODEL } from "@/lib/models";
+import { CLAUDE_MODEL, samplingParams } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // anthropic.ts — Claude API caller with template variable substitution
 // ---------------------------------------------------------------------------
@@ -54,7 +54,8 @@ export async function callClaude(
   const basePayload = {
     model,
     max_tokens: opts.maxTokens ?? 4096,
-    temperature: opts.temperature ?? 0.4,
+    // Newer models (Sonnet 5, Opus 4.7/4.8) reject temperature — omit it there.
+    ...samplingParams(model, opts.temperature ?? 0.4),
     system: opts.systemPrompt,
     messages: [{ role: "user" as const, content: opts.userMessage }],
   };

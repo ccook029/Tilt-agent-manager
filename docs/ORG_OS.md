@@ -109,25 +109,27 @@ Auth: everything sits behind the Tilt OS middleware like the rest of HQ.
    human-approved Studio content and flipping it to `published`; `/publish`
    console + `/api/org/publish`. **Live posting is gated on Chris adding the
    platform tokens** (see `.env.example` and `docs/HANDOFF.md`).
-4. **Roll-out** (next) — the same engine for Operations and Product/R&D;
-   connect marketing work orders to the Studio `posts` table so a shipped
-   piece becomes a rendered, publishable post; graduation (a trusted boss
-   ships without the owner trigger — the ledger already tracks readiness);
-   best-time scheduling + the `scheduled` post status.
+4. **Integration & upgrades** ✅ — the work order ↔ Studio seam
+   (`org/ship-executors.ts`: creators emit a ```post package; Chris's ship
+   inserts approved Studio `posts` rows that flow render → publish queue);
+   Google Search Console for Sage (`src/lib/gsc.ts`, reuses the GA4 service
+   account; env `GSC_SITE_URL`); model upgrade — workers on Claude Sonnet 5,
+   boss reviews on Claude Opus 4.8, with `samplingParams()` in `models.ts`
+   stripping `temperature` on models that reject it; "Run marketing week"
+   button on `/review` (on-demand dispatch per Chris — cron stays opt-in).
+5. **Next** — graduation (a trusted boss ships without the owner trigger —
+   the ledger already tracks readiness); best-time scheduling + the
+   `scheduled` post status; TikTok token auto-refresh + OAuth callback;
+   rolling richer work-order use to Operations and Product/R&D; migrating
+   Finance onto the engine last (it works today; needs engine tool use).
 
-## Open seams for Phase 4 (documented, not yet built)
+## Remaining seams (documented, not yet built)
 
-- **Work order ↔ Studio post.** Marketing work orders currently produce text
-  deliverables (copy, scripts, briefs). The publisher posts Studio `posts`
-  rows (which carry rendered media). Phase 4 connects them: an approved work
-  order becomes a `posts` row (copy + render brief → render pipeline → media),
-  so "ship" and "publish" are one flow instead of two surfaces.
-- **Two approval gates today.** The Org OS work-order approval (`/review`) and
-  the Studio post approval (`needs_review → approved`) are separate. They
-  converge once the seam above is built.
-- **Finance on the engine.** Finance keeps its bespoke loop for now; migrating
-  it onto the engine (as an employee prompt profile + Zoho tool hookups) is
-  the last migration, once the engine grows tool use.
+- **Renders still human-assisted.** A shipped post package lands in the
+  Studio as an approved post with a render brief; the render pipeline (or
+  the Studio UI) attaches media before it becomes publishable. Auto-render
+  on ship is a Phase 5 candidate.
+- **Platform credentials** gate live posting — see `docs/PUBLISHER_SETUP.md`.
 
 ## Migration notes
 

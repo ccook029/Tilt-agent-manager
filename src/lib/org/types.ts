@@ -121,5 +121,7 @@ export interface WorkOrder {
   shippedBy?: string;
   /** Owner's notes on ship / send-back / reject. */
   ownerNotes?: string;
+  /** What the department's ship executor did (e.g. "2 Studio posts created"). */
+  shipNote?: string;
   error?: string;
 }

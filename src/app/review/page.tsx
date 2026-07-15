@@ -137,12 +137,15 @@ export default function ReviewPage() {
             ship. Nothing publishes until you approve it.
           </p>
         </div>
-        <Link
-          href="/dashboard"
-          className="rounded-lg border border-gray-700 bg-gray-800/60 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700"
-        >
-          ← Dashboard
-        </Link>
+        <div className="flex items-center gap-2">
+          <DispatchWeekButton onDone={load} />
+          <Link
+            href="/dashboard"
+            className="rounded-lg border border-gray-700 bg-gray-800/60 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700"
+          >
+            ← Dashboard
+          </Link>
+        </div>
       </div>
 
       {loading ? (
@@ -218,6 +221,50 @@ export default function ReviewPage() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/** On-demand trigger for Harper's weekly dispatch (Chris chose on-demand over
+ * the Monday cron until the cadence feels normal). Takes a few minutes: Harper
+ * plans, the team drafts, she reviews, and results land in the queue above. */
+function DispatchWeekButton({ onDone }: { onDone: () => Promise<void> }) {
+  const [running, setRunning] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const run = async () => {
+    setRunning(true);
+    setNote(null);
+    try {
+      const res = await fetch("/api/marketing/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const d = await res.json().catch(() => ({}));
+      setNote(
+        res.ok
+          ? `Harper dispatched ${d.dispatched ?? 0} pieces — ${d.approved ?? 0} ready for you${d.escalated ? `, ${d.escalated} escalated` : ""}.`
+          : d.error ?? "Dispatch failed."
+      );
+      await onDone();
+    } catch {
+      setNote("Dispatch failed — try again.");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      {note && <span className="text-[11px] text-gray-500">{note}</span>}
+      <button
+        onClick={run}
+        disabled={running}
+        className="rounded-lg bg-[#0094b8] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#00a8d1] disabled:opacity-50"
+      >
+        {running ? "Harper's team is working…" : "Run marketing week"}
+      </button>
     </div>
   );
 }

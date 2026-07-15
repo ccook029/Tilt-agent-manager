@@ -41,6 +41,7 @@ import {
   getEmployeeProfile,
 } from "./employee-configs";
 import { renderDepartmentContext } from "./department-context";
+import { executeShip } from "./ship-executors";
 import type {
   Department,
   Employee,
@@ -480,7 +481,8 @@ export async function runWorkOrder(id: string): Promise<RunWorkOrderResult> {
 
 // ---- Owner actions (Chris keeps the trigger) -----------------------------------
 
-/** The owner's approve trigger: ship a boss-approved work order. */
+/** The owner's approve trigger: ship a boss-approved work order. Runs the
+ * department's ship executor (e.g. marketing content → approved Studio posts). */
 export async function shipWorkOrder(
   id: string,
   shippedBy = "Chris Cook",
@@ -488,15 +490,17 @@ export async function shipWorkOrder(
 ): Promise<WorkOrder> {
   const order = await getWorkOrder(id);
   if (!order) throw new Error(`Work order not found: ${id}`);
+  const shipNote = await executeShip(order);
   const updated = await updateWorkOrder(id, {
     status: "shipped",
     shippedAt: new Date().toISOString(),
     shippedBy,
     ownerNotes: notes,
+    shipNote: shipNote ?? undefined,
   });
   await postSignal({
     source: order.departmentId,
-    headline: `Chris approved "${order.title}" — shipped.`,
+    headline: `Chris approved "${order.title}" — shipped.${shipNote ? ` ${shipNote}` : ""}`,
   }).catch(() => {});
   return updated!;
 }

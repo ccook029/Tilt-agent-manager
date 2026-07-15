@@ -36,6 +36,28 @@ const DECISION_PROTOCOL = `OUTPUT PROTOCOL:
 \`\`\`
 No decision requests? Omit the json block entirely.`;
 
+// Content creators additionally emit a machine-readable post package so that
+// when Chris ships the work order, the posts flow straight into the Social
+// Studio (render pipeline → publish queue). Note the fence tag is "post",
+// NOT "json" — the json fence is reserved for decision requests.
+const POST_PACKAGE_PROTOCOL = `POST PACKAGE (required for postable content):
+After the human-readable deliverable (and before any decision-request json block), include ONE fenced block tagged \`post\` containing the final, ready-to-publish content as a JSON array — one entry per platform variant:
+\`\`\`post
+[
+  {
+    "platform": "instagram | tiktok | facebook",
+    "pillar": "proof | sheep | athletes | product | community | fit",
+    "format": "reel | photo | carousel | text",
+    "copy": "the final caption exactly as it should be posted (without hashtags)",
+    "hashtags": ["#TiltHockey", "..."],
+    "cta": "the CTA line",
+    "scheduled_date": "YYYY-MM-DD (optional)",
+    "render_brief": "what the visual/video shows — concrete enough for the render pipeline"
+  }
+]
+\`\`\`
+This block IS the deliverable's machine form — keep it in perfect sync with the prose above it.`;
+
 const profiles: Record<string, EmployeePromptProfile> = {
   // ---- Harper Slate — Marketing Director (boss) ---------------------------
   "marketing-director": {
@@ -66,8 +88,12 @@ Escalate to Chris ONLY for real judgment calls: a new brand claim, a sensitive/p
 
 For a video work order you deliver a production-ready package: a hook (first 1-2 seconds — this is what makes or breaks a reel), a shot-by-shot outline, on-screen text/captions, the spoken/voiceover script if any, suggested audio/trend direction, the CTA, and the hashtag set — all from the approved lists in the brand bar. Build against footage that plausibly exists in the asset library; when a shot isn't available, name it as a decision request / gap rather than assuming it.
 
-Everything must clear the brand hard rules. ${DECISION_PROTOCOL}`,
-    deliverableGuidance: `Reel/TikTok packages live or die on the first frame — lead with the hook. Keep scripts tight (a 15-30s reel is ~40-75 words). Specify the platform this cut is for and adapt length/pacing to it. Use only approved CTAs and hashtags.`,
+Everything must clear the brand hard rules.
+
+${POST_PACKAGE_PROTOCOL}
+
+${DECISION_PROTOCOL}`,
+    deliverableGuidance: `Reel/TikTok packages live or die on the first frame — lead with the hook. Keep scripts tight (a 15-30s reel is ~40-75 words). Specify the platform this cut is for and adapt length/pacing to it. Use only approved CTAs and hashtags. Include the post package block — put the full script/shot list in the prose and the final caption in the block's "copy".`,
   },
 
   // ---- Indy Post — Content & Image Creator --------------------------------
@@ -76,8 +102,12 @@ Everything must clear the brand hard rules. ${DECISION_PROTOCOL}`,
 
 For a post work order you deliver: the caption (in Tilt's voice), any carousel/slide breakdown, the image brief (what the visual shows, style, any on-image text) written so the render pipeline or a designer can execute it, the CTA, and the hashtags — from the approved lists. Match copy to the target platform. If the visual needs an asset the library doesn't have, raise it as a gap.
 
-Everything must clear the brand hard rules. ${DECISION_PROTOCOL}`,
-    deliverableGuidance: `Great captions open with a scroll-stopping first line, carry one clear idea tied to the pillar, and end on an approved CTA. For carousels, give each slide a purpose. Image briefs must be concrete enough to render without a follow-up question. Only approved CTAs and hashtags.`,
+Everything must clear the brand hard rules.
+
+${POST_PACKAGE_PROTOCOL}
+
+${DECISION_PROTOCOL}`,
+    deliverableGuidance: `Great captions open with a scroll-stopping first line, carry one clear idea tied to the pillar, and end on an approved CTA. For carousels, give each slide a purpose. Image briefs must be concrete enough to render without a follow-up question. Only approved CTAs and hashtags. Always include the post package block with the image brief in "render_brief".`,
   },
 
   // ---- Sage Rank — SEO & AI-Search Specialist -----------------------------

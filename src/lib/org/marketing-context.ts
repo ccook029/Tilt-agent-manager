@@ -16,6 +16,7 @@ import { HARD_RULES } from "../social/brand";
 import { getCatalogStats, getSkeleton, listGaps } from "../social/queries";
 import { getRecentSignals } from "../signals";
 import { fetchGA4Data, getWeekRange } from "../ga4";
+import { fetchSearchConsoleData, isGscConfigured } from "../gsc";
 
 function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
   return p.catch(() => fallback);
@@ -127,16 +128,24 @@ async function renderIntelBlock(): Promise<string> {
 
 /** Website performance snapshot (SEO/analytics grounding). Best-effort. */
 async function renderAnalyticsBlock(): Promise<string> {
-  try {
-    const data = await fetchGA4Data(getWeekRange(new Date()));
-    return [
-      "=== TILTHOCKEY.COM — LAST 7 DAYS (GA4) ===",
-      data.slice(0, 4000),
-      "=== END GA4 ===",
-    ].join("\n");
-  } catch {
-    return "=== TILTHOCKEY.COM ANALYTICS ===\n(GA4 not available this run — reason from the brand/plan context instead.)\n=== END ===";
-  }
+  const ga4 = await fetchGA4Data(getWeekRange(new Date())).catch(
+    () => "(GA4 not available this run.)"
+  );
+  const gsc = isGscConfigured()
+    ? await fetchSearchConsoleData(28).catch(
+        (e) =>
+          `(Search Console configured but the query failed: ${e instanceof Error ? e.message : e} — check that the service account email is added as a user in Search Console.)`
+      )
+    : "(Search Console not connected yet — set GSC_SITE_URL and add the GA4 service account as a user in Search Console for real query data.)";
+  return [
+    "=== TILTHOCKEY.COM — LAST 7 DAYS (GA4) ===",
+    ga4.slice(0, 4000),
+    "=== END GA4 ===",
+    "",
+    "=== TILTHOCKEY.COM — GOOGLE SEARCH CONSOLE ===",
+    gsc.slice(0, 4000),
+    "=== END SEARCH CONSOLE ===",
+  ].join("\n");
 }
 
 /**
