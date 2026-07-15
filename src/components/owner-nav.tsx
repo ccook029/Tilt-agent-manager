@@ -34,12 +34,6 @@ export default function OwnerNav() {
         Publish
       </Link>
       <Link
-        href="/org"
-        className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
-      >
-        Org
-      </Link>
-      <Link
         href="/strategy"
         className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
       >

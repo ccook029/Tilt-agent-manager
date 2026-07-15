@@ -138,7 +138,17 @@ Auth: everything sits behind the Tilt OS middleware like the rest of HQ.
    **graduation toggle** (`org/settings.ts`: autoShip per department — a
    graduated department's boss-approved work ships immediately, escalations
    still always reach Chris; off by default everywhere).
-7. **Next** — best-time scheduling + the `scheduled` post status; migrating
+7. **One coherent hierarchy** ✅ — the whole HQ reads like the org chart:
+   the home page's team grid is now a department tree (boss on top,
+   reporting lines to the team, the department's tools attached underneath);
+   the top bar is restructured around it (Org Chart · **Departments ▾** — a
+   directory-driven menu of every business area with its tools inside · the
+   owner's desk: Review / Publish / Strategy · Run History · Knowledge);
+   every tool lives on its department in `directory.ts` (single source of
+   truth for home, /org, and the menu); the five marketing hires got persona
+   cards + desk pages; persona department labels normalized to the org's
+   five names; /org sections are anchor-linkable (`/org#marketing`).
+8. **Next** — best-time scheduling + the `scheduled` post status; migrating
    Finance onto the engine last (it works today; needs engine tool use).
 
 ## Remaining seams (documented, not yet built)

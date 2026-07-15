@@ -8,8 +8,7 @@ import { Confetti } from "@/components/confetti";
 import CursorSpotlight from "@/components/cursor-spotlight";
 import { RunPipelineProvider } from "@/components/run-pipeline";
 import IntroOverlay from "@/components/intro-overlay";
-import StudioMenu from "@/components/studio-menu";
-import StaffMenu from "@/components/staff-menu";
+import DepartmentsMenu from "@/components/departments-menu";
 import SignOut from "@/components/sign-out";
 import OwnerNav from "@/components/owner-nav";
 
@@ -96,28 +95,25 @@ export default function RootLayout({
                 Corporate HQ
               </span>
             </Link>
+            {/* The bar reads like the company: the org, its departments (each
+                with its tools inside), then the owner's desk, then utilities. */}
             <nav className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <CommandButton />
+              <Link
+                href="/org"
+                className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Org Chart
+              </Link>
+              <DepartmentsMenu />
+              <span className="hidden sm:inline text-xs text-gray-700">|</span>
+              <OwnerNav />
+              <span className="hidden sm:inline text-xs text-gray-700">|</span>
               <Link
                 href="/dashboard"
                 className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
               >
-                Operations
-              </Link>
-              <StudioMenu />
-              <StaffMenu />
-              <OwnerNav />
-              <Link
-                href="/inventory"
-                className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
-              >
-                Inventory
-              </Link>
-              <Link
-                href="/files"
-                className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
-              >
-                Files
+                Run History
               </Link>
               <Link
                 href="/knowledge"
@@ -125,7 +121,6 @@ export default function RootLayout({
               >
                 Knowledge
               </Link>
-              <span className="hidden sm:inline text-xs text-gray-700">|</span>
               <SignOut />
             </nav>
           </div>

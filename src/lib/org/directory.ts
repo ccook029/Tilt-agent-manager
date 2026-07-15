@@ -20,6 +20,18 @@ const departments: Department[] = [
     mission:
       "Keep Tilt's books clean, audit-ready, and decision-grade: bookkeeping in Zoho Books, reconciliation, cash outlook, and financial strategy for the founders.",
     managerId: "accounting-manager",
+    tools: [
+      {
+        label: "Strategy Room",
+        href: "/strategy",
+        description: "Projections, expected contracts, and CFO analysis",
+      },
+      {
+        label: "Decisions Queue",
+        href: "/questions",
+        description: "Open accounting questions awaiting your call",
+      },
+    ],
   },
   {
     id: "marketing",
@@ -27,6 +39,33 @@ const departments: Department[] = [
     mission:
       "Grow Tilt's audience and sales with on-brand content: video, posts and imagery, SEO (classic Google AND AI-search visibility — ChatGPT/Claude/Perplexity/AI Overviews), and consistent publishing to Instagram, TikTok, and Facebook. Everything ships through the Marketing Director's review, and nothing publishes without the owner's approval while the gate is on.",
     managerId: "marketing-director",
+    tools: [
+      {
+        label: "Social Studio",
+        href: "/studio/social",
+        description: "Content plan, post library, gaps, and renders",
+      },
+      {
+        label: "Publish Console",
+        href: "/publish",
+        description: "Approved queue → Instagram, TikTok, Facebook",
+      },
+      {
+        label: "Announcement Creator",
+        href: "/studio/announcements",
+        description: "Partner & ambassador announcement art",
+      },
+      {
+        label: "Blanket Fundraiser",
+        href: "/studio/blanket",
+        description: "Team blanket renders for fundraisers",
+      },
+      {
+        label: "SOX Creator",
+        href: "/studio/sox",
+        description: "Team sock renders",
+      },
+    ],
   },
   {
     id: "operations",
@@ -34,6 +73,34 @@ const departments: Department[] = [
     mission:
       "Keep inventory, ordering, and fulfillment tight: the master Zoho Sheet in sync with Zoho Inventory, low-stock caught early, and factory purchase orders grounded in live demand.",
     managerId: null,
+    tools: [
+      {
+        label: "Inventory",
+        href: "/inventory",
+        description: "Live stock levels and reconciliation",
+      },
+      {
+        label: "Stick Order Builder",
+        href: "/inventory/order-builder",
+        description: "Demand-driven factory POs from live data",
+      },
+      {
+        label: "Stick Scanner",
+        href: "/inventory/scan",
+        description: "Scan sticks in and out",
+      },
+      {
+        label: "Tilt Web Admin",
+        href: "/api/modules/launch?m=webadmin",
+        description: "tilthockey.com back office — orders, products, site ops",
+        external: true,
+      },
+      {
+        label: "Staff Tools",
+        href: "/staff",
+        description: "Ambassadors, partners, retailers, registrations",
+      },
+    ],
   },
   {
     id: "product",
@@ -41,6 +108,13 @@ const departments: Department[] = [
     mission:
       "Design what Tilt builds next: product specs, RFQ packages, and materials research from polymer science to factory-ready documentation.",
     managerId: null,
+    tools: [
+      {
+        label: "Catalog Builder",
+        href: "/studio/catalog",
+        description: "Team-colorway catalog images on demand",
+      },
+    ],
   },
   {
     id: "intelligence",
@@ -48,6 +122,13 @@ const departments: Department[] = [
     mission:
       "Give every department eyes: website analytics, competitor product/pricing intel, and competitor social monitoring, delivered as briefs the other teams act on.",
     managerId: null,
+    tools: [
+      {
+        label: "Reports & Files",
+        href: "/files",
+        description: "Exported reports and company documents",
+      },
+    ],
   },
 ];
 
@@ -90,6 +171,7 @@ const employees: Employee[] = [
     departmentId: "marketing",
     role: "manager",
     reportsTo: null,
+    personaId: "marketing-director",
     skills: ["review", "content-calendar", "campaign-planning", "brand-voice"],
     charter:
       "Owns the content calendar and the brand bar. Dispatches work orders to the marketing team, reviews every deliverable against the brand knowledge base and department policy before it reaches Chris, and escalates only true judgment calls. Weekly direction is grounded in Sloane's competitor-social intel and Dana's analytics.",
@@ -103,6 +185,7 @@ const employees: Employee[] = [
     departmentId: "marketing",
     role: "worker",
     reportsTo: "marketing-director",
+    personaId: "video-creator",
     skills: ["video-script", "shot-list", "video-brief", "reel-concept"],
     charter:
       "Produces video content for IG Reels, TikTok, and Facebook: scripts, shot lists, and render briefs driven from the Social Studio asset library, filing gaps when footage is missing.",
@@ -116,6 +199,7 @@ const employees: Employee[] = [
     departmentId: "marketing",
     role: "worker",
     reportsTo: "marketing-director",
+    personaId: "content-creator",
     skills: ["post-copy", "image-brief", "carousel", "caption-pack"],
     charter:
       "Writes post copy and produces imagery through the Social Studio render pipeline, filling the content plan's slots with on-brand posts.",
@@ -129,6 +213,7 @@ const employees: Employee[] = [
     departmentId: "marketing",
     role: "worker",
     reportsTo: "marketing-director",
+    personaId: "seo-specialist",
     skills: ["seo-audit", "keyword-plan", "content-brief", "ai-search-optimization"],
     charter:
       "Keeps tilthockey.com visible where buyers actually look: classic Google SEO (technical health, keywords, content briefs) and AI-search optimization — making Tilt the answer ChatGPT, Claude, Perplexity, and Google AI Overviews give for hockey-gear questions.",
@@ -142,6 +227,7 @@ const employees: Employee[] = [
     departmentId: "marketing",
     role: "worker",
     reportsTo: "marketing-director",
+    personaId: "social-publisher",
     skills: ["publish-instagram", "publish-tiktok", "publish-facebook", "posting-schedule"],
     charter:
       "Takes the approved queue live on Instagram, TikTok, and Facebook at the right times. Until the platform APIs are wired (Phase 3), preps everything so posting is one tap.",

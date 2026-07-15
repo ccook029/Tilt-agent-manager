@@ -50,6 +50,16 @@ export interface Employee {
   enabled: boolean;
 }
 
+/** A workspace/tool that belongs to a department — rendered under it in the
+ * org chart so every surface of HQ is findable inside its business area. */
+export interface DepartmentTool {
+  label: string;
+  href: string;
+  description: string;
+  /** Opens in a new tab (external app / key-injecting launcher). */
+  external?: boolean;
+}
+
 export interface Department {
   id: string;
   name: string;
@@ -57,6 +67,8 @@ export interface Department {
   mission: string;
   /** Employee id of the boss, or null when members report to leadership. */
   managerId: string | null;
+  /** The department's tools and workspaces, shown in the org chart. */
+  tools?: DepartmentTool[];
 }
 
 // ---- Work orders -----------------------------------------------------------

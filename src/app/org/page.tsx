@@ -18,9 +18,16 @@ interface Employee {
   departmentId: string;
   role: "manager" | "worker";
   reportsTo: string | null;
+  personaId?: string;
   skills: string[];
   staffed: boolean;
   enabled: boolean;
+}
+interface DeptTool {
+  label: string;
+  href: string;
+  description: string;
+  external?: boolean;
 }
 interface Department {
   id: string;
@@ -28,6 +35,7 @@ interface Department {
   mission: string;
   managerId: string | null;
   members: string[];
+  tools?: DeptTool[];
 }
 
 export default function OrgPage() {
@@ -97,7 +105,8 @@ export default function OrgPage() {
             return (
               <div
                 key={dept.id}
-                className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-5"
+                id={dept.id}
+                className="scroll-mt-24 rounded-xl border border-gray-800/60 bg-[#111]/40 p-5"
               >
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -131,6 +140,39 @@ export default function OrgPage() {
                     {members.map((e) => (
                       <PersonRow key={e.id} employee={e} />
                     ))}
+                  </div>
+                )}
+
+                {(dept.tools?.length ?? 0) > 0 && (
+                  <div className="mt-4 border-t border-gray-800/60 pt-3">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
+                      Tools & workspaces
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {dept.tools!.map((t) =>
+                        t.external ? (
+                          <a
+                            key={t.href}
+                            href={t.href}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={t.description}
+                            className="rounded-full border border-gray-700 bg-gray-800/40 px-3 py-1 text-[11px] text-gray-300 transition-colors hover:border-[#00d6ff]/50 hover:text-[#00d6ff]"
+                          >
+                            {t.label} ↗
+                          </a>
+                        ) : (
+                          <Link
+                            key={t.href}
+                            href={t.href}
+                            title={t.description}
+                            className="rounded-full border border-gray-700 bg-gray-800/40 px-3 py-1 text-[11px] text-gray-300 transition-colors hover:border-[#00d6ff]/50 hover:text-[#00d6ff]"
+                          >
+                            {t.label}
+                          </Link>
+                        )
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -343,7 +385,7 @@ function PersonRow({
   employee: Employee;
   isBoss?: boolean;
 }) {
-  return (
+  const row = (
     <div className="flex items-center gap-3">
       <div
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
@@ -373,5 +415,16 @@ function PersonRow({
         </span>
       )}
     </div>
+  );
+
+  return employee.personaId ? (
+    <Link
+      href={`/dashboard/${employee.personaId}`}
+      className="block rounded-lg transition-colors hover:bg-gray-900/50"
+    >
+      {row}
+    </Link>
+  ) : (
+    row
   );
 }
