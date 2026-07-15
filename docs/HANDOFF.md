@@ -68,10 +68,26 @@ reviews run Claude Opus 4.8.
    on /publish. Tokens refresh themselves. (PUBLISHER_SETUP.md Part 2
    updated.)
 
-## Next (Phase 6 candidates, in priority order)
+## Phase 6 (built — 2026-07-15): the whole company is on the pipeline
 
-1. Graduation: let Harper ship low-risk pillars without your tap (ledger
-   already tracks readiness).
-2. Best-time scheduling + the `scheduled` post status.
-3. Roll richer work-order use to Operations and Product/R&D.
-4. Migrate Finance onto the engine (last — it works today).
+- **Every department is staffed for work orders now** — Stockton (grounded in
+  your live Zoho Sheet/Inventory data), Maya (who also reviews Rex's R&D for
+  buildability before it reaches you), Rex, Dana, and Vince all have real
+  job training, not generic prompts.
+- **Any boss can dispatch** — /org now has a **Dispatch team** button per
+  department (Maya can plan Product's period the way Harper plans
+  marketing's).
+- **You can assign work to anyone** — every department card on /org has an
+  **"+ Assign work"** form: pick the employee, write what you want in your
+  own words, and it runs through their boss's review into /review.
+- **Graduation exists (all off)** — each managed department has an
+  "Owner gate on / Graduated" toggle on /org. Graduating means boss-approved
+  work ships without your tap; escalations still always come to you. Flip it
+  per department whenever a boss has earned it.
+
+## Next (Phase 7 candidates)
+
+1. Best-time post scheduling + the `scheduled` status.
+2. Migrate Finance onto the engine (last — it works today).
+3. New hires as needs emerge (customer service, ambassador manager) — adding
+   one is now just a directory entry + a prompt profile.

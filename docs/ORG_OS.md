@@ -124,11 +124,22 @@ Auth: everything sits behind the Tilt OS middleware like the rest of HQ.
    `MARKETING_CRON=true` + `MARKETING_CRON_EVERY_DAYS`, manual runs reset the
    clock); TikTok OAuth (`/api/publish/tiktok/auth` + `/callback`, tokens in
    KV with auto-refresh, one-click Connect on /publish).
-6. **Next** — graduation (a trusted boss ships without the owner trigger —
-   the ledger already tracks readiness); best-time scheduling + the
-   `scheduled` post status; rolling richer work-order use to Operations and
-   Product/R&D; migrating Finance onto the engine last (it works today;
-   needs engine tool use).
+6. **Full org build-out** ✅ — the whole company is on the pipeline, not just
+   marketing: engine-native prompt profiles for Stockton (Operations), Maya
+   (Product boss — she reviews Rex — plus her own worker voice), Rex, Dana,
+   and Vince; per-department live-data grounding in `department-context.ts`
+   (Operations reads the Zoho Sheet/Inventory/sync snapshots, Product reads
+   the latest R&D/product/competitor findings, Intelligence reads GA4 +
+   signals); generic department dispatch (`org/dispatch.ts` +
+   `/api/org/departments/[id]/dispatch` — any staffed boss plans and hands
+   out work like Harper; marketing's pipeline is now a thin wrapper);
+   `/org` gains per-department **Dispatch team** buttons, an **Assign work**
+   form (Chris gives any employee a work order directly), and the
+   **graduation toggle** (`org/settings.ts`: autoShip per department — a
+   graduated department's boss-approved work ships immediately, escalations
+   still always reach Chris; off by default everywhere).
+7. **Next** — best-time scheduling + the `scheduled` post status; migrating
+   Finance onto the engine last (it works today; needs engine tool use).
 
 ## Remaining seams (documented, not yet built)
 

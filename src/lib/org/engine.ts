@@ -42,6 +42,7 @@ import {
 } from "./employee-configs";
 import { renderDepartmentContext } from "./department-context";
 import { executeShip } from "./ship-executors";
+import { isAutoShipEnabled } from "./settings";
 import type {
   Department,
   Employee,
@@ -434,6 +435,19 @@ export async function runWorkOrder(id: string): Promise<RunWorkOrderResult> {
         status: verdict === "approve" ? "approved" : "escalated",
         ownerNotes: undefined,
       }))!;
+
+      // Graduation: when Chris has graduated this department, a BOSS-approved
+      // order ships immediately instead of waiting for his tap. Only applies
+      // after a real review — no-boss positions always stop at the owner queue.
+      if (
+        verdict === "approve" &&
+        (await isAutoShipEnabled(department.id).catch(() => false))
+      ) {
+        order = await shipWorkOrder(
+          order.id,
+          `${reviewer.name} (graduated — auto-ship)`
+        ).catch(() => order!);
+      }
       verdictReached = true;
     }
 

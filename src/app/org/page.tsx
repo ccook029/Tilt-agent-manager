@@ -1,13 +1,14 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// /org — the company org chart, straight from the directory data.
+// /org — the company org chart + department controls.
 //
-// Departments, their boss, and every employee's reporting line — the structure
-// the engine actually enforces, made visible. "Not staffed yet" positions show
-// as pending so the roadmap is legible.
+// Per department: the boss and reporting lines (from the directory the engine
+// actually enforces), a Dispatch button (the boss plans and hands out work),
+// an Assign-work form (Chris gives any employee a work order directly), and
+// the graduation toggle (auto-ship boss-approved work — off by default).
 // ---------------------------------------------------------------------------
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 interface Employee {
@@ -17,6 +18,7 @@ interface Employee {
   departmentId: string;
   role: "manager" | "worker";
   reportsTo: string | null;
+  skills: string[];
   staffed: boolean;
   enabled: boolean;
 }
@@ -31,20 +33,25 @@ interface Department {
 export default function OrgPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [employees, setEmployees] = useState<Record<string, Employee>>({});
+  const [autoShip, setAutoShip] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetch("/api/org/directory")
-      .then((r) => r.json())
-      .then((d) => {
-        setDepartments(d.departments ?? []);
-        const map: Record<string, Employee> = {};
-        for (const e of d.employees ?? []) map[e.id] = e;
-        setEmployees(map);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    const [dir, settings] = await Promise.all([
+      fetch("/api/org/directory").then((r) => r.json()).catch(() => ({})),
+      fetch("/api/org/settings").then((r) => r.json()).catch(() => ({})),
+    ]);
+    setDepartments(dir.departments ?? []);
+    const map: Record<string, Employee> = {};
+    for (const e of dir.employees ?? []) map[e.id] = e;
+    setEmployees(map);
+    setAutoShip(settings.autoShip ?? {});
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 px-4 py-8">
@@ -54,8 +61,9 @@ export default function OrgPage() {
             Org Chart
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Every department, its boss, and who reports to whom. Work flows up
-            through the boss and stops at your desk for approval.
+            Every department, its boss, and who reports to whom. Dispatch a
+            team, assign work directly, and graduate a department when its
+            boss has earned auto-ship.
           </p>
         </div>
         <Link
@@ -91,11 +99,21 @@ export default function OrgPage() {
                 key={dept.id}
                 className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-5"
               >
-                <div className="mb-3">
-                  <h2 className="font-display text-lg font-bold uppercase tracking-wide text-gray-100">
-                    {dept.name}
-                  </h2>
-                  <p className="mt-1 text-xs text-gray-500">{dept.mission}</p>
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="font-display text-lg font-bold uppercase tracking-wide text-gray-100">
+                      {dept.name}
+                    </h2>
+                    <p className="mt-1 text-xs text-gray-500">{dept.mission}</p>
+                  </div>
+                  {boss?.staffed && (
+                    <DeptControls
+                      dept={dept}
+                      bossName={boss.name}
+                      autoShip={autoShip[dept.id] === true}
+                      onChanged={load}
+                    />
+                  )}
                 </div>
 
                 {boss ? (
@@ -115,9 +133,203 @@ export default function OrgPage() {
                     ))}
                   </div>
                 )}
+
+                <AssignWorkForm
+                  members={[boss, ...members]
+                    .filter((e): e is Employee => Boolean(e))
+                    .filter((e) => e.staffed && e.enabled)}
+                />
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Department controls: dispatch + graduation ----------------------------
+
+function DeptControls({
+  dept,
+  bossName,
+  autoShip,
+  onChanged,
+}: {
+  dept: Department;
+  bossName: string;
+  autoShip: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const dispatch = async () => {
+    setBusy("dispatch");
+    setNote(null);
+    try {
+      const res = await fetch(`/api/org/departments/${dept.id}/dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const d = await res.json().catch(() => ({}));
+      setNote(
+        res.ok
+          ? `${bossName} dispatched ${d.dispatched ?? 0} — ${d.approved ?? 0} in your review queue.`
+          : d.error ?? "Dispatch failed."
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const toggleGraduation = async () => {
+    setBusy("grad");
+    try {
+      await fetch("/api/org/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ departmentId: dept.id, autoShip: !autoShip }),
+      });
+      await onChanged();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="flex shrink-0 flex-col items-end gap-1.5">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={dispatch}
+          disabled={busy !== null}
+          className="rounded-md bg-[#0094b8] px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-[#00a8d1] disabled:opacity-50"
+        >
+          {busy === "dispatch" ? `${bossName} is working…` : "Dispatch team"}
+        </button>
+        <button
+          onClick={toggleGraduation}
+          disabled={busy !== null}
+          title={
+            autoShip
+              ? "Boss-approved work ships automatically. Click to restore your approve trigger."
+              : "You approve everything before it ships. Click to let the boss ship approved work without you."
+          }
+          className={`rounded-md border px-3 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+            autoShip
+              ? "border-emerald-700/60 bg-emerald-900/30 text-emerald-300"
+              : "border-gray-700 text-gray-400 hover:border-gray-500"
+          }`}
+        >
+          {autoShip ? "Graduated ✓" : "Owner gate on"}
+        </button>
+      </div>
+      {note && <p className="max-w-[16rem] text-right text-[10px] text-gray-500">{note}</p>}
+    </div>
+  );
+}
+
+// ---- Assign work directly ---------------------------------------------------
+
+function AssignWorkForm({ members }: { members: Employee[] }) {
+  const [open, setOpen] = useState(false);
+  const [assignee, setAssignee] = useState("");
+  const [title, setTitle] = useState("");
+  const [brief, setBrief] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  if (members.length === 0) return null;
+
+  const submit = async () => {
+    if (!assignee || !title.trim() || !brief.trim()) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const res = await fetch("/api/org/work-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigneeId: assignee, title, brief, run: true }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const status = d.order?.status;
+        setNote(
+          status === "approved" || status === "shipped"
+            ? "Done — it's in your review queue."
+            : status === "escalated"
+              ? "Done — it raised a question for you in /review."
+              : "Work order created."
+        );
+        setTitle("");
+        setBrief("");
+      } else {
+        setNote(d.error ?? "Failed to create the work order.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 border-t border-gray-800/60 pt-3">
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="text-[11px] font-medium text-[#00d6ff] hover:underline"
+        >
+          + Assign work to this team
+        </button>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={assignee}
+              onChange={(e) => setAssignee(e.target.value)}
+              className="rounded-md border border-gray-700 bg-gray-800/50 px-2 py-1.5 text-xs text-gray-200 focus:border-[#00d6ff] focus:outline-none"
+              disabled={busy}
+            >
+              <option value="">Who does it?</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} — {m.title}
+                </option>
+              ))}
+            </select>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Title (e.g. 'Reel: X1 flex demo')"
+              className="min-w-[14rem] flex-1 rounded-md border border-gray-700 bg-gray-800/50 px-2 py-1.5 text-xs text-gray-200 focus:border-[#00d6ff] focus:outline-none"
+              disabled={busy}
+            />
+          </div>
+          <textarea
+            value={brief}
+            onChange={(e) => setBrief(e.target.value)}
+            placeholder="The brief — what you want, in your words. Their boss reviews it before it comes back to you."
+            rows={2}
+            className="w-full rounded-md border border-gray-700 bg-gray-800/50 px-2 py-1.5 text-xs text-gray-200 focus:border-[#00d6ff] focus:outline-none"
+            disabled={busy}
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={submit}
+              disabled={busy || !assignee || !title.trim() || !brief.trim()}
+              className="rounded-md bg-[#0094b8] px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#00a8d1] disabled:opacity-40"
+            >
+              {busy ? "Working (takes a minute)…" : "Create & run"}
+            </button>
+            <button
+              onClick={() => setOpen(false)}
+              disabled={busy}
+              className="text-[11px] text-gray-500 hover:text-gray-300"
+            >
+              cancel
+            </button>
+            {note && <span className="text-[11px] text-gray-500">{note}</span>}
+          </div>
         </div>
       )}
     </div>
