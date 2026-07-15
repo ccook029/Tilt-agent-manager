@@ -96,19 +96,38 @@ Auth: everything sits behind the Tilt OS middleware like the rest of HQ.
 
 ## Phase plan
 
-1. **Foundation** (this phase) — org model, department engine, per-department
-   ledgers, work orders, API.
-2. **Marketing v1** — staff Harper + the four hires with real prompt profiles
-   wired to the Social Studio (plan skeleton, asset library, brand KB, GA4);
-   the boss dispatches the weekly calendar as work orders; boss review moves
-   posts `needs_review → approved`; review-queue UI for Chris (approve
-   trigger, send-back, escalation answers); scheduled dispatch via the cron.
-3. **Publisher** — real posting to Instagram, TikTok, and Facebook (Meta
-   Graph API + TikTok Content Posting API), `scheduled` status, best-time
-   posting.
-4. **Roll-out** — the same engine for Operations and Product/R&D, org-chart
-   UI with reporting lines, department pages, graduation (boss ships without
-   the owner trigger once trust is earned).
+1. **Foundation** ✅ — org model, department engine, per-department ledgers,
+   work orders, API.
+2. **Marketing v1** ✅ — Harper + the hires staffed with real prompt profiles
+   grounded in the Social Studio (plan, gaps, asset library, brand KB) and
+   GA4 (`org/marketing-context.ts`); Harper dispatches the week as work orders
+   (`pipelines/marketing.ts`, `/api/marketing/run`, `MARKETING_CRON`); the
+   `/review` console gives Chris the approve trigger, send-back, and escalation
+   answers; `/org` renders the chart.
+3. **Publisher** ✅ (infrastructure) — Instagram/Facebook via Meta Graph and
+   TikTok via the Content Posting API (`src/lib/publish/*`), posting
+   human-approved Studio content and flipping it to `published`; `/publish`
+   console + `/api/org/publish`. **Live posting is gated on Chris adding the
+   platform tokens** (see `.env.example` and `docs/HANDOFF.md`).
+4. **Roll-out** (next) — the same engine for Operations and Product/R&D;
+   connect marketing work orders to the Studio `posts` table so a shipped
+   piece becomes a rendered, publishable post; graduation (a trusted boss
+   ships without the owner trigger — the ledger already tracks readiness);
+   best-time scheduling + the `scheduled` post status.
+
+## Open seams for Phase 4 (documented, not yet built)
+
+- **Work order ↔ Studio post.** Marketing work orders currently produce text
+  deliverables (copy, scripts, briefs). The publisher posts Studio `posts`
+  rows (which carry rendered media). Phase 4 connects them: an approved work
+  order becomes a `posts` row (copy + render brief → render pipeline → media),
+  so "ship" and "publish" are one flow instead of two surfaces.
+- **Two approval gates today.** The Org OS work-order approval (`/review`) and
+  the Studio post approval (`needs_review → approved`) are separate. They
+  converge once the seam above is built.
+- **Finance on the engine.** Finance keeps its bespoke loop for now; migrating
+  it onto the engine (as an employee prompt profile + Zoho tool hookups) is
+  the last migration, once the engine grows tool use.
 
 ## Migration notes
 
