@@ -10,6 +10,15 @@ Pull data → Build prompt → Call Claude → Email report
 
 Agents are defined as config files in `src/agents/`. The orchestrator reads the config, injects real data into prompt templates, calls the Anthropic API, and delivers the output via email.
 
+## Org OS — employees, bosses, and the owner's approve trigger
+
+The platform is evolving from a flat list of agents into a real company
+structure: departments of specialist **employees** whose work flows through a
+**boss review** before it reaches the founders, with the owner keeping the
+final approve trigger. See **[docs/ORG_OS.md](docs/ORG_OS.md)** for the org
+chart, the work-order lifecycle, and the phase plan. Core code lives in
+`src/lib/org/` with HTTP endpoints under `/api/org/*`.
+
 ## Website Analytics Agent
 
 Runs **daily Mon–Fri at 8 AM ET** (12:00 UTC). Pulls GA4 data, sends it to Claude for analysis, and emails an actionable report.

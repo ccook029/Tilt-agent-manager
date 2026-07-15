@@ -1,4 +1,4 @@
-import { CLAUDE_MODEL } from "@/lib/models";
+import { CLAUDE_MODEL, samplingParams } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // manager.ts — Summarises combined agent outputs via Claude
 // ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ export async function summariseResults(
   const response = await client.messages.create({
     model: MANAGER_MODEL,
     max_tokens: 2048,
-    temperature: 0.3,
+    ...samplingParams(MANAGER_MODEL, 0.3),
     system: MANAGER_SYSTEM_PROMPT,
     messages: [
       {

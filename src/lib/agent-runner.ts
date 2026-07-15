@@ -1,4 +1,4 @@
-import { CLAUDE_MODEL } from "@/lib/models";
+import { CLAUDE_MODEL, samplingParams } from "@/lib/models";
 // ---------------------------------------------------------------------------
 // agent-runner.ts — Executes a single agent against the Claude API
 // ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ export async function runAgent(config: AgentConfig): Promise<AgentRunLog> {
     const response = await client.messages.create({
       model,
       max_tokens: config.maxTokens ?? DEFAULT_MAX_TOKENS,
-      temperature: config.temperature ?? DEFAULT_TEMPERATURE,
+      ...samplingParams(model, config.temperature ?? DEFAULT_TEMPERATURE),
       system: config.systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
     });

@@ -1,0 +1,170 @@
+# Tilt Org OS — from agents to employees
+
+The redesign of the agent platform into a real company structure: departments
+of specialist **employees**, each reporting to a **boss** who reviews their
+work before it reaches the founders, with the **owner keeping the final
+approve trigger** on everything that ships.
+
+Decided with Chris on 2026-07-15:
+
+- The publisher targets **Instagram, TikTok, and Facebook** (Phase 3).
+- Every department pipeline runs through its boss, **but Chris keeps the
+  approve trigger** until he's comfortable graduating a boss to ship on
+  their own (the graduation counters in the policy ledger already track
+  readiness).
+- SEO covers **classic Google AND AI-search optimization** — making Tilt the
+  answer ChatGPT, Claude, Perplexity, and Google AI Overviews give for
+  hockey-gear questions. (Google Search Console access still to be confirmed.)
+
+## Where it came from
+
+The Finance team already proved this loop: Penny (Staff Accountant) does the
+work and raises decision requests → Sterling (CFO) reviews, resolves what
+policy covers, escalates only owner-level calls → Chris's answers become
+permanent rules in the policy ledger, so nothing is asked twice
+(`accounting-loop.ts`, `policy-ledger.ts`). The Org OS generalizes exactly
+that pattern; Finance keeps its richer bespoke pipeline and shares its ledger
+with the new system through key mapping.
+
+## The pieces (Phase 1 — built)
+
+| Piece | File | What it is |
+|---|---|---|
+| Org model | `src/lib/org/types.ts` | Employee, Department, WorkOrder, reviews, status machine |
+| Org chart | `src/lib/org/directory.ts` | Departments + employees + `reportsTo` as real data (was prompt prose) |
+| Department ledger | `src/lib/org/ledger.ts` | Per-department policies + escalations; finance maps to the legacy accounting KV keys |
+| Work orders | `src/lib/org/work-orders.ts` | KV store + enforced status transitions |
+| Department engine | `src/lib/org/engine.ts` | worker draft → boss review → approve / bounded revise (max 3 rounds) / escalate |
+| Prompt profiles | `src/lib/org/employee-configs.ts` | Per-employee prompts (Phase 2 fills marketing in); default synthesized from the charter |
+| API | `src/app/api/org/*` | directory, work-orders (+run/ship/send_back/reject), escalations |
+
+### The work-order lifecycle
+
+```
+            queued
+              │ run
+              ▼
+        in_progress ◄────────────┐
+              │ draft            │ (boss feedback or
+              ▼                  │  owner send-back)
+   ┌─── in_review ── revise ──► revision
+   │          │
+approve   escalate
+   │          │
+   ▼          ▼
+approved   escalated ──► owner answers → answer becomes DEPARTMENT POLICY
+   │
+   │  ship  ◄── THE OWNER'S APPROVE TRIGGER (Chris)
+   ▼
+shipped        (send_back → revision · reject → rejected)
+```
+
+- Positions with `reportsTo: null` (Stockton, Dana, Vince, and the bosses
+  themselves) skip the boss step — their drafts go straight to the owner's
+  queue.
+- Boss reviews run on `CLAUDE_MANAGER_MODEL` (falls back to `CLAUDE_MODEL`),
+  so bosses can use a stronger model than workers.
+- Every completed run also lands in the dashboard run logs and posts a signal
+  to the cross-agent bus.
+
+### API sketch
+
+```
+GET  /api/org/directory                      → org chart
+GET  /api/org/work-orders?queue=owner        → Chris's approve queue
+POST /api/org/work-orders                    → { assigneeId, title, brief, run: true }
+POST /api/org/work-orders/:id                → { action: "ship" | "send_back" | "reject" | "run", notes? }
+GET  /api/org/escalations                    → open questions across all departments
+POST /api/org/escalations                    → { departmentId, escalationId, answer } → becomes policy
+```
+
+Auth: everything sits behind the Tilt OS middleware like the rest of HQ.
+
+## The org chart (Phase 1)
+
+- **Finance & Accounting** — Sterling Vance (CFO, boss) ← Penny Quill.
+  Existing bespoke loop untouched; shares its ledger with the Org OS.
+- **Marketing** — Harper Slate (Marketing Director, boss) ← Cutter Reel
+  (video), Indy Post (posts & images), Sage Rank (SEO + AI search), Piper
+  Queue (publisher), Remy Vector (creative director), Sloane Signal (social
+  intel). *Positions are in the org chart now; Harper/Cutter/Indy/Sage/Piper
+  are `staffed: false` until Phase 2 gives them real prompts wired to the
+  Social Studio.*
+- **Operations** — Stockton Ledger (reports to leadership).
+- **Product & R&D** — Maya Blueprint (boss) ← Dr. Rex Polymer.
+- **Business Intelligence** — Dana Metrics, Vince Recon (report to leadership).
+
+## Phase plan
+
+1. **Foundation** ✅ — org model, department engine, per-department ledgers,
+   work orders, API.
+2. **Marketing v1** ✅ — Harper + the hires staffed with real prompt profiles
+   grounded in the Social Studio (plan, gaps, asset library, brand KB) and
+   GA4 (`org/marketing-context.ts`); Harper dispatches the week as work orders
+   (`pipelines/marketing.ts`, `/api/marketing/run`, `MARKETING_CRON`); the
+   `/review` console gives Chris the approve trigger, send-back, and escalation
+   answers; `/org` renders the chart.
+3. **Publisher** ✅ (infrastructure) — Instagram/Facebook via Meta Graph and
+   TikTok via the Content Posting API (`src/lib/publish/*`), posting
+   human-approved Studio content and flipping it to `published`; `/publish`
+   console + `/api/org/publish`. **Live posting is gated on Chris adding the
+   platform tokens** (see `.env.example` and `docs/HANDOFF.md`).
+4. **Integration & upgrades** ✅ — the work order ↔ Studio seam
+   (`org/ship-executors.ts`: creators emit a ```post package; Chris's ship
+   inserts approved Studio `posts` rows that flow render → publish queue);
+   Google Search Console for Sage (`src/lib/gsc.ts`, reuses the GA4 service
+   account; env `GSC_SITE_URL`); model upgrade — workers on Claude Sonnet 5,
+   boss reviews on Claude Opus 4.8, with `samplingParams()` in `models.ts`
+   stripping `temperature` on models that reject it; "Run marketing week"
+   button on `/review` (on-demand dispatch per Chris — cron stays opt-in).
+5. **Automation** ✅ — auto-render on ship (shipped content is asset-matched
+   via the planner's ranking and static images render immediately, so pieces
+   arrive in /publish with media; reels render on the Studio's Shotstack
+   pass); every-N-days dispatch cadence (`org/dispatch-cadence.ts`, KV-backed;
+   `MARKETING_CRON=true` + `MARKETING_CRON_EVERY_DAYS`, manual runs reset the
+   clock); TikTok OAuth (`/api/publish/tiktok/auth` + `/callback`, tokens in
+   KV with auto-refresh, one-click Connect on /publish).
+6. **Full org build-out** ✅ — the whole company is on the pipeline, not just
+   marketing: engine-native prompt profiles for Stockton (Operations), Maya
+   (Product boss — she reviews Rex — plus her own worker voice), Rex, Dana,
+   and Vince; per-department live-data grounding in `department-context.ts`
+   (Operations reads the Zoho Sheet/Inventory/sync snapshots, Product reads
+   the latest R&D/product/competitor findings, Intelligence reads GA4 +
+   signals); generic department dispatch (`org/dispatch.ts` +
+   `/api/org/departments/[id]/dispatch` — any staffed boss plans and hands
+   out work like Harper; marketing's pipeline is now a thin wrapper);
+   `/org` gains per-department **Dispatch team** buttons, an **Assign work**
+   form (Chris gives any employee a work order directly), and the
+   **graduation toggle** (`org/settings.ts`: autoShip per department — a
+   graduated department's boss-approved work ships immediately, escalations
+   still always reach Chris; off by default everywhere).
+7. **One coherent hierarchy** ✅ — the whole HQ reads like the org chart:
+   the home page's team grid is now a department tree (boss on top,
+   reporting lines to the team, the department's tools attached underneath);
+   the top bar is restructured around it (Org Chart · **Departments ▾** — a
+   directory-driven menu of every business area with its tools inside · the
+   owner's desk: Review / Publish / Strategy · Run History · Knowledge);
+   every tool lives on its department in `directory.ts` (single source of
+   truth for home, /org, and the menu); the five marketing hires got persona
+   cards + desk pages; persona department labels normalized to the org's
+   five names; /org sections are anchor-linkable (`/org#marketing`).
+8. **Next** — best-time scheduling + the `scheduled` post status; migrating
+   Finance onto the engine last (it works today; needs engine tool use).
+
+## Remaining seams (documented, not yet built)
+
+- **Reels don't render inline on ship** (Shotstack submit/poll is too slow
+  for the ship request) — they render on the Studio's next reel pass.
+- **Unmatched content needs founder footage.** When the asset library lacks
+  what a piece needs, the ship note says so; match or upload in the Studio.
+- **Platform credentials** gate live posting — see `docs/PUBLISHER_SETUP.md`.
+
+## Migration notes
+
+- The legacy generic runner (`agent-registry.ts` → `orchestrator.ts` →
+  `manager.ts` summarizer) still powers the dashboard "Run All" button and is
+  untouched, but new work should go through work orders. It gets retired as
+  departments migrate.
+- Finance migrates onto the engine last — it works today and its bespoke
+  context building (Zoho snapshots, MCP) becomes an employee prompt profile +
+  tool hookups once the engine grows tool use.

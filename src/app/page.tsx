@@ -1,12 +1,56 @@
 import Link from "next/link";
 import Image from "next/image";
-import { getAllPersonas, getLeadership } from "@/lib/personas";
+import { getLeadership, getPersonaByAgentId } from "@/lib/personas";
+import { getDepartments, getEmployeesByDepartment } from "@/lib/org/directory";
+import type { Employee } from "@/lib/org/types";
 import HqMetrics from "@/components/hq-metrics";
-import TeamGrid from "@/components/team-grid";
+import CompanyTree, {
+  type DepartmentView,
+  type MemberView,
+} from "@/components/team-grid";
 import TiltCard from "@/components/tilt-card";
 import Hero from "@/components/hero";
 import ScrollReveal from "@/components/scroll-reveal";
 import { Stagger, StaggerItem } from "@/components/motion-primitives";
+
+// Build the org-chart view: directory (structure) + personas (faces/bios).
+function toMemberView(e: Employee, isBoss: boolean): MemberView {
+  const persona = e.personaId ? getPersonaByAgentId(e.personaId) : undefined;
+  return {
+    id: e.id,
+    name: e.name,
+    title: e.title,
+    initials:
+      persona?.avatarInitials ??
+      e.name
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .slice(0, 2),
+    color: persona?.avatarColor ?? "bg-gray-700",
+    accent: persona?.avatarAccent ?? "ring-gray-500",
+    bio: persona?.bio ?? e.charter,
+    href: e.personaId ? `/dashboard/${e.personaId}` : "/org",
+    isBoss,
+  };
+}
+
+function buildDepartmentViews(): DepartmentView[] {
+  return getDepartments().map((d) => {
+    const members = getEmployeesByDepartment(d.id).filter((e) => e.enabled);
+    const boss = members.find((e) => e.id === d.managerId) ?? null;
+    return {
+      id: d.id,
+      name: d.name,
+      mission: d.mission,
+      boss: boss ? toMemberView(boss, true) : null,
+      members: members
+        .filter((e) => e.id !== d.managerId)
+        .map((e) => toMemberView(e, false)),
+      tools: d.tools ?? [],
+    };
+  });
+}
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -20,7 +64,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export default function Home() {
-  const team = getAllPersonas();
+  const departments = buildDepartmentViews();
   const founders = getLeadership();
 
   return (
@@ -86,11 +130,11 @@ export default function Home() {
         </div>
       </ScrollReveal>
 
-      {/* Team Grid */}
+      {/* The Company — departments, reporting lines, and tools */}
       <ScrollReveal>
         <div id="team" className="scroll-mt-24">
-          <SectionLabel>The Team</SectionLabel>
-          <TeamGrid team={team} />
+          <SectionLabel>The Company</SectionLabel>
+          <CompanyTree departments={departments} />
         </div>
       </ScrollReveal>
 
