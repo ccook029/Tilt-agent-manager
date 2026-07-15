@@ -10,3 +10,12 @@ next-env.d.ts
 # Python cache (e.g. from .claude skill scripts)
 __pycache__/
 *.pyc
+
+# promo-video build artifacts (staged assets, footage, rendered output)
+promo-video/assets/
+promo-video/build/
+promo-video/frames/
+promo-video/shoot/
+promo-video/*.mp4
+promo-video/*.wav
+promo-video/*.jpg

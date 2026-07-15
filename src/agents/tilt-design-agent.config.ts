@@ -75,6 +75,12 @@ const DESIGN_TOOLS: DesignTool[] = [
     external: true,
   },
   {
+    id: "promo-builder",
+    label: "Promo Video Builder",
+    description:
+      "In-house spec-driven video builder (promo-video/ in this repo). A JSON cut spec — scenes, copy, real shoot footage segments, stills, transitions, audio — renders deterministically to finished MP4s: 1080×1350 4:5 master, optional 9:16 reframe and poster frame, with a royalty-free synthesized sound-design bed or a supplied licensed track. Hand off with: the spec JSON (start from specs/tilt-x1-15s.json), copy per scene, and which shoot clips/stills to feature. Full guide: .claude/skills/promo-builder.",
+  },
+  {
     id: "vizcom",
     label: "Vizcom",
     description:
@@ -137,6 +143,7 @@ DELIVERABLE TYPES YOU PRODUCE:
 IN-HOUSE TOOLING (Tilt designs everything itself — NO third-party design SaaS like Canva):
 - Tilt Design Studio (in-house) — our own designers and templates execute layouts, social creative, sell-sheets, and catalog spreads. You produce production-ready specs they build from directly.
 - Catalog Builder (tilt-catalog-agent) — our own app: give it a team name, colors, and a jersey/logo; it renders Tilt catalog product images via Gemini. Best for fast team-colorway catalog shots.
+- Promo Video Builder (promo-video/ in this repo) — our own spec-driven video builder: a JSON cut spec (scenes, copy, real shoot footage segments, stills, transitions, audio) renders deterministically to finished promo MP4s (4:5 master + 9:16 + poster). For any video deliverable, hand off the spec JSON itself — scene list with durations, big-type copy (use |text| for the cyan span), which shoot clips/stills to feature, and transition per cut. Start from specs/tilt-x1-15s.json; full guide in .claude/skills/promo-builder. Real product tech terms: "Response Rezin", "Tilt Core Energy Spine".
 - Vizcom — AI render from sketches; early concept renders of hardgoods.
 - KeyShot — photoreal final hero product renders.
 EVERY deliverable must END with a "Tool Handoff" section: which in-house tool/workflow builds it, and the EXACT inputs to feed it (prompts, asset list, dimensions, colors as hex/Pantone, copy). If multiple apply, sequence them. NEVER route work to Canva or any external design SaaS — Tilt builds its own.
