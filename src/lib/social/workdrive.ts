@@ -76,11 +76,15 @@ async function getAccessToken(): Promise<string> {
 
   // Credentials go in the form body, not the query string — secrets in URLs
   // get captured by proxy/access logs.
-  const res = await fetch(`${accountsDomain}/oauth/v2/token`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: params.toString(),
-  });
+  const res = await fetchWithTimeout(
+    `${accountsDomain}/oauth/v2/token`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    },
+    15_000,
+  );
   if (!res.ok) {
     throw new Error(
       `Zoho token exchange failed: ${res.status} ${await res.text()}`,
@@ -112,14 +116,42 @@ const API_BASE =
 const DOWNLOAD_BASE =
   process.env.ZOHO_WORKDRIVE_DOWNLOAD_BASE ?? `${API_BASE}/download`;
 
+/**
+ * fetch with a hard deadline. Zoho endpoints (especially the data-center
+ * download host) can accept a connection and then never respond; without a
+ * timeout that hangs the whole serverless function until it's killed, which
+ * surfaces as an unparseable platform error. This makes every WorkDrive call
+ * fail fast with a clear message instead.
+ */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  ms: number,
+): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(ms) });
+  } catch (e) {
+    if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
+      throw new Error(
+        `WorkDrive request timed out after ${Math.round(ms / 1000)}s (${url.split("?")[0]}). If this is the download host, set ZOHO_WORKDRIVE_DOWNLOAD_BASE for your data center.`,
+      );
+    }
+    throw e;
+  }
+}
+
 async function workdriveFetch(path: string): Promise<Response> {
   const doFetch = async () =>
-    fetch(`${API_BASE}${path}`, {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${await getAccessToken()}`,
-        Accept: "application/vnd.api+json",
+    fetchWithTimeout(
+      `${API_BASE}${path}`,
+      {
+        headers: {
+          Authorization: `Zoho-oauthtoken ${await getAccessToken()}`,
+          Accept: "application/vnd.api+json",
+        },
       },
-    });
+      20_000,
+    );
   let res = await doFetch();
   if (res.status === 401) {
     // Token revoked/invalidated before its cached expiry — refresh once & retry.
@@ -292,9 +324,11 @@ export async function probeWorkdrive(): Promise<WorkdriveProbe> {
   }
 
   try {
-    const res = await fetch(`${DOWNLOAD_BASE}/${firstFileId}`, {
-      headers: { Authorization: `Zoho-oauthtoken ${await getAccessToken()}` },
-    });
+    const res = await fetchWithTimeout(
+      `${DOWNLOAD_BASE}/${firstFileId}`,
+      { headers: { Authorization: `Zoho-oauthtoken ${await getAccessToken()}` } },
+      15_000,
+    );
     const ct = res.headers.get("content-type") ?? "";
     if (res.ok && !ct.includes("json") && !ct.includes("html")) {
       result.download = { ok: true, detail: `Download endpoint returns bytes (content-type: ${ct || "unknown"}).` };
@@ -323,9 +357,11 @@ export async function downloadFile(fileId: string): Promise<{
   contentType: string;
 }> {
   const doDownload = async () =>
-    fetch(`${DOWNLOAD_BASE}/${fileId}`, {
-      headers: { Authorization: `Zoho-oauthtoken ${await getAccessToken()}` },
-    });
+    fetchWithTimeout(
+      `${DOWNLOAD_BASE}/${fileId}`,
+      { headers: { Authorization: `Zoho-oauthtoken ${await getAccessToken()}` } },
+      120_000,
+    );
   let res = await doDownload();
   if (res.status === 401) {
     tokenCache = null;
