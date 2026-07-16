@@ -22,13 +22,15 @@ export interface DispatchProgress {
   planned: number; // total pieces the boss created
   completed: number; // orders that have finished running
   approved: number;
+  shipped: number;
   escalated: number;
   errored: number;
 }
 
 export interface DispatchOutcome {
   planned: number;
-  approved: number;
+  approved: number; // boss-approved, waiting in the owner's review queue
+  shipped: number; // auto-shipped (a graduated department ships without you)
   escalated: number;
   errored: number;
   error?: string;
@@ -65,6 +67,7 @@ export async function dispatchInBackground(
     return {
       planned: 0,
       approved: 0,
+      shipped: 0,
       escalated: 0,
       errored: 0,
       error: plan.error ?? "Dispatch planning failed.",
@@ -75,6 +78,7 @@ export async function dispatchInBackground(
   const outcome: DispatchOutcome = {
     planned: ids.length,
     approved: 0,
+    shipped: 0,
     escalated: 0,
     errored: 0,
   };
@@ -83,6 +87,7 @@ export async function dispatchInBackground(
     planned: ids.length,
     completed: 0,
     approved: 0,
+    shipped: 0,
     escalated: 0,
     errored: 0,
   });
@@ -99,9 +104,10 @@ export async function dispatchInBackground(
         order?: { status?: string };
       };
       const status = d.order?.status;
-      if (status === "approved" || status === "shipped") outcome.approved += 1;
+      if (status === "approved") outcome.approved += 1;
+      else if (status === "shipped") outcome.shipped += 1;
       else if (status === "escalated") outcome.escalated += 1;
-      else if (!res.ok || status === "error") outcome.errored += 1;
+      else outcome.errored += 1; // error, or any non-terminal status = didn't land
     } catch {
       outcome.errored += 1;
     }
@@ -110,6 +116,7 @@ export async function dispatchInBackground(
       planned: ids.length,
       completed: i + 1,
       approved: outcome.approved,
+      shipped: outcome.shipped,
       escalated: outcome.escalated,
       errored: outcome.errored,
     });

@@ -37,6 +37,7 @@ interface WorkOrder {
   createdAt: string;
   rounds: WorkRound[];
   reviews: ManagerReview[];
+  error?: string;
 }
 interface Escalation {
   id: string;
@@ -59,6 +60,7 @@ interface Department {
 
 export default function ReviewPage() {
   const [orders, setOrders] = useState<WorkOrder[]>([]);
+  const [erroredOrders, setErroredOrders] = useState<WorkOrder[]>([]);
   const [escalations, setEscalations] = useState<Escalation[]>([]);
   const [employees, setEmployees] = useState<Record<string, Employee>>({});
   const [departments, setDepartments] = useState<Record<string, Department>>({});
@@ -66,12 +68,14 @@ export default function ReviewPage() {
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [q, esc, dir] = await Promise.all([
+    const [q, err, esc, dir] = await Promise.all([
       fetch("/api/org/work-orders?queue=owner").then((r) => r.json()).catch(() => ({})),
+      fetch("/api/org/work-orders?status=error&limit=20").then((r) => r.json()).catch(() => ({})),
       fetch("/api/org/escalations").then((r) => r.json()).catch(() => ({})),
       fetch("/api/org/directory").then((r) => r.json()).catch(() => ({})),
     ]);
     setOrders(q.orders ?? []);
+    setErroredOrders(err.orders ?? []);
     setEscalations(esc.escalations ?? []);
     const emp: Record<string, Employee> = {};
     for (const e of dir.employees ?? []) emp[e.id] = e;
@@ -88,7 +92,7 @@ export default function ReviewPage() {
 
   const act = async (
     id: string,
-    action: "ship" | "send_back" | "reject",
+    action: "ship" | "send_back" | "reject" | "run",
     notes?: string
   ) => {
     setBusy(id);
@@ -178,6 +182,30 @@ export default function ReviewPage() {
             )}
           </section>
 
+          {erroredOrders.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-red-400">
+                Ran into a problem — {erroredOrders.length}
+              </h2>
+              <p className="text-xs text-gray-600">
+                These pieces hit an error mid-run (usually the AI service was
+                briefly busy). Retry runs the piece again from the top; it does
+                not re-plan.
+              </p>
+              {erroredOrders.map((o) => (
+                <ErroredOrderCard
+                  key={o.id}
+                  order={o}
+                  employees={employees}
+                  departments={departments}
+                  busy={busy === o.id}
+                  onRetry={() => act(o.id, "run")}
+                  onReject={() => act(o.id, "reject")}
+                />
+              ))}
+            </section>
+          )}
+
           <section className="space-y-3">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-amber-400">
               Needs your decision — {escalations.length}
@@ -253,11 +281,13 @@ function DispatchWeekButton({ onDone }: { onDone: () => Promise<void> }) {
       } else if (outcome.planned === 0) {
         setNote("Harper didn't find anything worth dispatching this round.");
       } else {
-        setNote(
-          `Done — ${outcome.approved} ready for you${
-            outcome.escalated ? `, ${outcome.escalated} escalated` : ""
-          }${outcome.errored ? `, ${outcome.errored} errored` : ""}.`
-        );
+        const parts = [
+          `${outcome.approved} ready for you`,
+          outcome.shipped ? `${outcome.shipped} auto-shipped` : "",
+          outcome.escalated ? `${outcome.escalated} escalated` : "",
+          outcome.errored ? `${outcome.errored} errored — retry below` : "",
+        ].filter(Boolean);
+        setNote(`Done — ${parts.join(", ")}.`);
       }
       await onDone();
     } catch {
@@ -384,6 +414,62 @@ function WorkOrderCard({
             Reject
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ErroredOrderCard({
+  order,
+  employees,
+  departments,
+  busy,
+  onRetry,
+  onReject,
+}: {
+  order: WorkOrder;
+  employees: Record<string, Employee>;
+  departments: Record<string, Department>;
+  busy: boolean;
+  onRetry: () => void;
+  onReject: () => void;
+}) {
+  const who = employees[order.assigneeId];
+  const dept = departments[order.departmentId];
+  return (
+    <div className="space-y-3 rounded-xl border border-red-900/40 bg-red-950/10 p-4">
+      <div>
+        <p className="text-sm font-medium text-gray-100">{order.title}</p>
+        <p className="mt-0.5 text-xs text-gray-500">
+          {dept?.name ?? order.departmentId} · {who?.name ?? order.assigneeId} ·{" "}
+          {order.deliverableType}
+        </p>
+      </div>
+      {order.error && (
+        <div className="rounded-lg border border-red-900/40 bg-black/40 p-3">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-red-400">
+            Error
+          </p>
+          <p className="whitespace-pre-wrap break-words font-mono text-[11px] text-red-200/80">
+            {order.error}
+          </p>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={onRetry}
+          disabled={busy}
+          className="rounded-md bg-[#0094b8] px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#00a8d1] disabled:opacity-40"
+        >
+          {busy ? "Retrying…" : "Retry"}
+        </button>
+        <button
+          onClick={onReject}
+          disabled={busy}
+          className="rounded-md border border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-400 transition-colors hover:border-red-700 hover:text-red-300 disabled:opacity-40"
+        >
+          Reject
+        </button>
       </div>
     </div>
   );

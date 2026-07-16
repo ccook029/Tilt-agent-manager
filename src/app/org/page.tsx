@@ -228,11 +228,13 @@ function DeptControls({
       } else if (outcome.planned === 0) {
         setNote(`${bossName} had nothing to dispatch this round.`);
       } else {
-        setNote(
-          `Done — ${outcome.approved} in your review queue${
-            outcome.escalated ? `, ${outcome.escalated} escalated` : ""
-          }${outcome.errored ? `, ${outcome.errored} errored` : ""}.`
-        );
+        const parts = [
+          `${outcome.approved} in your review queue`,
+          outcome.shipped ? `${outcome.shipped} auto-shipped` : "",
+          outcome.escalated ? `${outcome.escalated} escalated` : "",
+          outcome.errored ? `${outcome.errored} errored` : "",
+        ].filter(Boolean);
+        setNote(`Done — ${parts.join(", ")}.`);
       }
       await onChanged();
     } finally {
