@@ -20,6 +20,8 @@ import { fetchSyncReport } from "../zoho-sync";
 import { fetchGA4Data, getWeekRange } from "../ga4";
 import { getRunLogsByAgent } from "../store";
 import { getRecentSignals } from "../signals";
+import { renderTeamOrdersSnapshot } from "../sales/team-orders";
+import { renderRetailersSnapshot } from "../sales/retailers";
 
 /** Roles that plan around performance data get the (pricier) GA4 block. */
 const ANALYTICS_ROLES = new Set(["marketing-director", "seo-specialist"]);
@@ -106,6 +108,28 @@ async function renderIntelligenceContext(): Promise<string> {
   ].join("\n");
 }
 
+async function renderSalesContext(): Promise<string> {
+  const [team, retail] = await Promise.all([
+    renderTeamOrdersSnapshot().catch(
+      (e) => `(team orders unavailable this run: ${e})`
+    ),
+    renderRetailersSnapshot().catch(
+      (e) => `(retailers unavailable this run: ${e})`
+    ),
+  ]);
+  return [
+    "",
+    "",
+    "=== OPEN TEAM-STORE ORDERS (consolidate and route each line to a vendor) ===",
+    team,
+    "=== END TEAM ORDERS ===",
+    "",
+    "=== RETAILER / CONSIGNMENT ACCOUNTS ===",
+    retail,
+    "=== END RETAILERS ===",
+  ].join("\n");
+}
+
 export async function renderDepartmentContext(
   employee: Employee
 ): Promise<string> {
@@ -121,6 +145,8 @@ export async function renderDepartmentContext(
         return await renderProductContext();
       case "intelligence":
         return await renderIntelligenceContext();
+      case "sales":
+        return await renderSalesContext();
       default:
         return "";
     }
