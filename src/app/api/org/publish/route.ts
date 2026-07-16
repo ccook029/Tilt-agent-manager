@@ -17,7 +17,7 @@ import {
 } from "@/lib/publish";
 import { normalizePlatform } from "@/lib/publish/types";
 import {
-  listPublishablePosts,
+  listApprovedPosts,
   publishApprovedPosts,
   publishPost,
 } from "@/lib/pipelines/publish";
@@ -27,13 +27,16 @@ export const maxDuration = 300;
 
 export async function GET() {
   const [queue, log, connections] = await Promise.all([
-    hasDatabase() ? listPublishablePosts().catch(() => []) : Promise.resolve([]),
+    hasDatabase() ? listApprovedPosts().catch(() => []) : Promise.resolve([]),
     getPublishLog(30).catch(() => []),
     getConnectionStatus(),
   ]);
   return NextResponse.json({
     connections,
     databaseConfigured: hasDatabase(),
+    // The queue includes posts still rendering / awaiting footage (ready:false)
+    // so shipped content is visible immediately. Only ready:true posts can be
+    // published; the publish actions re-check media server-side regardless.
     queue: queue.map((p) => ({
       id: p.id,
       platform: p.platform,
@@ -41,6 +44,7 @@ export async function GET() {
       renderUrl: p.renderUrl,
       renderKind: p.renderKind,
       scheduledDate: p.scheduledDate,
+      ready: Boolean(p.renderUrl),
     })),
     log,
   });

@@ -23,6 +23,7 @@ interface QueueItem {
   renderUrl?: string | null;
   renderKind?: string | null;
   scheduledDate?: string | null;
+  ready?: boolean;
 }
 interface LogEntry {
   at: string;
@@ -148,8 +149,13 @@ export default function PublishPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
                 Approved queue — {queue.length}
+                {queue.length > 0 && (
+                  <span className="ml-1 text-gray-500">
+                    ({queue.filter((q) => q.ready).length} ready to post)
+                  </span>
+                )}
               </h2>
-              {queue.length > 0 && anyConnected && (
+              {queue.some((q) => q.ready) && anyConnected && (
                 <button
                   onClick={() => publish({ action: "publish-all" }, "all")}
                   disabled={busy === "all"}
@@ -161,42 +167,64 @@ export default function PublishPage() {
             </div>
             {queue.length === 0 ? (
               <div className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-6 text-sm text-gray-400">
-                Nothing approved and waiting. Approved Studio posts with rendered
-                media show up here.
+                Nothing approved and waiting. When you approve &amp; ship a piece
+                in Review, it lands here — ready to post, or with its render
+                status while the visual is being made.
               </div>
             ) : (
-              queue.map((q) => (
-                <div
-                  key={q.id}
-                  className="flex items-center gap-3 rounded-xl border border-gray-800/60 bg-[#0d0d0d] p-3"
-                >
-                  {q.renderUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={q.renderUrl}
-                      alt=""
-                      className="h-12 w-12 shrink-0 rounded-md object-cover"
-                    />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] uppercase tracking-wide text-gray-500">
-                      {PLATFORM_LABEL[q.platform] ?? q.platform}
-                      {q.renderKind === "shotstack" ? " · video" : " · image"}
-                    </p>
-                    <p className="truncate text-xs text-gray-300">{q.copy}</p>
-                  </div>
-                  <button
-                    onClick={() =>
-                      publish({ action: "publish-post", postId: q.id }, q.id)
-                    }
-                    disabled={busy === q.id || !anyConnected}
-                    title={!anyConnected ? "Connect a platform first" : ""}
-                    className="shrink-0 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-40"
+              queue.map((q) => {
+                const isVideo = q.renderKind === "shotstack";
+                const pending = !q.ready;
+                return (
+                  <div
+                    key={q.id}
+                    className="flex items-center gap-3 rounded-xl border border-gray-800/60 bg-[#0d0d0d] p-3"
                   >
-                    {busy === q.id ? "…" : "Publish"}
-                  </button>
-                </div>
-              ))
+                    {q.renderUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={q.renderUrl}
+                        alt=""
+                        className="h-12 w-12 shrink-0 rounded-md object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-gray-800 bg-black/40 text-lg">
+                        {isVideo ? "🎬" : "🖼️"}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] uppercase tracking-wide text-gray-500">
+                        {PLATFORM_LABEL[q.platform] ?? q.platform}
+                        {isVideo ? " · video" : " · image"}
+                      </p>
+                      <p className="truncate text-xs text-gray-300">{q.copy}</p>
+                      {pending && (
+                        <p className="mt-0.5 text-[11px] text-amber-400/80">
+                          {isVideo
+                            ? "Rendering — video is being assembled on the Studio's next reel pass."
+                            : "Needs media — match or upload an asset in the Studio."}
+                        </p>
+                      )}
+                    </div>
+                    {pending ? (
+                      <span className="shrink-0 rounded-md border border-amber-800/50 px-3 py-1.5 text-[11px] font-medium text-amber-400/80">
+                        Not ready
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() =>
+                          publish({ action: "publish-post", postId: q.id }, q.id)
+                        }
+                        disabled={busy === q.id || !anyConnected}
+                        title={!anyConnected ? "Connect a platform first" : ""}
+                        className="shrink-0 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-40"
+                      >
+                        {busy === q.id ? "…" : "Publish"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })
             )}
           </section>
 

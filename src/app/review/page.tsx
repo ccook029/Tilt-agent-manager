@@ -311,6 +311,46 @@ function DispatchWeekButton({ onDone }: { onDone: () => Promise<void> }) {
   );
 }
 
+/**
+ * A plain-English, always-visible summary of what a deliverable actually is, so
+ * the approve decision is informed by the content — not just the title. Prefers
+ * the postable caption(s) from the `post` package when present; otherwise a
+ * cleaned excerpt of the draft.
+ */
+function contentPreview(order: WorkOrder): string {
+  const draft = order.rounds[order.rounds.length - 1]?.draft ?? "";
+  if (!draft.trim()) return "";
+
+  const postBlock = draft.match(/```post\s*([\s\S]*?)```/i);
+  if (postBlock) {
+    try {
+      const parsed = JSON.parse(postBlock[1].trim());
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+      const first = items[0] as Record<string, unknown> | undefined;
+      const copy = first?.copy ? String(first.copy) : "";
+      if (copy) {
+        const platforms = items
+          .map((i) => (i as Record<string, unknown>).platform)
+          .filter(Boolean)
+          .join(", ");
+        const fmt = first?.format ? ` ${String(first.format)}` : "";
+        const tag = platforms ? `${platforms}${fmt} — ` : "";
+        return `${tag}${copy}`.slice(0, 240);
+      }
+    } catch {
+      /* fall through to excerpt */
+    }
+  }
+
+  return draft
+    .replace(/```[\s\S]*?```/g, " ") // drop fenced blocks
+    .replace(/^#+\s*/gm, "") // header markers
+    .replace(/[*_`>~]+/g, "") // inline markdown
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
+}
+
 function WorkOrderCard({
   order,
   employees,
@@ -334,11 +374,12 @@ function WorkOrderCard({
   const review = order.reviews[order.reviews.length - 1]?.notes;
   const who = employees[order.assigneeId];
   const dept = departments[order.departmentId];
+  const preview = contentPreview(order);
 
   return (
     <div className="space-y-3 rounded-xl border border-emerald-900/40 bg-emerald-950/10 p-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-medium text-gray-100">{order.title}</p>
           <p className="mt-0.5 text-xs text-gray-500">
             {dept?.name ?? order.departmentId} · {who?.name ?? order.assigneeId} ·{" "}
@@ -349,9 +390,17 @@ function WorkOrderCard({
           onClick={() => setExpanded((v) => !v)}
           className="shrink-0 text-xs text-gray-500 hover:text-gray-300"
         >
-          {expanded ? "hide" : "view"}
+          {expanded ? "hide" : "view full"}
         </button>
       </div>
+
+      {preview && (
+        <p className="text-xs leading-relaxed text-gray-300">
+          <span className="font-semibold text-gray-500">What it is: </span>
+          {preview}
+          {preview.length >= 240 ? "…" : ""}
+        </p>
+      )}
 
       {expanded && (
         <div className="space-y-3 rounded-lg border border-gray-800/60 bg-black/30 p-3">
