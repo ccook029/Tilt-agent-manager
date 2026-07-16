@@ -42,6 +42,8 @@ const DISPATCH_INSTRUCTIONS: Record<string, string> = {
     "Balance near-term product work (specs, RFQs, catalog) against research that feeds next season. Every dispatched piece should move a real Tilt product forward — name which one in the brief.",
   intelligence:
     "Aim each piece at a decision another department is about to make — marketing's next push, a pricing call, a product bet. Every brief should end in a concrete Tilt move, not just an observation. Separate confirmed facts from inference and name the source.",
+  sales:
+    "Prioritize open team orders that are ready to send to vendors (dispatch one 'consolidate & route the {team} order' piece each), and any consignment accounts with un-invoiced orders (an audit piece). Don't dispatch an order to vendors if it's missing sizes or specs — flag the gap instead.",
 };
 
 function parsePlan(text: string, valid: Set<string>): PlannedPiece[] {

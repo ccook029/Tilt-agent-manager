@@ -18,6 +18,7 @@
 // who review a report also carry a managerSystemPrompt there.
 // ---------------------------------------------------------------------------
 import type { Department, Employee } from "./types";
+import { staffToolUrl } from "../staff-tools";
 
 const departments: Department[] = [
   {
@@ -124,6 +125,27 @@ const departments: Department[] = [
         label: "Catalog Builder",
         href: "/studio/catalog",
         description: "Team-colorway catalog images on demand",
+      },
+    ],
+  },
+  {
+    id: "sales",
+    name: "Sales & Fulfillment",
+    mission:
+      "Turn team and retailer sales into fulfilled orders: consolidate each team's gear from the team store, route every line to the right factory as a vendor-ready purchase email, and keep retailer accounts current — especially making sure consignment accounts get invoiced. Every order and email clears the Team & Apparel Manager's review before it reaches the founders.",
+    managerId: "team-apparel-manager",
+    tools: [
+      {
+        label: "Team Store",
+        href: staffToolUrl("/admin/teams"),
+        description: "tiltweb team orders, colorways, and rosters",
+        external: true,
+      },
+      {
+        label: "Retailer Portal",
+        href: staffToolUrl("/admin/retailers"),
+        description: "Wholesale + consignment accounts and orders",
+        external: true,
       },
     ],
   },
@@ -346,6 +368,55 @@ const employees: Employee[] = [
     skills: ["competitor-report", "pricing-watch", "patent-watch"],
     charter:
       "Weekly sweep of competitor launches, pricing moves, sponsorships, and patents.",
+    staffed: true,
+    enabled: true,
+  },
+
+  // ---- Sales & Fulfillment (team orders → vendor POs; retailer/consignment) --
+  {
+    id: "team-apparel-manager",
+    name: "Marlo Crest",
+    title: "Team & Apparel Manager",
+    departmentId: "sales",
+    role: "manager",
+    reportsTo: null,
+    personaId: "team-apparel-manager",
+    skills: ["review", "order-approval", "vendor-relations"],
+    charter:
+      "Owns team and retailer fulfillment. Reviews every consolidated order and every drafted vendor email before it reaches the founders — checking the order is complete and correctly routed, the specs are unambiguous, and the email is in Tilt's voice. Escalates only genuine judgment calls (a new vendor, a pricing question, an order that doesn't add up).",
+    staffed: true,
+    enabled: true,
+  },
+  {
+    id: "team-sales-coordinator",
+    name: "Jules Roster",
+    title: "Team Sales Coordinator",
+    departmentId: "sales",
+    role: "worker",
+    reportsTo: "team-apparel-manager",
+    personaId: "team-sales-coordinator",
+    skills: [
+      "team-order-consolidation",
+      "vendor-routing",
+      "vendor-email",
+      "order-audit",
+    ],
+    charter:
+      "Consolidates a team's order from the team store, routes every product line to the correct factory using the vendor registry, and drafts the purchase email to each vendor in Jeremy's voice — broken out by size, with specs, pantones, branding, and shipping. Flags any line whose vendor is unknown rather than guessing.",
+    staffed: true,
+    enabled: true,
+  },
+  {
+    id: "retailer-auditor",
+    name: "Reeve Tally",
+    title: "Retailer Account Auditor",
+    departmentId: "sales",
+    role: "worker",
+    reportsTo: "team-apparel-manager",
+    personaId: "retailer-auditor",
+    skills: ["retailer-audit", "consignment-invoice-check", "account-reconciliation"],
+    charter:
+      "Tracks retailer orders through the portal and audits accounts. Makes sure consignment accounts get invoiced — flags every consignment order with no invoice raised, and hands it to Finance to bill. Reconciles what shipped against what was invoiced.",
     staffed: true,
     enabled: true,
   },

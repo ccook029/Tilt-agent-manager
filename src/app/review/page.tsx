@@ -321,6 +321,26 @@ function contentPreview(order: WorkOrder): string {
   const draft = order.rounds[order.rounds.length - 1]?.draft ?? "";
   if (!draft.trim()) return "";
 
+  // Vendor-email drafts (Team Sales Coordinator): show the subjects.
+  const emailBlock = draft.match(/```email\s*([\s\S]*?)```/i);
+  if (emailBlock) {
+    try {
+      const parsed = JSON.parse(emailBlock[1].trim());
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+      const subjects = items
+        .map((i) => (i as Record<string, unknown>).subject)
+        .filter(Boolean)
+        .map(String);
+      if (subjects.length) {
+        return `${subjects.length} vendor email${
+          subjects.length === 1 ? "" : "s"
+        } ready: ${subjects.join(" · ")}`.slice(0, 240);
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
   const postBlock = draft.match(/```post\s*([\s\S]*?)```/i);
   if (postBlock) {
     try {
