@@ -12,6 +12,7 @@
 // any system prompt is always safe.
 // ---------------------------------------------------------------------------
 import { kv } from "@vercel/kv";
+import { renderEthos } from "./ethos";
 
 const KEY = "org-knowledge";
 const MAX_CHARS = 40_000;
@@ -39,16 +40,30 @@ export async function setOrgKnowledge(
   return doc;
 }
 
-/** Block appended to an agent's system prompt. Empty until Chris adds facts. */
+/**
+ * The shared company context appended to EVERY employee's system prompt.
+ *
+ * Two layers, always in this order:
+ *   1. THE TILT ETHOS — foundational reasoning, always present (baked in code
+ *      so it can never be forgotten or emptied).
+ *   2. COMPANY KNOWLEDGE — the specific facts Chris teaches on the /knowledge
+ *      screen, layered on top when present.
+ *
+ * This is the single choke point that makes every employee — worker and boss,
+ * new department engine and legacy pipeline — think the Tilt way.
+ */
 export async function renderOrgKnowledge(): Promise<string> {
   const doc = await getOrgKnowledge().catch(() => null);
-  if (!doc?.content?.trim()) return "";
-  return [
-    "",
-    "=== TILT COMPANY KNOWLEDGE (shared across all agents — authoritative) ===",
-    "Facts Chris has taught about how Tilt operates. Apply them without asking.",
-    "",
-    doc.content.trim(),
-    "=== END COMPANY KNOWLEDGE ===",
-  ].join("\n");
+  const knowledge = doc?.content?.trim();
+  const knowledgeBlock = knowledge
+    ? [
+        "",
+        "=== TILT COMPANY KNOWLEDGE (specific facts Chris has taught — authoritative) ===",
+        "Apply these without asking.",
+        "",
+        knowledge,
+        "=== END COMPANY KNOWLEDGE ===",
+      ].join("\n")
+    : "";
+  return renderEthos() + knowledgeBlock;
 }

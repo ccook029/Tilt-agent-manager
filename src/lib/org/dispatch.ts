@@ -18,6 +18,7 @@ import {
 } from "./directory";
 import { renderDepartmentContext } from "./department-context";
 import { renderPolicyBlock } from "./ledger";
+import { renderOrgKnowledge } from "../org-knowledge";
 import { createWorkOrder } from "./work-orders";
 import { runWorkOrder } from "./engine";
 import { recordDispatch } from "./dispatch-cadence";
@@ -116,9 +117,10 @@ export async function runDepartmentDispatch(
   const roster = [...workers.values()]
     .map((e) => `- ${e.id} — ${e.name}, ${e.title} (skills: ${e.skills.join(", ")})`)
     .join("\n");
-  const [context, policy] = await Promise.all([
+  const [context, policy, knowledge] = await Promise.all([
     renderDepartmentContext(manager).catch(() => ""),
     renderPolicyBlock(departmentId, dept.name),
+    renderOrgKnowledge().catch(() => ""),
   ]);
 
   const profile = getEmployeeProfile(manager.id);
@@ -126,6 +128,7 @@ export async function runDepartmentDispatch(
     profile?.systemPrompt ??
     `You are ${manager.name}, ${manager.title} at Tilt Hockey Inc., the boss of the ${dept.name} department.\n\nDEPARTMENT MISSION: ${dept.mission}`
   }
+${knowledge}
 
 ${policy}
 ${context}`;
