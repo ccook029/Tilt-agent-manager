@@ -205,12 +205,17 @@ ${extra ? `${extra}\n\n` : ""}First, a short paragraph of your direction for the
     }
   }
 
-  await postSignal({
-    source: departmentId,
-    headline: `${manager.name} dispatched ${result.dispatched} pieces — ${result.approved} awaiting Chris's approval${
-      result.escalated > 0 ? `, ${result.escalated} escalated` : ""
-    }.`,
-  }).catch(() => {});
+  if (result.dispatched > 0) {
+    // When run=false (the two-phase client flow), the boss has only planned and
+    // handed out the orders — the team runs them next, each posting its own
+    // signal on completion. Report accordingly so the feed isn't misleading.
+    const headline = run
+      ? `${manager.name} dispatched ${result.dispatched} pieces — ${result.approved} awaiting Chris's approval${
+          result.escalated > 0 ? `, ${result.escalated} escalated` : ""
+        }.`
+      : `${manager.name} planned ${result.dispatched} pieces and dispatched them to the team.`;
+    await postSignal({ source: departmentId, headline }).catch(() => {});
+  }
 
   return result;
 }
