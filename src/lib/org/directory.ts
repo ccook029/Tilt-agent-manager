@@ -6,10 +6,16 @@
 // the engine actually enforces. Leadership (Chris Cook, Jeremy Elliott)
 // remains in personas.ts — humans sit above every reportsTo: null position.
 //
-// Marketing is fully staffed (Phase 2): director + video, posts/images, SEO,
-// and publisher hires each have a prompt profile in employee-configs.ts. A
-// position with staffed: false exists in the org chart but the engine refuses
-// to run its work orders until its profile lands.
+// Every department now has a wired manager so its boss can plan-and-dispatch
+// through the engine (worker → boss review → Chris's queue):
+//   finance      Sterling → Penny
+//   marketing    Harper → video / posts / SEO / publisher / design / social-intel
+//   product      Maya → Rex
+//   intelligence Dana (BI lead) → Vince
+//   operations   Stockton (solo — no reports yet; works via direct Assign-work,
+//                so the /org Dispatch button is hidden until he has a report)
+// Each staffed position has a prompt profile in employee-configs.ts; managers
+// who review a report also carry a managerSystemPrompt there.
 // ---------------------------------------------------------------------------
 import type { Department, Employee } from "./types";
 
@@ -77,7 +83,7 @@ const departments: Department[] = [
     name: "Operations",
     mission:
       "Keep inventory, ordering, and fulfillment tight: the master Zoho Sheet in sync with Zoho Inventory, low-stock caught early, and factory purchase orders grounded in live demand.",
-    managerId: null,
+    managerId: "inventory",
     tools: [
       {
         label: "Inventory",
@@ -112,7 +118,7 @@ const departments: Department[] = [
     name: "Product & R&D",
     mission:
       "Design what Tilt builds next: product specs, RFQ packages, and materials research from polymer science to factory-ready documentation.",
-    managerId: null,
+    managerId: "product-design",
     tools: [
       {
         label: "Catalog Builder",
@@ -126,7 +132,7 @@ const departments: Department[] = [
     name: "Business Intelligence",
     mission:
       "Give every department eyes: website analytics, competitor product/pricing intel, and competitor social monitoring, delivered as briefs the other teams act on.",
-    managerId: null,
+    managerId: "website-analytics",
     tools: [
       {
         label: "Reports & Files",
@@ -335,7 +341,7 @@ const employees: Employee[] = [
     title: "Director of Competitive Intelligence",
     departmentId: "intelligence",
     role: "worker",
-    reportsTo: null,
+    reportsTo: "website-analytics",
     personaId: "competitor-intel",
     skills: ["competitor-report", "pricing-watch", "patent-watch"],
     charter:

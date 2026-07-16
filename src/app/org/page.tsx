@@ -103,6 +103,10 @@ export default function OrgPage() {
               .map((id) => employees[id])
               .filter(Boolean)
               .filter((e) => e.id !== dept.managerId);
+            // A boss can only dispatch when they actually have staffed reports.
+            // Solo departments (e.g. Operations = Stockton) fall back to
+            // Assign-work rather than a Dispatch button that would error.
+            const hasStaffedReports = members.some((e) => e.staffed && e.enabled);
             return (
               <div
                 key={dept.id}
@@ -116,7 +120,7 @@ export default function OrgPage() {
                     </h2>
                     <p className="mt-1 text-xs text-gray-500">{dept.mission}</p>
                   </div>
-                  {boss?.staffed && (
+                  {boss?.staffed && hasStaffedReports && (
                     <DeptControls
                       dept={dept}
                       bossName={boss.name}
