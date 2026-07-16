@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { dispatchInBackground } from "@/lib/client/dispatch";
 
 interface Employee {
   id: string;
@@ -208,19 +209,32 @@ function DeptControls({
 
   const dispatch = async () => {
     setBusy("dispatch");
-    setNote(null);
+    setNote(`${bossName} is planning…`);
     try {
-      const res = await fetch(`/api/org/departments/${dept.id}/dispatch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const d = await res.json().catch(() => ({}));
-      setNote(
-        res.ok
-          ? `${bossName} dispatched ${d.dispatched ?? 0} — ${d.approved ?? 0} in your review queue.`
-          : d.error ?? "Dispatch failed."
+      const outcome = await dispatchInBackground(
+        `/api/org/departments/${dept.id}/dispatch`,
+        {
+          onProgress: (p) => {
+            if (p.phase === "running" && p.completed === 0) {
+              setNote(`${bossName} dispatched ${p.planned} — the team is drafting…`);
+            } else if (p.phase === "running") {
+              setNote(`Working… ${p.completed}/${p.planned} done`);
+            }
+          },
+        }
       );
+      if (outcome.error) {
+        setNote(outcome.error);
+      } else if (outcome.planned === 0) {
+        setNote(`${bossName} had nothing to dispatch this round.`);
+      } else {
+        setNote(
+          `Done — ${outcome.approved} in your review queue${
+            outcome.escalated ? `, ${outcome.escalated} escalated` : ""
+          }${outcome.errored ? `, ${outcome.errored} errored` : ""}.`
+        );
+      }
+      await onChanged();
     } finally {
       setBusy(null);
     }

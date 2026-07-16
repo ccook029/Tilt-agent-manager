@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { dispatchInBackground } from "@/lib/client/dispatch";
 
 interface WorkRound {
   round: number;
@@ -226,27 +227,38 @@ export default function ReviewPage() {
 }
 
 /** On-demand trigger for Harper's weekly dispatch (Chris chose on-demand over
- * the Monday cron until the cadence feels normal). Takes a few minutes: Harper
- * plans, the team drafts, she reviews, and results land in the queue above. */
+ * the Monday cron until the cadence feels normal). Two-phase so it never times
+ * out: Harper plans and hands out the work, then each piece runs in its own
+ * request — the queue above fills in live as the team finishes. */
 function DispatchWeekButton({ onDone }: { onDone: () => Promise<void> }) {
   const [running, setRunning] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
   const run = async () => {
     setRunning(true);
-    setNote(null);
+    setNote("Harper is planning the week…");
     try {
-      const res = await fetch("/api/marketing/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+      const outcome = await dispatchInBackground("/api/marketing/run", {
+        onProgress: async (p) => {
+          if (p.phase === "running" && p.completed === 0) {
+            setNote(`Harper dispatched ${p.planned} pieces — the team is drafting…`);
+          } else if (p.phase === "running") {
+            setNote(`Working… ${p.completed}/${p.planned} done`);
+            await onDone(); // pieces land in the queue as they finish
+          }
+        },
       });
-      const d = await res.json().catch(() => ({}));
-      setNote(
-        res.ok
-          ? `Harper dispatched ${d.dispatched ?? 0} pieces — ${d.approved ?? 0} ready for you${d.escalated ? `, ${d.escalated} escalated` : ""}.`
-          : d.error ?? "Dispatch failed."
-      );
+      if (outcome.error) {
+        setNote(outcome.error);
+      } else if (outcome.planned === 0) {
+        setNote("Harper didn't find anything worth dispatching this round.");
+      } else {
+        setNote(
+          `Done — ${outcome.approved} ready for you${
+            outcome.escalated ? `, ${outcome.escalated} escalated` : ""
+          }${outcome.errored ? `, ${outcome.errored} errored` : ""}.`
+        );
+      }
       await onDone();
     } catch {
       setNote("Dispatch failed — try again.");
