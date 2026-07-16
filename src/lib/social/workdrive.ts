@@ -332,18 +332,22 @@ export async function probeWorkdrive(): Promise<WorkdriveProbe> {
     const ct = res.headers.get("content-type") ?? "";
     if (res.ok && !ct.includes("json") && !ct.includes("html")) {
       result.download = { ok: true, detail: `Download endpoint returns bytes (content-type: ${ct || "unknown"}).` };
-    } else {
-      result.download = {
-        ok: false,
-        detail: `Download probe returned ${res.status} (${ct || "no content-type"}). If files won't download, set ZOHO_WORKDRIVE_DOWNLOAD_BASE for your data center.`,
-      };
+      // Don't drain a real byte stream.
+      try {
+        await res.body?.cancel();
+      } catch {
+        /* ignore */
+      }
+      return result;
     }
-    // Don't drain the body.
-    try {
-      await res.body?.cancel();
-    } catch {
-      /* ignore */
-    }
+    // Not bytes — surface Zoho's actual error body so we know exactly why
+    // (invalid scope vs invalid token vs wrong URL rule) instead of guessing.
+    const body = (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 220);
+    result.download = {
+      ok: false,
+      detail: `Download probe: HTTP ${res.status} (${ct || "no content-type"}) — ${body || "no body"}. If this is a URL/host issue, set ZOHO_WORKDRIVE_DOWNLOAD_BASE for your data center.`,
+    };
+    return result;
   } catch (e) {
     result.download = { ok: false, detail: short(e) };
   }
