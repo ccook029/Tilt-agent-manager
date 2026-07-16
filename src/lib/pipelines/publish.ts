@@ -39,6 +39,19 @@ export async function listPublishablePosts(): Promise<Post[]> {
   );
 }
 
+/**
+ * ALL approved posts, for display — including ones still rendering or waiting
+ * on footage (no renderUrl yet). Shipped content shows up here immediately so
+ * it's never invisible between /review and having postable media. The actual
+ * publish actions still use listPublishablePosts (media required).
+ */
+export async function listApprovedPosts(): Promise<Post[]> {
+  const posts = await listPosts().catch(() => []);
+  return posts.filter(
+    (p) => p.status === "approved" && normalizePlatform(p.platform) !== null
+  );
+}
+
 /** Publish one approved post by id and, on success, mark it published. */
 export async function publishPost(postId: string): Promise<PublishResult> {
   if (!hasDatabase()) {
