@@ -6,6 +6,7 @@ import type { KbConfig } from "@/lib/social/kb/config";
 import type { PostSlot } from "@/lib/social/planner/schedule";
 import type { RankedAsset } from "@/lib/social/planner/assetMatch";
 import { HARD_RULES, checkContentSafety } from "@/lib/social/brand";
+import { renderEthos } from "@/lib/ethos";
 
 /**
  * The planning brain (Phase 2, text only). For one locked-window slot it writes
@@ -59,6 +60,8 @@ function buildSystemPrompt(kb: KbConfig): string {
     .map((p) => `- ${p.name} (${p.category})${p.msrp ? ` — MSRP ${p.msrp}` : ""}: ${p.notes}`)
     .join("\n");
   return [
+    renderEthos(),
+    ``,
     `You are the social content strategist + copywriter for Tilt Hockey.`,
     `Core line: "${kb.voice.coreLine}". Voice: ${kb.voice.traits.join(", ")}.`,
     `Themes: ${kb.voice.themes.join(" / ")}.`,
