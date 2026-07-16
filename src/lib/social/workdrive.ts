@@ -5,7 +5,9 @@
  * a short-lived access token, then call the WorkDrive REST API.
  * Docs: https://www.zoho.com/workdrive/help/api/
  *
- * Scope used: WorkDrive.files.READ / WorkDrive.team.READ.
+ * Scopes: WorkDrive.files.READ + WorkDrive.team.READ (list/metadata) AND
+ * ZohoFiles.files.READ (required to download file *contents* — without it the
+ * download host returns 401 INVALID_OAUTHSCOPE even though listing works).
  */
 
 export type WorkDriveFile = {

@@ -280,6 +280,8 @@
   width: auto;
   display: block;
   margin-bottom: 14px;
+  /* The wordmark PNG is dark artwork; invert to white for the dark hero. */
+  filter: invert(1) brightness(2);
 }
 
 .social-studio .dash {
