@@ -74,9 +74,14 @@ export default function ZohoSetupPage() {
         </li>
         <li>
           In the Self Client → <strong>Generate Code</strong> tab, set scope to{" "}
-          <code style={codeStyle}>WorkDrive.files.READ,WorkDrive.team.READ</code>
-          , pick a duration (10 min is fine), and create. Paste that code below
-          quickly — it expires.
+          <code style={codeStyle}>
+            WorkDrive.files.READ,WorkDrive.team.READ,ZohoFiles.files.READ
+          </code>{" "}
+          (the <code style={codeStyle}>ZohoFiles.files.READ</code> scope is
+          required to <em>download</em> file contents — without it, listing
+          works but downloads fail with INVALID_OAUTHSCOPE), pick a duration
+          (10 min is fine), and create. Paste that code below quickly — it
+          expires.
         </li>
       </ol>
 

@@ -49,7 +49,7 @@ export default async function Home() {
     <div className="container">
       <section className="hero hero--dash">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/tilt-logo.svg" alt="Tilt Hockey" className="hero__logo" />
+        <img src="/images/tilt-logo.png" alt="Tilt Hockey" className="hero__logo" />
         <p className="tagline">Social Command Center · {formatToday()}</p>
         <h1>
           Plan it. Brand it.{" "}
