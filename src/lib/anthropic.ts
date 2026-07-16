@@ -8,7 +8,12 @@ let _client: Anthropic | null = null;
 
 function getClient(): Anthropic {
   if (!_client) {
-    _client = new Anthropic(); // reads ANTHROPIC_API_KEY from env
+    // reads ANTHROPIC_API_KEY from env. maxRetries above the SDK default (2):
+    // a dispatch fires several worker+boss calls back-to-back, so a transient
+    // 429/500/529 (overload / rate limit) is likely — the SDK backs off and
+    // retries these, and a few extra attempts keeps a whole run from failing
+    // just because the API was briefly busy.
+    _client = new Anthropic({ maxRetries: 5 });
   }
   return _client;
 }
