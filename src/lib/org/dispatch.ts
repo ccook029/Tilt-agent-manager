@@ -40,6 +40,8 @@ const DISPATCH_INSTRUCTIONS: Record<string, string> = {
     "Respect the weekly cadence in the brand bar across Instagram, TikTok, and Facebook, hit a healthy mix of pillars, and lean into the priority format (short video). Prefer pieces the asset library can actually support; when a piece needs footage that isn't available, say so in its brief so it surfaces as a gap.",
   product:
     "Balance near-term product work (specs, RFQs, catalog) against research that feeds next season. Every dispatched piece should move a real Tilt product forward — name which one in the brief.",
+  intelligence:
+    "Aim each piece at a decision another department is about to make — marketing's next push, a pricing call, a product bet. Every brief should end in a concrete Tilt move, not just an observation. Separate confirmed facts from inference and name the source.",
 };
 
 function parsePlan(text: string, valid: Set<string>): PlannedPiece[] {
