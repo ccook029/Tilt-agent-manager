@@ -14,6 +14,11 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { dispatchInBackground } from "@/lib/client/dispatch";
 import { getPersonaByAgentId } from "@/lib/personas";
+import GenericAgentChat from "@/components/generic-agent-chat";
+
+// These three have richer dedicated chats on their legacy console
+// (/dashboard/[id]) — the generic org chat stays out of their way.
+const DEDICATED_CHAT = new Set(["accounting", "accounting-manager", "product-design"]);
 
 interface Employee {
   id: string;
@@ -176,8 +181,31 @@ export default function EmployeePage() {
         <p className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-4 text-sm text-gray-400">{employee.charter}</p>
       )}
 
-      {/* Assign work + (boss) dispatch */}
-      <AssignWork employeeId={id} employeeName={employee.name} onDone={load} />
+      {/* Chat is the primary way to work with an employee. Bosses come in
+          already grounded in their team's recent output and can hand out
+          agreed work via one-click assign cards. */}
+      {employee.staffed && !DEDICATED_CHAT.has(id) && (
+        <GenericAgentChat
+          agentId={id}
+          name={employee.name}
+          greeting={
+            isBoss && hasReports
+              ? `Hey — it's ${employee.name.split(" ")[0]}. Ask me about the team's work and I'll give you the high level first — then we can drill into whatever's worth it. When we land on something to do, I'll set it up so you can assign it in one click.`
+              : `Hey — it's ${employee.name.split(" ")[0]}. Ask me anything about my area, or talk through a piece of work before you assign it.`
+          }
+          placeholder={`Message ${employee.name.split(" ")[0]}…`}
+        />
+      )}
+
+      {/* Direct assign form + (boss) dispatch */}
+      <details className="group">
+        <summary className="cursor-pointer select-none text-xs font-medium text-gray-500 transition-colors hover:text-gray-300">
+          Assign work with a form instead ▾
+        </summary>
+        <div className="mt-2">
+          <AssignWork employeeId={id} employeeName={employee.name} onDone={load} />
+        </div>
+      </details>
       {isBoss && hasReports && dept && (
         <DispatchTeam deptId={dept.id} bossName={employee.name} onDone={load} />
       )}
