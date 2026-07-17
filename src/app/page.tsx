@@ -142,12 +142,13 @@ export default function Home() {
       <ScrollReveal>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Link
-            href="/dashboard"
+            href="/review"
             className="lift block rounded-lg border border-gray-800/60 p-5 hover:border-[#00d6ff]/30 bg-[#111]/30"
           >
-            <h3 className="font-semibold mb-1">Operations Dashboard</h3>
+            <h3 className="font-semibold mb-1">Review Queue</h3>
             <p className="text-sm text-gray-500">
-              View agent run history, reports, and performance metrics.
+              Work waiting on you — approve &amp; ship, answer escalations,
+              retry anything that hit a problem.
             </p>
           </Link>
           <Link

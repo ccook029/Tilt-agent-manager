@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { dispatchInBackground } from "@/lib/client/dispatch";
+import { getPersonaByAgentId } from "@/lib/personas";
 
 interface Employee {
   id: string;
@@ -122,6 +123,11 @@ export default function EmployeePage() {
     [employees, employee]
   );
   const isBoss = !!(dept && dept.managerId === id);
+  // Legacy scheduled agents (Penny, Sterling, Maya, Dana, …) keep their
+  // per-agent console at /dashboard/[id] — chat, Run Now, report files.
+  // Staffed employees (assignHref) and external tools don't have one.
+  const persona = getPersonaByAgentId(id);
+  const hasConsole = !!persona && !persona.external && !persona.assignHref;
   const hasReports = useMemo(
     () => employees.some((e) => e.reportsTo === id && e.staffed),
     [employees, id]
@@ -158,7 +164,12 @@ export default function EmployeePage() {
             </p>
           </div>
         </div>
-        <Link href="/org" className="rounded-lg border border-gray-700 bg-gray-800/60 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700">← Org chart</Link>
+        <div className="flex shrink-0 items-center gap-2">
+          {hasConsole && (
+            <Link href={`/dashboard/${id}`} className="rounded-lg border border-[#0094b8]/40 bg-[#0094b8]/10 px-3 py-2 text-xs font-medium text-[#00d6ff] transition-colors hover:bg-[#0094b8]/20" title={`Chat with ${employee.name.split(" ")[0]}, trigger scheduled runs, and browse report files`}>Chat &amp; runs</Link>
+          )}
+          <Link href="/org" className="rounded-lg border border-gray-700 bg-gray-800/60 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700">← Org chart</Link>
+        </div>
       </div>
 
       {employee.charter && (

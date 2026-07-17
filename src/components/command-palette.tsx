@@ -71,7 +71,11 @@ export function CommandPalette() {
   const commands = useMemo<Command[]>(() => {
     const nav: Command[] = [
       { id: "home", label: "Go to HQ Home", group: "Navigate", perform: () => router.push("/") },
-      { id: "dash", label: "Go to Operations Dashboard", group: "Navigate", perform: () => router.push("/dashboard") },
+      { id: "org", label: "Go to Org HQ", group: "Navigate", perform: () => router.push("/org") },
+      { id: "review", label: "Go to Review Queue", group: "Navigate", perform: () => router.push("/review") },
+      { id: "publish", label: "Go to Publisher", group: "Navigate", perform: () => router.push("/publish") },
+      { id: "shipments", label: "Go to Shipments", group: "Navigate", perform: () => router.push("/shipments") },
+      { id: "dash", label: "Go to Operations Overview", group: "Navigate", perform: () => router.push("/dashboard") },
       { id: "strategy", label: "Go to Strategy (CFO analyst)", group: "Navigate", perform: () => router.push("/strategy") },
       { id: "studio", label: "Go to Design Studio", group: "Navigate", perform: () => router.push("/studio") },
       { id: "studio-social", label: "Studio: Social Content", group: "Navigate", perform: () => router.push("/studio/social") },
@@ -92,7 +96,10 @@ export function CommandPalette() {
       label: p.name,
       hint: `${p.title} · ${p.department}`,
       group: "Agents",
-      perform: () => router.push(`/dashboard/${p.agentId}`),
+      // Employees land on the unified org page; external tools keep their
+      // launch card (they aren't in the org directory).
+      perform: () =>
+        router.push(p.external ? `/dashboard/${p.agentId}` : `/org/${p.agentId}`),
     }));
 
     // "Run <agent>" — trigger a scheduled agent's run right now, with the
@@ -128,9 +135,10 @@ export function CommandPalette() {
         },
       }));
 
-    // "Ask <agent>" — jump straight into an agent's chat.
+    // "Ask <agent>" — jump straight into an agent's chat. Staffed employees
+    // (assignHref) take work through their boss and have no chat console.
     const askVerbs: Command[] = personas
-      .filter((p) => !p.external)
+      .filter((p) => !p.external && !p.assignHref)
       .map((p) => ({
         id: `ask-${p.agentId}`,
         label: `Ask ${p.name}`,

@@ -35,8 +35,8 @@ const departments: Department[] = [
       },
       {
         label: "Signals Feed",
-        href: "/signals",
-        description: "Company-wide activity stream",
+        href: "/dashboard",
+        description: "Company-wide activity stream (Operations overview)",
       },
     ],
   },
@@ -208,7 +208,7 @@ const departments: Department[] = [
       },
       {
         label: "Signals Feed",
-        href: "/signals",
+        href: "/dashboard",
         description: "What the company is doing — timely hooks for outreach",
       },
     ],
