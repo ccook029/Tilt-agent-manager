@@ -23,6 +23,7 @@ import { getRecentSignals } from "../signals";
 import { renderTeamOrdersSnapshot } from "../sales/team-orders";
 import { renderConsignmentSnapshot } from "../sales/retailers";
 import { renderRecentInvoicesSnapshot } from "../sales/invoices";
+import { fetchBooksSnapshot } from "../zoho-books";
 
 /** Roles that plan around performance data get the (pricier) GA4 block. */
 const ANALYTICS_ROLES = new Set(["marketing-director", "seo-specialist"]);
@@ -172,6 +173,31 @@ async function renderBizdevContext(): Promise<string> {
   ].join("\n");
 }
 
+async function renderFinanceContext(): Promise<string> {
+  return safeBlock("ZOHO BOOKS SNAPSHOT (cash, A/R, A/P — the live books)", fetchBooksSnapshot());
+}
+
+async function renderCxContext(): Promise<string> {
+  const signals = await getRecentSignals(24 * 7).catch(() => []);
+  const signalBlock =
+    signals.length === 0
+      ? "(quiet week)"
+      : signals.slice(0, 8).map((s) => `- [${s.source}] ${s.headline}`).join("\n");
+  return [
+    "",
+    "",
+    "=== TILT WARRANTY POLICY (decide against this) ===",
+    "Manufacturer defects are covered (blade delamination, shaft cracks not from impact, factory faults). Normal wear, impact damage, and misuse are NOT covered. A new retailer may swap up to 3 defective sticks per calendar month. When a claim is genuinely a defect, be generous and fast — a well-handled claim makes a player for life. When it's wear or misuse, decline kindly and clearly.",
+    "=== END WARRANTY POLICY ===",
+    "",
+    "=== WHAT THE COMPANY DID THIS WEEK (context for replies) ===",
+    signalBlock,
+    "=== END SIGNALS ===",
+    "",
+    "(Live warranty-claim feed from tiltweb is not wired yet — work from the claim in the brief.)",
+  ].join("\n");
+}
+
 export async function renderDepartmentContext(
   employee: Employee
 ): Promise<string> {
@@ -191,6 +217,10 @@ export async function renderDepartmentContext(
         return await renderSalesContext(employee.id);
       case "bizdev":
         return await renderBizdevContext();
+      case "finance":
+        return await renderFinanceContext();
+      case "cx":
+        return await renderCxContext();
       default:
         return "";
     }

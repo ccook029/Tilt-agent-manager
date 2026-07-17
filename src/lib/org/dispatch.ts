@@ -46,6 +46,10 @@ const DISPATCH_INSTRUCTIONS: Record<string, string> = {
     "Prioritize open team orders that are ready to send to vendors (dispatch one 'consolidate & route the {team} order' piece each), and any consignment accounts with un-invoiced orders (an audit piece). Don't dispatch an order to vendors if it's missing sizes or specs — flag the gap instead.",
   bizdev:
     "Keep the funnel moving: a research piece to find fresh prospects in a named segment/geography, a qualification piece to score what research found, and an outreach piece to write first-touch emails to the HOT leads. Grassroots and honest — quality prospects that fit Tilt's model beat a long list, and first-touch stays relational (no pricing, no pitch).",
+  cx:
+    "Dispatch a triage piece for each open warranty claim and a support-reply piece for any customer situation that needs a written response. Fair and fast on real defects; kind and clear on wear/misuse. Name the specific claim or customer in each brief.",
+  finance:
+    "Lean on the Financial Analyst for forward-looking work — cash-flow runway, projections, budget-vs-actual, and the margin reality on real orders. Leave day-to-day bookkeeping to Penny's own loop; dispatch analysis that helps the founders decide.",
 };
 
 function parsePlan(text: string, valid: Set<string>): PlannedPiece[] {
