@@ -103,10 +103,16 @@ ${roster}
 The founder confirms each block with one click, which runs the full worker → your-review cycle and lands the result in their Review queue. Don't emit an assign block for hypotheticals — only when the work is actually wanted. Never put anything after the assign block(s).`;
 }
 
+export interface ChatImage {
+  mediaType: string;
+  data: string; // base64, no data: prefix
+}
+
 export async function runAgentConversation(
   agentId: string,
   message: string,
-  clientHistory: { role: "user" | "assistant"; content: string }[] = []
+  clientHistory: { role: "user" | "assistant"; content: string }[] = [],
+  images: ChatImage[] = []
 ): Promise<AgentChatTurn> {
   const config = getAgentById(agentId);
   const employee = getEmployeeById(agentId);
@@ -177,7 +183,11 @@ export async function runAgentConversation(
     ? `\n\nYou are the department boss. When asked about your team's work, LEAD WITH THE HIGH LEVEL — the few findings or takeaways that matter, in a handful of tight sentences — and offer the threads worth pulling. Do NOT re-dump a report; the founder can drill down by asking. Have a point of view: what you'd act on, what you'd skip, and why.\n\n${assignProtocol(teamReports)}`
     : "";
 
-  const userMessage = `You are ${name}, chatting live with the Tilt team (Chris, Jeremy, or staff). Answer their message directly and specifically, grounded in your recent work below and what you know about Tilt. If you don't have the data, say exactly what you'd run or need — don't invent numbers. Keep it conversational and tight; this is a chat, not an email.${managerGuidance}
+  const imageNote = images.length
+    ? `\n\nThey attached ${images.length} screenshot${images.length > 1 ? "s" : ""} (shown to you above the text) — look at ${images.length > 1 ? "them" : "it"} carefully; ${images.length > 1 ? "they are" : "it is"} what they're talking about.`
+    : "";
+
+  const userMessage = `You are ${name}, chatting live with the Tilt team (Chris, Jeremy, or staff). Answer their message directly and specifically, grounded in your recent work below and what you know about Tilt. If you don't have the data, say exactly what you'd run or need — don't invent numbers. Keep it conversational and tight; this is a chat, not an email.${managerGuidance}${imageNote}
 
 ## Your most recent reports
 ${reports}${orgBlocks}
@@ -194,8 +204,14 @@ ${message}`;
     model: config?.model ?? (isManager ? CLAUDE_MANAGER_MODEL : CLAUDE_MODEL),
     maxTokens: isManager ? 2200 : 1600,
     temperature: 0.4,
+    images,
   });
 
-  await appendAgentChat(agentId, message, res.text).catch(() => {});
+  // The stored transcript is text-only — note the attachment instead of
+  // persisting base64 blobs into KV.
+  const storedMessage = images.length
+    ? `[${images.length} screenshot${images.length > 1 ? "s" : ""} attached] ${message}`
+    : message;
+  await appendAgentChat(agentId, storedMessage, res.text).catch(() => {});
   return { reply: res.text };
 }

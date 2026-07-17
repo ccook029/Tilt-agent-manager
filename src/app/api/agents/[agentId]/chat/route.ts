@@ -37,16 +37,41 @@ export async function POST(
     return NextResponse.json({ ok: true });
   }
 
-  const { message, history = [] } = body as {
+  const { message, history = [], images = [] } = body as {
     message?: string;
     history?: { role: "user" | "assistant"; content: string }[];
+    images?: { mediaType?: string; data?: string }[];
   };
-  if (!message?.trim()) {
+  if (!message?.trim() && images.length === 0) {
     return NextResponse.json({ error: "message is required" }, { status: 400 });
   }
 
+  // Screenshots: at most 4, images only, ~4MB of base64 total (the client
+  // downscales before sending; this is the backstop).
+  const cleanImages = (Array.isArray(images) ? images : [])
+    .filter(
+      (i): i is { mediaType: string; data: string } =>
+        typeof i?.mediaType === "string" &&
+        i.mediaType.startsWith("image/") &&
+        typeof i?.data === "string" &&
+        i.data.length > 0
+    )
+    .slice(0, 4);
+  const totalBytes = cleanImages.reduce((n, i) => n + i.data.length, 0);
+  if (totalBytes > 5_500_000) {
+    return NextResponse.json(
+      { error: "Attachments too large — try fewer or smaller screenshots." },
+      { status: 413 }
+    );
+  }
+
   try {
-    const result = await runAgentConversation(agentId, message, history);
+    const result = await runAgentConversation(
+      agentId,
+      message?.trim() || "(see the attached screenshot)",
+      history,
+      cleanImages
+    );
     return NextResponse.json({ ok: true, reply: result.reply });
   } catch (err) {
     return NextResponse.json(

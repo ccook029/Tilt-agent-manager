@@ -45,6 +45,12 @@ export interface CallClaudeOptions {
    * same response — we just read the final text. A number caps the searches.
    */
   webSearch?: boolean | number;
+  /**
+   * Images (screenshots, photos) shown to Claude alongside the user message —
+   * base64 payloads, no data: prefix. Used by the employee chats so Chris can
+   * paste a screenshot of what he's talking about.
+   */
+  images?: { mediaType: string; data: string }[];
 }
 
 // Anthropic's server-side web search (dynamic filtering) — supported on our
@@ -68,13 +74,31 @@ export async function callClaude(
   const client = getClient();
   const model = opts.model ?? CLAUDE_MODEL;
 
+  // With images attached, the user turn becomes image blocks + a text block.
+  const content: string | Anthropic.Messages.ContentBlockParam[] =
+    opts.images && opts.images.length > 0
+      ? [
+          ...opts.images.map(
+            (img): Anthropic.Messages.ContentBlockParam => ({
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: img.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+                data: img.data,
+              },
+            })
+          ),
+          { type: "text", text: opts.userMessage },
+        ]
+      : opts.userMessage;
+
   const basePayload = {
     model,
     max_tokens: opts.maxTokens ?? 4096,
     // Newer models (Sonnet 5, Opus 4.7/4.8) reject temperature — omit it there.
     ...samplingParams(model, opts.temperature ?? 0.4),
     system: opts.systemPrompt,
-    messages: [{ role: "user" as const, content: opts.userMessage }],
+    messages: [{ role: "user" as const, content }],
   };
 
   // When MCP servers are supplied, use the beta mcp_servers connector so Claude
