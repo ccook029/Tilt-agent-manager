@@ -113,7 +113,7 @@ export default function RootLayout({
                 href="/dashboard"
                 className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
               >
-                Run History
+                Operations
               </Link>
               <Link
                 href="/knowledge"
