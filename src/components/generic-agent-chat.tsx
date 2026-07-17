@@ -17,6 +17,36 @@ interface Msg {
 }
 
 // ---------------------------------------------------------------------------
+// Voice replies — browser speech synthesis (no API, works offline). Replies
+// are cleaned for the ear: no markdown symbols, no code fences, assign blocks
+// become a short spoken note.
+// ---------------------------------------------------------------------------
+const VOICE_KEY = "tilt.chat.voice";
+
+function speakableText(text: string): string {
+  return text
+    .replace(/```assign[\s\S]*?```/g, " I've drafted the work order — hit Assign and run when you're ready. ")
+    .replace(/```[\s\S]*?```/g, " — details on screen — ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^#+\s*/gm, "")
+    .replace(/[*_`>~|]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 2600);
+}
+
+function pickVoice(): SpeechSynthesisVoice | null {
+  const voices = window.speechSynthesis.getVoices().filter((v) => v.lang.startsWith("en"));
+  if (!voices.length) return null;
+  const prefer = ["Natural", "Google US English", "Samantha", "Aria", "Zira"];
+  for (const hint of prefer) {
+    const hit = voices.find((v) => v.name.includes(hint));
+    if (hit) return hit;
+  }
+  return voices.find((v) => v.default) ?? voices[0];
+}
+
+// ---------------------------------------------------------------------------
 // ```assign blocks — a boss can hand out work from the chat. Each block is
 // JSON {assignee, title, brief}; we render it as a card with one button that
 // creates + runs the work order (worker → boss review → Chris's queue).
@@ -136,7 +166,46 @@ export default function GenericAgentChat({
   const [messages, setMessages] = useState<Msg[]>([intro]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Restore the voice preference; stop any speech when leaving the page.
+  useEffect(() => {
+    try {
+      setVoiceOn(localStorage.getItem(VOICE_KEY) === "1");
+    } catch {}
+    return () => window.speechSynthesis?.cancel();
+  }, []);
+
+  const stopSpeaking = useCallback(() => {
+    window.speechSynthesis?.cancel();
+    setSpeaking(false);
+  }, []);
+
+  const speak = useCallback((text: string) => {
+    if (!("speechSynthesis" in window)) return;
+    const clean = speakableText(text);
+    if (!clean) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(clean);
+    const voice = pickVoice();
+    if (voice) utterance.voice = voice;
+    utterance.rate = 1.03;
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    setSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  const toggleVoice = () => {
+    const next = !voiceOn;
+    setVoiceOn(next);
+    if (!next) stopSpeaking();
+    try {
+      localStorage.setItem(VOICE_KEY, next ? "1" : "0");
+    } catch {}
+  };
 
   const api = useCallback(
     (payload: object) =>
@@ -172,13 +241,9 @@ export default function GenericAgentChat({
     try {
       const res = await api({ mode: "chat", message: text });
       const data = await res.json().catch(() => ({}));
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          content: data.reply ?? data.error ?? "(no response)",
-        },
-      ]);
+      const reply = data.reply ?? data.error ?? "(no response)";
+      setMessages((m) => [...m, { role: "assistant", content: reply }]);
+      if (voiceOn && data.reply) speak(data.reply);
     } catch {
       setMessages((m) => [...m, { role: "assistant", content: "Network error — try again." }]);
     } finally {
@@ -187,6 +252,7 @@ export default function GenericAgentChat({
   };
 
   const clear = async () => {
+    stopSpeaking();
     await api({ mode: "clear" }).catch(() => {});
     setMessages([intro]);
   };
@@ -195,12 +261,31 @@ export default function GenericAgentChat({
     <div className="rounded-2xl border border-gray-800/80 bg-[#101010]/80">
       <div className="flex items-center justify-between border-b border-gray-800/70 px-4 py-2.5">
         <span className="text-sm font-medium text-gray-300">Talk to {name}</span>
-        <button
-          onClick={clear}
-          className="text-xs text-gray-600 hover:text-gray-300 transition-colors"
-        >
-          Clear
-        </button>
+        <div className="flex items-center gap-3">
+          {speaking && (
+            <button
+              onClick={stopSpeaking}
+              className="text-xs text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              ◼ Stop
+            </button>
+          )}
+          <button
+            onClick={toggleVoice}
+            title="Speak replies out loud"
+            className={`text-xs transition-colors ${
+              voiceOn ? "text-[#00d6ff] hover:text-[#7be9ff]" : "text-gray-600 hover:text-gray-300"
+            }`}
+          >
+            {voiceOn ? "🔊 Voice on" : "🔇 Voice off"}
+          </button>
+          <button
+            onClick={clear}
+            className="text-xs text-gray-600 hover:text-gray-300 transition-colors"
+          >
+            Clear
+          </button>
+        </div>
       </div>
 
       <div ref={scrollRef} className="max-h-[52vh] min-h-[280px] overflow-y-auto px-4 py-4 space-y-4">
