@@ -251,6 +251,11 @@ export async function fetchUncategorizedBankTxns(
 export const fetchOpenInvoices = () =>
   getAllPages<BooksInvoice>("/invoices", "invoices", { status: "unpaid" });
 
+/** All invoices dated on/after `sinceIso` (YYYY-MM-DD), any status — used to
+ * check whether a consignment retailer's month was actually invoiced. */
+export const fetchRecentInvoices = (sinceIso: string) =>
+  getAllPages<BooksInvoice>("/invoices", "invoices", { date_start: sinceIso });
+
 export const fetchOpenBills = () =>
   getAllPages<BooksBill>("/bills", "bills", { status: "unpaid" });
 

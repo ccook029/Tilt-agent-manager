@@ -21,7 +21,8 @@ import { fetchGA4Data, getWeekRange } from "../ga4";
 import { getRunLogsByAgent } from "../store";
 import { getRecentSignals } from "../signals";
 import { renderTeamOrdersSnapshot } from "../sales/team-orders";
-import { renderRetailersSnapshot } from "../sales/retailers";
+import { renderConsignmentSnapshot } from "../sales/retailers";
+import { renderRecentInvoicesSnapshot } from "../sales/invoices";
 
 /** Roles that plan around performance data get the (pricier) GA4 block. */
 const ANALYTICS_ROLES = new Set(["marketing-director", "seo-specialist"]);
@@ -108,26 +109,45 @@ async function renderIntelligenceContext(): Promise<string> {
   ].join("\n");
 }
 
-async function renderSalesContext(): Promise<string> {
-  const [team, retail] = await Promise.all([
-    renderTeamOrdersSnapshot().catch(
+async function renderSalesContext(employeeId: string): Promise<string> {
+  const teamBlock = async () => {
+    const team = await renderTeamOrdersSnapshot().catch(
       (e) => `(team orders unavailable this run: ${e})`
-    ),
-    renderRetailersSnapshot().catch(
-      (e) => `(retailers unavailable this run: ${e})`
-    ),
-  ]);
-  return [
-    "",
-    "",
-    "=== OPEN TEAM-STORE ORDERS (consolidate and route each line to a vendor) ===",
-    team,
-    "=== END TEAM ORDERS ===",
-    "",
-    "=== RETAILER / CONSIGNMENT ACCOUNTS ===",
-    retail,
-    "=== END RETAILERS ===",
-  ].join("\n");
+    );
+    return [
+      "",
+      "",
+      "=== OPEN TEAM-STORE ORDERS (consolidate and route each line to a vendor) ===",
+      team,
+      "=== END TEAM ORDERS ===",
+    ].join("\n");
+  };
+
+  // The auditor cross-references billable consignment months against the real
+  // Zoho invoices to find months that were never invoiced.
+  const consignmentBlock = async () => {
+    const [consign, invoices] = await Promise.all([
+      renderConsignmentSnapshot().catch((e) => `(consignment unavailable: ${e})`),
+      renderRecentInvoicesSnapshot().catch((e) => `(invoices unavailable: ${e})`),
+    ]);
+    return [
+      "",
+      "",
+      "=== CONSIGNMENT — BILLABLE MONTHS (what SHOULD be invoiced) ===",
+      consign,
+      "=== END BILLABLE MONTHS ===",
+      "",
+      "=== ZOHO BOOKS — RECENT INVOICES (what WAS invoiced; match by retailer + amount + month) ===",
+      invoices,
+      "=== END INVOICES ===",
+    ].join("\n");
+  };
+
+  // Auditor → consignment only; coordinator → team orders only; the manager
+  // (planning a dispatch) sees both so she can hand out the right work.
+  if (employeeId === "retailer-auditor") return await consignmentBlock();
+  if (employeeId === "team-sales-coordinator") return await teamBlock();
+  return (await teamBlock()) + (await consignmentBlock());
 }
 
 export async function renderDepartmentContext(
@@ -146,7 +166,7 @@ export async function renderDepartmentContext(
       case "intelligence":
         return await renderIntelligenceContext();
       case "sales":
-        return await renderSalesContext();
+        return await renderSalesContext(employee.id);
       default:
         return "";
     }
