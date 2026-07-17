@@ -150,6 +150,26 @@ const departments: Department[] = [
     ],
   },
   {
+    id: "bizdev",
+    name: "Business Development",
+    mission:
+      "Grow Tilt's dealer and team network the grassroots way: research real prospects (independent shops, teams, and organizations that fit Tilt's model), qualify them against our ideal-customer profile and the ethos, and draft warm, relational first-touch outreach. Every lead and every email clears the Director's review, and nothing goes out without the owner's approval.",
+    managerId: "sales-director",
+    tools: [
+      {
+        label: "Retailer Portal",
+        href: staffToolUrl("/admin/retailers"),
+        description: "Existing dealer accounts — don't prospect these",
+        external: true,
+      },
+      {
+        label: "Signals Feed",
+        href: "/signals",
+        description: "What the company is doing — timely hooks for outreach",
+      },
+    ],
+  },
+  {
     id: "intelligence",
     name: "Business Intelligence",
     mission:
@@ -417,6 +437,64 @@ const employees: Employee[] = [
     skills: ["retailer-audit", "consignment-invoice-check", "account-reconciliation"],
     charter:
       "Tracks retailer orders through the portal and audits accounts. Makes sure consignment accounts get invoiced — flags every consignment order with no invoice raised, and hands it to Finance to bill. Reconciles what shipped against what was invoiced.",
+    staffed: true,
+    enabled: true,
+  },
+
+  // ---- Business Development (research → qualify → outreach → sales boss) -----
+  {
+    id: "sales-director",
+    name: "Brooks Landry",
+    title: "Director of Business Development",
+    departmentId: "bizdev",
+    role: "manager",
+    reportsTo: null,
+    personaId: "sales-director",
+    skills: ["review", "lead-qualification", "pipeline"],
+    charter:
+      "Owns outbound growth. Reviews every qualified lead and every outreach draft before it reaches the founders — checking the prospect genuinely fits Tilt's model, the read is honest, and first-touch outreach is relational (a conversation, never a pitch with pricing). Escalates only real judgment calls.",
+    staffed: true,
+    enabled: true,
+  },
+  {
+    id: "lead-researcher",
+    name: "Scout Rhodes",
+    title: "Lead Researcher",
+    departmentId: "bizdev",
+    role: "worker",
+    reportsTo: "sales-director",
+    personaId: "lead-researcher",
+    skills: ["lead-research", "market-scan", "prospect-list"],
+    charter:
+      "Finds real prospects on the live web — independent hockey shops, teams, and organizations that fit Tilt's model — and gathers the facts that matter (location, size, current brands, buying autonomy, a public contact where one exists). Cites sources; never invents a contact.",
+    staffed: true,
+    enabled: true,
+  },
+  {
+    id: "lead-qualifier",
+    name: "Avery Gauge",
+    title: "Lead Qualifier",
+    departmentId: "bizdev",
+    role: "worker",
+    reportsTo: "sales-director",
+    personaId: "lead-qualifier",
+    skills: ["lead-qualification", "icp-scoring", "fit-assessment"],
+    charter:
+      "Scores each prospect against Tilt's ideal-customer profile and the ethos: independent shops tired of thin margins, teams and orgs, autonomous buyers. Flags bad-fit leads honestly (an INT/JR-heavy account that guts blended margin is not a good lead). Rates hot / warm / cold with reasoning.",
+    staffed: true,
+    enabled: true,
+  },
+  {
+    id: "outreach-writer",
+    name: "Wren Delaney",
+    title: "Outreach Writer",
+    departmentId: "bizdev",
+    role: "worker",
+    reportsTo: "sales-director",
+    personaId: "outreach-writer",
+    skills: ["cold-email", "outreach-sequence", "first-touch"],
+    charter:
+      "Drafts warm, relational first-touch emails to qualified prospects. Per the ethos: intro touches are relational — no pricing in writing, no deck framing, no margin talk. The goal is a conversation, not a close.",
     staffed: true,
     enabled: true,
   },

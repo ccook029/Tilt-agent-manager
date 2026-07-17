@@ -38,7 +38,19 @@ export interface CallClaudeOptions {
    * runs — so callers that pre-fetch data via REST keep working unchanged.
    */
   mcpServers?: McpServer[];
+  /**
+   * Give Claude Anthropic's server-side web search tool (real research on the
+   * live web). Used by Business Development's Lead Researcher and Vetter. The
+   * search runs on Anthropic's infrastructure and returns cited results in the
+   * same response — we just read the final text. A number caps the searches.
+   */
+  webSearch?: boolean | number;
 }
+
+// Anthropic's server-side web search (dynamic filtering) — supported on our
+// worker/boss models (Sonnet 5, Opus 4.8). GA, no beta header.
+const WEB_SEARCH_TOOL_TYPE = "web_search_20260209";
+const DEFAULT_WEB_SEARCH_MAX_USES = 6;
 
 export interface ClaudeResponse {
   text: string;
@@ -85,6 +97,8 @@ export async function callClaude(
       })),
       betas: ["mcp-client-2025-11-20"],
     });
+  } else if (opts.webSearch) {
+    response = await runWithWebSearch(client, basePayload, opts);
   } else {
     response = (await client.messages.create(basePayload)) as Anthropic.Messages.Message;
   }
@@ -100,6 +114,51 @@ export async function callClaude(
     outputTokens: response.usage?.output_tokens ?? 0,
     model,
   };
+}
+
+/**
+ * Run a completion with Anthropic's server-side web search tool. Server tools
+ * can stop with `stop_reason: "pause_turn"` when they hit their per-turn
+ * iteration limit; to continue we re-send the assistant turn and let the server
+ * resume (no extra user message). Token usage is summed across the resumes.
+ */
+async function runWithWebSearch(
+  client: Anthropic,
+  basePayload: Record<string, unknown>,
+  opts: CallClaudeOptions
+): Promise<Anthropic.Messages.Message> {
+  const maxUses =
+    typeof opts.webSearch === "number" ? opts.webSearch : DEFAULT_WEB_SEARCH_MAX_USES;
+  const messages = [...(basePayload.messages as Anthropic.MessageParam[])];
+  const tools = [
+    { type: WEB_SEARCH_TOOL_TYPE, name: "web_search", max_uses: maxUses },
+  ];
+  // The installed SDK types predate web_search_20260209; cast past them.
+  const send = (msgs: Anthropic.MessageParam[]) =>
+    client.messages.create({
+      ...basePayload,
+      messages: msgs,
+      tools,
+    } as unknown as Anthropic.Messages.MessageCreateParamsNonStreaming) as Promise<Anthropic.Messages.Message>;
+
+  let response = await send(messages);
+  let totalInput = response.usage?.input_tokens ?? 0;
+  let totalOutput = response.usage?.output_tokens ?? 0;
+  let guard = 0;
+  while (response.stop_reason === "pause_turn" && guard < 4) {
+    guard += 1;
+    messages.push({ role: "assistant", content: response.content });
+    response = await send(messages);
+    totalInput += response.usage?.input_tokens ?? 0;
+    totalOutput += response.usage?.output_tokens ?? 0;
+  }
+
+  // Report the summed usage across resumes on the final message.
+  if (response.usage) {
+    response.usage.input_tokens = totalInput;
+    response.usage.output_tokens = totalOutput;
+  }
+  return response;
 }
 
 /**

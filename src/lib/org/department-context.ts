@@ -150,6 +150,28 @@ async function renderSalesContext(employeeId: string): Promise<string> {
   return (await teamBlock()) + (await consignmentBlock());
 }
 
+async function renderBizdevContext(): Promise<string> {
+  const signals = await getRecentSignals(24 * 7).catch(() => []);
+  const signalBlock =
+    signals.length === 0
+      ? "(quiet week)"
+      : signals
+          .slice(0, 12)
+          .map((s) => `- [${s.source}] ${s.headline}`)
+          .join("\n");
+  return [
+    "",
+    "",
+    "=== PROSPECTING SCOPE ===",
+    "Target Tilt's grassroots path in order: Ontario independents → skeptical independent retailers → Source for Sports stores (each buys autonomously — no national order to win) → US starting in Detroit; plus teams and organizations. Do NOT prospect accounts that are already Tilt dealers (see Staff Tools → Retailers); flag any you're unsure about.",
+    "=== END SCOPE ===",
+    "",
+    "=== WHAT TILT DID THIS WEEK (timely hooks for outreach) ===",
+    signalBlock,
+    "=== END SIGNALS ===",
+  ].join("\n");
+}
+
 export async function renderDepartmentContext(
   employee: Employee
 ): Promise<string> {
@@ -167,6 +189,8 @@ export async function renderDepartmentContext(
         return await renderIntelligenceContext();
       case "sales":
         return await renderSalesContext(employee.id);
+      case "bizdev":
+        return await renderBizdevContext();
       default:
         return "";
     }
