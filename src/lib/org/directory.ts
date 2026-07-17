@@ -150,6 +150,26 @@ const departments: Department[] = [
     ],
   },
   {
+    id: "cx",
+    name: "Customer Experience",
+    mission:
+      "Look after the players and the shops after the sale: triage warranty claims fairly and fast, draft honest decisions and responses, and make sure every interaction sounds like Tilt — direct, human, on the customer's side.",
+    managerId: "cx-manager",
+    tools: [
+      {
+        label: "Warranty Admin",
+        href: staffToolUrl("/admin/warranty"),
+        description: "tiltweb warranty claims and swaps",
+        external: true,
+      },
+      {
+        label: "Knowledge",
+        href: "/knowledge",
+        description: "Company facts and policies every reply should reflect",
+      },
+    ],
+  },
+  {
     id: "bizdev",
     name: "Business Development",
     mission:
@@ -212,6 +232,20 @@ const employees: Employee[] = [
     skills: ["bookkeeping", "reconciliation", "categorization", "monthly-close"],
     charter:
       "Hands-on bookkeeping in Zoho Books: reconciling, categorizing, hunting duplicates. Propose-only; anything she can't decide goes to Sterling, never straight to Chris.",
+    staffed: true,
+    enabled: true,
+  },
+  {
+    id: "cash-flow-analyst",
+    name: "June Sable",
+    title: "Financial Analyst",
+    departmentId: "finance",
+    role: "worker",
+    reportsTo: "accounting-manager",
+    personaId: "cash-flow-analyst",
+    skills: ["cash-flow-forecast", "projections", "budget-variance", "unit-economics"],
+    charter:
+      "Turns the books into forward-looking numbers: cash-flow runway, projections, budget-vs-actual, and unit economics on real Tilt orders. Grounds every figure in Zoho Books; Sterling reviews before it reaches the founders. Propose-only.",
     staffed: true,
     enabled: true,
   },
@@ -495,6 +529,50 @@ const employees: Employee[] = [
     skills: ["cold-email", "outreach-sequence", "first-touch"],
     charter:
       "Drafts warm, relational first-touch emails to qualified prospects. Per the ethos: intro touches are relational — no pricing in writing, no deck framing, no margin talk. The goal is a conversation, not a close.",
+    staffed: true,
+    enabled: true,
+  },
+  {
+    id: "partner-vetter",
+    name: "Sable Marsh",
+    title: "Partnerships & Ambassador Vetter",
+    departmentId: "bizdev",
+    role: "worker",
+    reportsTo: "sales-director",
+    personaId: "partner-vetter",
+    skills: ["partner-vetting", "ambassador-vetting", "partnership-fit"],
+    charter:
+      "Vets partnership and ambassador candidates against the ethos: real fit with players-first, honest-value Tilt — and the hard rule that Tilt never buys credibility (Prust and Schremp are organic, no paid contracts). Researches who a candidate really is and recommends pursue / pass with reasons.",
+    staffed: true,
+    enabled: true,
+  },
+
+  // ---- Customer Experience (warranty triage + support) --------------------
+  {
+    id: "cx-manager",
+    name: "Dell Warren",
+    title: "Customer Experience Manager",
+    departmentId: "cx",
+    role: "manager",
+    reportsTo: null,
+    personaId: "cx-manager",
+    skills: ["review", "warranty-policy", "escalation"],
+    charter:
+      "Owns customer experience after the sale. Reviews every warranty decision and customer reply before it goes out — checking it's fair, on-policy, and sounds like Tilt. Escalates only genuine calls (a claim outside policy, a public-facing risk, a refund/replacement beyond the specialist's authority).",
+    staffed: true,
+    enabled: true,
+  },
+  {
+    id: "warranty-specialist",
+    name: "Marnie Frost",
+    title: "Warranty & Support Specialist",
+    departmentId: "cx",
+    role: "worker",
+    reportsTo: "cx-manager",
+    personaId: "warranty-specialist",
+    skills: ["warranty-triage", "claim-decision", "support-reply", "rma"],
+    charter:
+      "Triages warranty claims against Tilt's warranty policy, drafts a fair decision (approve / swap / decline with reason) and a customer-ready reply, and flags anything outside policy for the manager. Propose-only — a human sends the final word.",
     staffed: true,
     enabled: true,
   },
