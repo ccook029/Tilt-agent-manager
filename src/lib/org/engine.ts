@@ -333,6 +333,7 @@ export async function runWorkOrder(id: string): Promise<RunWorkOrderResult> {
         model: employee.model ?? CLAUDE_MODEL,
         maxTokens: 3072,
         temperature: 0.4,
+        webSearch: profile?.research,
       });
       tokens.input += workerRes.inputTokens;
       tokens.output += workerRes.outputTokens;
