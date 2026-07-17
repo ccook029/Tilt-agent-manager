@@ -262,8 +262,9 @@ export default function EmployeePage() {
 function VoicePicker({ agentId, firstName }: { agentId: string; firstName: string }) {
   const [voices, setVoices] = useState<{ id: string; name: string; category: string }[]>([]);
   const [current, setCurrent] = useState<string>("");
+  const [companyDefault, setCompanyDefault] = useState<string>("");
   const [available, setAvailable] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/agents/tts/voices")
@@ -272,6 +273,7 @@ function VoicePicker({ agentId, firstName }: { agentId: string; firstName: strin
         if (!d?.ok) return;
         setVoices(d.voices ?? []);
         setCurrent(d.map?.[agentId] ?? "");
+        setCompanyDefault(d.map?.["default"] ?? "");
         setAvailable(true);
       })
       .catch(() => {});
@@ -279,17 +281,32 @@ function VoicePicker({ agentId, firstName }: { agentId: string; firstName: strin
 
   if (!available) return null;
 
-  const pick = async (voiceId: string) => {
-    setCurrent(voiceId);
-    setSaved(false);
+  const save = async (id: string, voiceId: string) => {
     await fetch("/api/agents/tts/voices", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ agentId, voiceId: voiceId || null }),
+      body: JSON.stringify({ agentId: id, voiceId: voiceId || null }),
     }).catch(() => {});
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   };
+
+  const flash = (text: string) => {
+    setNote(text);
+    setTimeout(() => setNote(null), 2500);
+  };
+
+  const pick = async (voiceId: string) => {
+    setCurrent(voiceId);
+    await save(agentId, voiceId);
+    flash("saved ✓");
+  };
+
+  const setForEveryone = async () => {
+    await save("default", current);
+    setCompanyDefault(current);
+    flash("set for the whole company ✓");
+  };
+
+  const defaultName = voices.find((v) => v.id === companyDefault)?.name;
 
   return (
     <div className="flex flex-wrap items-center gap-2 px-1 text-[11px] text-gray-500">
@@ -299,7 +316,7 @@ function VoicePicker({ agentId, firstName }: { agentId: string; firstName: strin
         onChange={(e) => void pick(e.target.value)}
         className="rounded-md border border-gray-800 bg-[#0a0a0a] px-2 py-1 text-[11px] text-gray-300 focus:border-[#00d6ff] focus:outline-none"
       >
-        <option value="">Auto</option>
+        <option value="">{defaultName ? `Auto (${defaultName})` : "Auto"}</option>
         {voices.map((v) => (
           <option key={v.id} value={v.id}>
             {v.name}
@@ -307,7 +324,15 @@ function VoicePicker({ agentId, firstName }: { agentId: string; firstName: strin
           </option>
         ))}
       </select>
-      {saved && <span className="text-emerald-400">saved ✓</span>}
+      {current && current !== companyDefault && (
+        <button
+          onClick={() => void setForEveryone()}
+          className="rounded-full border border-gray-800 bg-gray-900/60 px-2.5 py-0.5 text-[11px] text-gray-400 transition-colors hover:border-[#00d6ff]/50 hover:text-[#00d6ff]"
+        >
+          Use for everyone
+        </button>
+      )}
+      {note && <span className="text-emerald-400">{note}</span>}
     </div>
   );
 }
