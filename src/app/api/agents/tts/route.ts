@@ -45,13 +45,15 @@ function hashPick(agentId: string, pool: string[]): string {
 async function elevenLabsTts(
   text: string,
   agentId: string,
-  key: string
-): Promise<NextResponse | null> {
-  // A voice Chris assigned on /org/[id] wins (can be a cloned/premium voice),
-  // then the company-wide default ("default" key), then a stable pick from
-  // the premade pool.
+  key: string,
+  voiceIdOverride?: string
+): Promise<{ audio: NextResponse } | { error: string }> {
+  // Explicit override (the picker's Test button) wins, then a voice Chris
+  // assigned on /org/[id] (can be a cloned/premium voice), then the
+  // company-wide default, then a stable pick from the premade pool.
   const map = await getVoiceMap().catch(() => ({}) as Record<string, string>);
-  const voiceId = map[agentId] ?? map["default"] ?? hashPick(agentId, ELEVEN_VOICES);
+  const voiceId =
+    voiceIdOverride ?? map[agentId] ?? map["default"] ?? hashPick(agentId, ELEVEN_VOICES);
   const res = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
     {
@@ -67,12 +69,14 @@ async function elevenLabsTts(
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     console.error(`[tts] ElevenLabs ${res.status}: ${detail.slice(0, 300)}`);
-    return null; // fall through to Gemini
+    return { error: `ElevenLabs ${res.status}: ${detail.slice(0, 200) || "no detail"}` };
   }
   const audio = Buffer.from(await res.arrayBuffer());
-  return new NextResponse(new Uint8Array(audio), {
-    headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" },
-  });
+  return {
+    audio: new NextResponse(new Uint8Array(audio), {
+      headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" },
+    }),
+  };
 }
 
 function pcmToWav(pcm: Buffer, sampleRate: number): Buffer {
@@ -97,6 +101,10 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as {
     text?: string;
     agentId?: string;
+    /** Explicit voice to use (the picker's Test button). */
+    voiceId?: string;
+    /** Fail loudly instead of falling back — surfaces the real provider error. */
+    strict?: boolean;
   };
   const text = body.text?.trim().slice(0, 2600);
   if (!text) {
@@ -106,12 +114,27 @@ export async function POST(request: NextRequest) {
 
   // Best voice first: ElevenLabs when its key is configured.
   const elevenKey = process.env.ELEVENLABS_API_KEY;
+  if (!elevenKey && body.strict) {
+    return NextResponse.json(
+      { error: "ELEVENLABS_API_KEY is not set in Vercel — custom voices aren't linked yet." },
+      { status: 501 }
+    );
+  }
   if (elevenKey) {
     try {
-      const res = await elevenLabsTts(text, agentId, elevenKey);
-      if (res) return res;
+      const result = await elevenLabsTts(text, agentId, elevenKey, body.voiceId);
+      if ("audio" in result) return result.audio;
+      if (body.strict) {
+        return NextResponse.json({ error: result.error }, { status: 502 });
+      }
     } catch (err) {
       console.error("[tts] ElevenLabs failed:", err);
+      if (body.strict) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : "ElevenLabs request failed" },
+          { status: 502 }
+        );
+      }
     }
   }
 
