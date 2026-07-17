@@ -47,10 +47,11 @@ async function elevenLabsTts(
   agentId: string,
   key: string
 ): Promise<NextResponse | null> {
-  // A voice Chris assigned on /org/[id] wins (can be a cloned/premium voice);
-  // otherwise a stable pick from the premade pool.
+  // A voice Chris assigned on /org/[id] wins (can be a cloned/premium voice),
+  // then the company-wide default ("default" key), then a stable pick from
+  // the premade pool.
   const map = await getVoiceMap().catch(() => ({}) as Record<string, string>);
-  const voiceId = map[agentId] ?? hashPick(agentId, ELEVEN_VOICES);
+  const voiceId = map[agentId] ?? map["default"] ?? hashPick(agentId, ELEVEN_VOICES);
   const res = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
     {
