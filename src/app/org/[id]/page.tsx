@@ -185,16 +185,19 @@ export default function EmployeePage() {
           already grounded in their team's recent output and can hand out
           agreed work via one-click assign cards. */}
       {employee.staffed && !DEDICATED_CHAT.has(id) && (
-        <GenericAgentChat
-          agentId={id}
-          name={employee.name}
-          greeting={
-            isBoss && hasReports
-              ? `Hey — it's ${employee.name.split(" ")[0]}. Ask me about the team's work and I'll give you the high level first — then we can drill into whatever's worth it. When we land on something to do, I'll set it up so you can assign it in one click.`
-              : `Hey — it's ${employee.name.split(" ")[0]}. Ask me anything about my area, or talk through a piece of work before you assign it.`
-          }
-          placeholder={`Message ${employee.name.split(" ")[0]}…`}
-        />
+        <>
+          <GenericAgentChat
+            agentId={id}
+            name={employee.name}
+            greeting={
+              isBoss && hasReports
+                ? `Hey — it's ${employee.name.split(" ")[0]}. Ask me about the team's work and I'll give you the high level first — then we can drill into whatever's worth it. When we land on something to do, I'll set it up so you can assign it in one click.`
+                : `Hey — it's ${employee.name.split(" ")[0]}. Ask me anything about my area, or talk through a piece of work before you assign it.`
+            }
+            placeholder={`Message ${employee.name.split(" ")[0]}…`}
+          />
+          <VoicePicker agentId={id} firstName={employee.name.split(" ")[0]} />
+        </>
       )}
 
       {/* Direct assign form + (boss) dispatch */}
@@ -249,6 +252,62 @@ export default function EmployeePage() {
           ))}
         </section>
       )}
+    </div>
+  );
+}
+
+// Voice picker — assign any voice from the ElevenLabs account (premium and
+// cloned voices included) to this employee. Hidden when ElevenLabs isn't
+// configured; "Auto" uses the default pool.
+function VoicePicker({ agentId, firstName }: { agentId: string; firstName: string }) {
+  const [voices, setVoices] = useState<{ id: string; name: string; category: string }[]>([]);
+  const [current, setCurrent] = useState<string>("");
+  const [available, setAvailable] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/agents/tts/voices")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.ok) return;
+        setVoices(d.voices ?? []);
+        setCurrent(d.map?.[agentId] ?? "");
+        setAvailable(true);
+      })
+      .catch(() => {});
+  }, [agentId]);
+
+  if (!available) return null;
+
+  const pick = async (voiceId: string) => {
+    setCurrent(voiceId);
+    setSaved(false);
+    await fetch("/api/agents/tts/voices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentId, voiceId: voiceId || null }),
+    }).catch(() => {});
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-1 text-[11px] text-gray-500">
+      <span>{firstName}&apos;s voice:</span>
+      <select
+        value={current}
+        onChange={(e) => void pick(e.target.value)}
+        className="rounded-md border border-gray-800 bg-[#0a0a0a] px-2 py-1 text-[11px] text-gray-300 focus:border-[#00d6ff] focus:outline-none"
+      >
+        <option value="">Auto</option>
+        {voices.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.name}
+            {v.category === "cloned" ? " (cloned)" : ""}
+          </option>
+        ))}
+      </select>
+      {saved && <span className="text-emerald-400">saved ✓</span>}
     </div>
   );
 }
