@@ -11,6 +11,7 @@
 // hashing their id, so Harper doesn't sound like Stockton.
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
+import { getVoiceMap } from "@/lib/tts-voices";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -46,7 +47,10 @@ async function elevenLabsTts(
   agentId: string,
   key: string
 ): Promise<NextResponse | null> {
-  const voiceId = hashPick(agentId, ELEVEN_VOICES);
+  // A voice Chris assigned on /org/[id] wins (can be a cloned/premium voice);
+  // otherwise a stable pick from the premade pool.
+  const map = await getVoiceMap().catch(() => ({}) as Record<string, string>);
+  const voiceId = map[agentId] ?? hashPick(agentId, ELEVEN_VOICES);
   const res = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
     {
