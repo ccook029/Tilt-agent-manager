@@ -1,14 +1,14 @@
 // ---------------------------------------------------------------------------
 // /api/agents/tts — natural voice for the employee chats.
 //
-// POST { text, agentId } → audio/wav
+// POST { text, agentId } → audio (wav or mp3)
 //
-// Uses Gemini's TTS (same GEMINI_API_KEY that powers the announcement
-// renders). Each employee gets a consistent voice picked from a small pool by
-// hashing their id, so Harper doesn't sound like Stockton. Gemini returns raw
-// 16-bit PCM; we wrap it in a WAV header for the <audio> element. The client
-// falls back to browser speech synthesis when this route errors (no key, quota,
-// model change).
+// Provider ladder, best available first:
+//   1. ElevenLabs (ELEVENLABS_API_KEY set) — the most human voices.
+//   2. Gemini TTS (GEMINI_API_KEY, same key as the announcement renders).
+//   3. 501 → the client falls back to the browser voice.
+// Each employee gets a consistent voice picked from the provider's pool by
+// hashing their id, so Harper doesn't sound like Stockton.
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
 
@@ -20,14 +20,54 @@ const API_BASE =
 const TTS_MODEL = process.env.GEMINI_TTS_MODEL ?? "gemini-2.5-flash-preview-tts";
 
 // A small pool of Gemini prebuilt voices that sound good conversationally.
-const VOICES = ["Kore", "Puck", "Charon", "Aoede", "Leda", "Fenrir"];
+const GEMINI_VOICES = ["Kore", "Puck", "Charon", "Aoede", "Leda", "Fenrir"];
 
-function voiceFor(agentId: string): string {
+// ElevenLabs premade voices (id — name): a mix so employees sound distinct.
+const ELEVEN_VOICES = [
+  "21m00Tcm4TlvDq8ikWAM", // Rachel
+  "pNInz6obpgDQGcFmaJgB", // Adam
+  "EXAVITQu4vr4xnSDxMaL", // Bella
+  "TxGEqnHWrfWFTfGW9XjX", // Josh
+  "AZnzlk1XvdvUeBnXmlld", // Domi
+  "ErXwobaYiN019PkySvjV", // Antoni
+];
+const ELEVEN_MODEL = process.env.ELEVENLABS_MODEL ?? "eleven_multilingual_v2";
+
+function hashPick(agentId: string, pool: string[]): string {
   let hash = 0;
   for (let i = 0; i < agentId.length; i++) {
     hash = (hash * 31 + agentId.charCodeAt(i)) >>> 0;
   }
-  return VOICES[hash % VOICES.length];
+  return pool[hash % pool.length];
+}
+
+async function elevenLabsTts(
+  text: string,
+  agentId: string,
+  key: string
+): Promise<NextResponse | null> {
+  const voiceId = hashPick(agentId, ELEVEN_VOICES);
+  const res = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+    {
+      method: "POST",
+      headers: { "xi-api-key": key, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        model_id: ELEVEN_MODEL,
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      }),
+    }
+  );
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    console.error(`[tts] ElevenLabs ${res.status}: ${detail.slice(0, 300)}`);
+    return null; // fall through to Gemini
+  }
+  const audio = Buffer.from(await res.arrayBuffer());
+  return new NextResponse(new Uint8Array(audio), {
+    headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" },
+  });
 }
 
 function pcmToWav(pcm: Buffer, sampleRate: number): Buffer {
@@ -49,14 +89,6 @@ function pcmToWav(pcm: Buffer, sampleRate: number): Buffer {
 }
 
 export async function POST(request: NextRequest) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    return NextResponse.json(
-      { error: "GEMINI_API_KEY not set — using the browser voice instead." },
-      { status: 501 }
-    );
-  }
-
   const body = (await request.json().catch(() => ({}))) as {
     text?: string;
     agentId?: string;
@@ -64,6 +96,26 @@ export async function POST(request: NextRequest) {
   const text = body.text?.trim().slice(0, 2600);
   if (!text) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
+  }
+  const agentId = body.agentId ?? "default";
+
+  // Best voice first: ElevenLabs when its key is configured.
+  const elevenKey = process.env.ELEVENLABS_API_KEY;
+  if (elevenKey) {
+    try {
+      const res = await elevenLabsTts(text, agentId, elevenKey);
+      if (res) return res;
+    } catch (err) {
+      console.error("[tts] ElevenLabs failed:", err);
+    }
+  }
+
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    return NextResponse.json(
+      { error: "No TTS key set — using the browser voice instead." },
+      { status: 501 }
+    );
   }
 
   try {
@@ -84,7 +136,7 @@ export async function POST(request: NextRequest) {
           responseModalities: ["AUDIO"],
           speechConfig: {
             voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: voiceFor(body.agentId ?? "default") },
+              prebuiltVoiceConfig: { voiceName: hashPick(agentId, GEMINI_VOICES) },
             },
           },
         },
