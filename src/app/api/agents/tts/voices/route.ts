@@ -22,8 +22,12 @@ export async function GET() {
       cache: "no-store",
     });
     if (!res.ok) {
+      // Pass ElevenLabs' own words through so the picker can show exactly
+      // what's wrong (invalid key vs. missing permission vs. quota).
+      const detail = (await res.text().catch(() => "")).slice(0, 300);
+      console.error(`[tts/voices] ElevenLabs ${res.status}: ${detail}`);
       return NextResponse.json(
-        { error: `ElevenLabs voices failed (${res.status})` },
+        { error: `ElevenLabs said (${res.status}): ${detail || "no detail"}` },
         { status: 502 }
       );
     }
