@@ -470,7 +470,7 @@ export default function GenericAgentChat({
                 onClick={() => speak(m.content)}
                 title="Read this reply out loud"
                 aria-label="Read this reply out loud"
-                className="mt-1 text-[11px] text-gray-600 transition-colors hover:text-[#00d6ff]"
+                className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-gray-800 bg-gray-900/60 px-2.5 py-0.5 text-[11px] text-gray-400 transition-colors hover:border-[#00d6ff]/50 hover:text-[#00d6ff]"
               >
                 ▶ Listen
               </button>
