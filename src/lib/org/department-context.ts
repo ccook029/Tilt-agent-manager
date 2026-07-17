@@ -24,6 +24,8 @@ import { renderTeamOrdersSnapshot } from "../sales/team-orders";
 import { renderConsignmentSnapshot } from "../sales/retailers";
 import { renderRecentInvoicesSnapshot } from "../sales/invoices";
 import { fetchBooksSnapshot } from "../zoho-books";
+import { renderShipmentsSnapshot } from "../supply/shipments";
+import { getOwnerQueue } from "./work-orders";
 
 /** Roles that plan around performance data get the (pricier) GA4 block. */
 const ANALYTICS_ROLES = new Set(["marketing-director", "seo-specialist"]);
@@ -62,12 +64,13 @@ async function latestFindings(
 }
 
 async function renderOperationsContext(): Promise<string> {
-  const [sheet, sync, inventory] = await Promise.all([
+  const [sheet, sync, inventory, shipments] = await Promise.all([
     safeBlock("MASTER ZOHO SHEET (source of truth for stick counts)", fetchSheetSnapshot()),
     safeBlock("SHEET ↔ INVENTORY RECONCILIATION", fetchSyncReport(), 3000),
     safeBlock("ZOHO INVENTORY SNAPSHOT", fetchInventorySnapshot()),
+    renderShipmentsSnapshot().catch(() => "(shipment register unavailable this run)"),
   ]);
-  return `\n\n${sheet}\n\n${sync}\n\n${inventory}`;
+  return `\n\n${sheet}\n\n${sync}\n\n${inventory}\n\n=== OPEN SHIPMENTS (track each against its timeline; flag at-risk/overdue) ===\n${shipments}\n=== END SHIPMENTS ===`;
 }
 
 async function renderProductContext(): Promise<string> {
@@ -198,6 +201,41 @@ async function renderCxContext(): Promise<string> {
   ].join("\n");
 }
 
+async function renderExecutiveContext(): Promise<string> {
+  const [signals, queue] = await Promise.all([
+    getRecentSignals(24 * 7).catch(() => []),
+    getOwnerQueue().catch(() => []),
+  ]);
+  const signalBlock =
+    signals.length === 0
+      ? "(quiet week)"
+      : signals.slice(0, 30).map((s) => `- [${s.source}] ${s.headline}`).join("\n");
+
+  const approved = queue.filter((o) => o.status === "approved");
+  const escalated = queue.filter((o) => o.status === "escalated");
+  const queueBlock =
+    queue.length === 0
+      ? "(nothing waiting on the founders right now)"
+      : [
+          `${approved.length} boss-approved and waiting to ship:`,
+          ...approved.slice(0, 20).map((o) => `  - [${o.departmentId}] ${o.title}`),
+          `${escalated.length} escalated — needs a founder decision:`,
+          ...escalated.slice(0, 20).map((o) => `  - [${o.departmentId}] ${o.title}`),
+        ].join("\n");
+
+  return [
+    "",
+    "",
+    "=== THE FOUNDERS' QUEUE (what's waiting on Chris & Jeremy right now) ===",
+    queueBlock,
+    "=== END QUEUE ===",
+    "",
+    "=== COMPANY ACTIVITY — LAST 7 DAYS (every department's signals) ===",
+    signalBlock,
+    "=== END ACTIVITY ===",
+  ].join("\n");
+}
+
 export async function renderDepartmentContext(
   employee: Employee
 ): Promise<string> {
@@ -221,6 +259,8 @@ export async function renderDepartmentContext(
         return await renderFinanceContext();
       case "cx":
         return await renderCxContext();
+      case "executive":
+        return await renderExecutiveContext();
       default:
         return "";
     }

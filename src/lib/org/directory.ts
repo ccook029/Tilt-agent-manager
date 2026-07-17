@@ -22,6 +22,25 @@ import { staffToolUrl } from "../staff-tools";
 
 const departments: Department[] = [
   {
+    id: "executive",
+    name: "Office of the Founders",
+    mission:
+      "Keep the founders ahead of the whole company without drowning them: synthesize every department into one clear briefing — what shipped, what needs a decision, what's stuck — so Chris and Jeremy spend their scarce hours on the calls only they can make.",
+    managerId: null,
+    tools: [
+      {
+        label: "Review Queue",
+        href: "/review",
+        description: "Everything waiting on the founders",
+      },
+      {
+        label: "Signals Feed",
+        href: "/signals",
+        description: "Company-wide activity stream",
+      },
+    ],
+  },
+  {
     id: "finance",
     name: "Finance & Accounting",
     mission:
@@ -100,6 +119,11 @@ const departments: Department[] = [
         label: "Stick Scanner",
         href: "/inventory/scan",
         description: "Scan sticks in and out",
+      },
+      {
+        label: "Shipments",
+        href: "/shipments",
+        description: "Tracking numbers + timelines for factory shipments",
       },
       {
         label: "Tilt Web Admin",
@@ -206,6 +230,22 @@ const departments: Department[] = [
 ];
 
 const employees: Employee[] = [
+  // ---- Office of the Founders ---------------------------------------------
+  {
+    id: "chief-of-staff",
+    name: "Reese Calder",
+    title: "Chief of Staff",
+    departmentId: "executive",
+    role: "worker",
+    reportsTo: null,
+    personaId: "chief-of-staff",
+    skills: ["founder-briefing", "prioritization", "cross-department-synthesis"],
+    charter:
+      "Reads the whole company — every department's recent output, the founders' review queue, open questions — and turns it into one short briefing: what shipped, what needs Chris and Jeremy's decision (ranked), what's stuck, and the few things that matter most this week. Reports straight to the founders.",
+    staffed: true,
+    enabled: true,
+  },
+
   // ---- Finance (the proven worker → boss → owner loop) --------------------
   {
     id: "accounting-manager",
@@ -362,6 +402,20 @@ const employees: Employee[] = [
     skills: ["stock-alert", "po-recommendation", "reconciliation", "order-builder"],
     charter:
       "Watches every SKU: master Sheet ↔ Zoho Inventory sync, low-stock alerts, PO recommendations, and the Stick Order Builder.",
+    staffed: true,
+    enabled: true,
+  },
+  {
+    id: "supply-coordinator",
+    name: "Piers Vale",
+    title: "Supply Chain & Production Coordinator",
+    departmentId: "operations",
+    role: "worker",
+    reportsTo: "inventory",
+    personaId: "supply-coordinator",
+    skills: ["shipment-tracking", "production-status", "vendor-followup", "landed-cost"],
+    charter:
+      "Tracks every factory shipment from PO to arrival using the shipment register: watches each against its expected date, flags anything at-risk or overdue, and drafts vendor check-in emails to keep orders on schedule. Reports to Stockton.",
     staffed: true,
     enabled: true,
   },
@@ -543,6 +597,20 @@ const employees: Employee[] = [
     skills: ["partner-vetting", "ambassador-vetting", "partnership-fit"],
     charter:
       "Vets partnership and ambassador candidates against the ethos: real fit with players-first, honest-value Tilt — and the hard rule that Tilt never buys credibility (Prust and Schremp are organic, no paid contracts). Researches who a candidate really is and recommends pursue / pass with reasons.",
+    staffed: true,
+    enabled: true,
+  },
+  {
+    id: "events-scout",
+    name: "Casey Fields",
+    title: "Grassroots & Events Scout",
+    departmentId: "bizdev",
+    role: "worker",
+    reportsTo: "sales-director",
+    personaId: "events-scout",
+    skills: ["event-research", "tournament-scan", "demo-planning"],
+    charter:
+      "Finds where Tilt can get sticks into hands: tournaments, camps, showcases, tryouts, and league events in Tilt's footprint. Researches real events on the live web with dates and locations, and flags the highest-leverage ones to attend or run a demo at.",
     staffed: true,
     enabled: true,
   },
