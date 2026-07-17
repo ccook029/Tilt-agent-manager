@@ -305,14 +305,17 @@ function AssignWorkForm({ members }: { members: Employee[] }) {
   if (members.length === 0) return null;
 
   const submit = async () => {
-    if (!assignee || !title.trim() || !brief.trim()) return;
+    if (!assignee || !brief.trim()) return;
     setBusy(true);
     setNote(null);
+    // Title is optional — derive a short one from the brief when left blank.
+    const finalTitle =
+      title.trim() || brief.trim().split(/\s+/).slice(0, 7).join(" ").slice(0, 60);
     try {
       const res = await fetch("/api/org/work-orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assigneeId: assignee, title, brief, run: true }),
+        body: JSON.stringify({ assigneeId: assignee, title: finalTitle, brief, run: true }),
       });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -362,7 +365,7 @@ function AssignWorkForm({ members }: { members: Employee[] }) {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Title (e.g. 'Reel: X1 flex demo')"
+              placeholder="Title (optional)"
               className="min-w-[14rem] flex-1 rounded-md border border-gray-700 bg-gray-800/50 px-2 py-1.5 text-xs text-gray-200 focus:border-[#00d6ff] focus:outline-none"
               disabled={busy}
             />
@@ -378,7 +381,7 @@ function AssignWorkForm({ members }: { members: Employee[] }) {
           <div className="flex items-center gap-2">
             <button
               onClick={submit}
-              disabled={busy || !assignee || !title.trim() || !brief.trim()}
+              disabled={busy || !assignee || !brief.trim()}
               className="rounded-md bg-[#0094b8] px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#00a8d1] disabled:opacity-40"
             >
               {busy ? "Working (takes a minute)…" : "Create & run"}
@@ -437,14 +440,12 @@ function PersonRow({
     </div>
   );
 
-  return employee.personaId ? (
+  return (
     <Link
-      href={`/dashboard/${employee.personaId}`}
+      href={`/org/${employee.id}`}
       className="block rounded-lg transition-colors hover:bg-gray-900/50"
     >
       {row}
     </Link>
-  ) : (
-    row
   );
 }

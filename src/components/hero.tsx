@@ -226,10 +226,10 @@ export default function Hero() {
         >
           <Magnetic>
             <Link
-              href="/dashboard"
+              href="/org"
               className="inline-flex items-center gap-2 rounded-lg bg-[#00d6ff] px-6 py-3 text-sm font-semibold text-[#06232b] shadow-[0_10px_30px_-10px_rgba(0,214,255,0.7)] transition-colors hover:bg-[#00a6c9]"
             >
-              Enter the Dashboard
+              Enter HQ
               <span aria-hidden>→</span>
             </Link>
           </Magnetic>

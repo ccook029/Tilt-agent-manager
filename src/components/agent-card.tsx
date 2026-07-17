@@ -151,7 +151,7 @@ export function DraggableAgentCard({
           <StarIcon filled={pinned} className="text-[15px]" />
         </button>
 
-        <Link href={`/dashboard/${person.agentId}`} className="block p-6 pl-9">
+        <Link href={`/org/${person.agentId}`} className="block p-6 pl-9">
           <AgentCardBody person={person} agentData={agentData} />
         </Link>
       </div>
