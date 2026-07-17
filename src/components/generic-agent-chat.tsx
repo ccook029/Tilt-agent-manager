@@ -14,6 +14,58 @@ interface Msg {
   role: "user" | "assistant";
   content: string;
   timestamp?: string;
+  /** Preview data-URLs for screenshots sent with this message (this session
+   * only — the persisted transcript stores a text note instead). */
+  images?: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Screenshot attachments — attach / paste / drop an image, downscaled in the
+// browser (max 1600px, JPEG) so the request stays under Vercel's body cap.
+// ---------------------------------------------------------------------------
+interface Attachment {
+  mediaType: string;
+  data: string; // base64, no data: prefix
+  preview: string; // data URL for the thumbnail
+}
+
+const MAX_ATTACHMENTS = 4;
+
+async function fileToAttachment(file: File): Promise<Attachment | null> {
+  if (!file.type.startsWith("image/")) return null;
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("bad image"));
+    el.src = dataUrl;
+  });
+
+  const MAX_DIM = 1600;
+  const oversized = img.width > MAX_DIM || img.height > MAX_DIM;
+  // Small originals go through untouched (keeps PNG text crisp).
+  if (!oversized && dataUrl.length < 900_000) {
+    const comma = dataUrl.indexOf(",");
+    const meta = dataUrl.slice(0, comma); // data:image/png;base64
+    return {
+      mediaType: meta.slice(5, meta.indexOf(";")),
+      data: dataUrl.slice(comma + 1),
+      preview: dataUrl,
+    };
+  }
+
+  const scale = Math.min(1, MAX_DIM / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const out = canvas.toDataURL("image/jpeg", 0.85);
+  return { mediaType: "image/jpeg", data: out.slice(out.indexOf(",") + 1), preview: out };
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +220,29 @@ export default function GenericAgentChat({
   const [loading, setLoading] = useState(false);
   const [voiceOn, setVoiceOn] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const addFiles = useCallback(async (files: Iterable<File>) => {
+    const converted = await Promise.all(
+      Array.from(files).map((f) => fileToAttachment(f).catch(() => null))
+    );
+    setAttachments((a) =>
+      [...a, ...converted.filter((c): c is Attachment => c !== null)].slice(0, MAX_ATTACHMENTS)
+    );
+  }, []);
+
+  const onPaste = (e: React.ClipboardEvent) => {
+    const files = Array.from(e.clipboardData?.items ?? [])
+      .filter((item) => item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((f): f is File => f !== null);
+    if (files.length) {
+      e.preventDefault();
+      void addFiles(files);
+    }
+  };
 
   // Restore the voice preference; stop any speech when leaving the page.
   useEffect(() => {
@@ -234,12 +308,25 @@ export default function GenericAgentChat({
 
   const send = async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if ((!text && attachments.length === 0) || loading) return;
+    const sending = attachments;
     setInput("");
-    setMessages((m) => [...m, { role: "user", content: text }]);
+    setAttachments([]);
+    setMessages((m) => [
+      ...m,
+      {
+        role: "user",
+        content: text || "(screenshot)",
+        images: sending.map((a) => a.preview),
+      },
+    ]);
     setLoading(true);
     try {
-      const res = await api({ mode: "chat", message: text });
+      const res = await api({
+        mode: "chat",
+        message: text,
+        images: sending.map((a) => ({ mediaType: a.mediaType, data: a.data })),
+      });
       const data = await res.json().catch(() => ({}));
       const reply = data.reply ?? data.error ?? "(no response)";
       setMessages((m) => [...m, { role: "assistant", content: reply }]);
@@ -293,6 +380,14 @@ export default function GenericAgentChat({
           m.role === "user" ? (
             <div key={i} className="flex justify-end">
               <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-[#00d6ff]/15 border border-cyan-900/50 px-3.5 py-2 text-sm text-gray-100">
+                {m.images && m.images.length > 0 && (
+                  <div className="mb-1.5 flex flex-wrap gap-1.5">
+                    {m.images.map((src, j) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={j} src={src} alt="screenshot" className="max-h-40 rounded-lg border border-cyan-900/50" />
+                    ))}
+                  </div>
+                )}
                 {m.content}
               </div>
             </div>
@@ -313,22 +408,69 @@ export default function GenericAgentChat({
         {loading && <p className="text-xs text-gray-600">{name} is thinking…</p>}
       </div>
 
-      <div className="flex gap-2 border-t border-gray-800/70 p-3">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder={placeholder ?? `Ask ${name} something…`}
-          disabled={loading}
-          className="flex-1 rounded-lg border border-gray-800 bg-[#0a0a0a] px-3 py-2 text-sm text-gray-200 focus:border-[#00d6ff] focus:outline-none"
-        />
-        <button
-          onClick={send}
-          disabled={loading || !input.trim()}
-          className="rounded-lg bg-[#00d6ff] px-4 py-2 text-sm font-semibold text-black hover:bg-[#33e0ff] transition-colors disabled:opacity-40"
-        >
-          Send
-        </button>
+      <div
+        className="border-t border-gray-800/70 p-3"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          void addFiles(e.dataTransfer?.files ?? []);
+        }}
+      >
+        {attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachments.map((a, i) => (
+              <div key={i} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={a.preview} alt="attachment" className="h-14 rounded-md border border-gray-700" />
+                <button
+                  onClick={() => setAttachments((arr) => arr.filter((_, j) => j !== i))}
+                  aria-label="Remove screenshot"
+                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gray-800 text-[10px] text-gray-300 ring-1 ring-gray-600 hover:bg-red-900 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              void addFiles(e.target.files ?? []);
+              e.target.value = "";
+            }}
+          />
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={loading || attachments.length >= MAX_ATTACHMENTS}
+            title="Attach a screenshot (or paste / drop one)"
+            aria-label="Attach a screenshot"
+            className="rounded-lg border border-gray-800 bg-[#0a0a0a] px-2.5 text-sm text-gray-400 transition-colors hover:border-gray-600 hover:text-gray-200 disabled:opacity-40"
+          >
+            📎
+          </button>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && send()}
+            onPaste={onPaste}
+            placeholder={placeholder ?? `Ask ${name} something…`}
+            disabled={loading}
+            className="flex-1 rounded-lg border border-gray-800 bg-[#0a0a0a] px-3 py-2 text-sm text-gray-200 focus:border-[#00d6ff] focus:outline-none"
+          />
+          <button
+            onClick={send}
+            disabled={loading || (!input.trim() && attachments.length === 0)}
+            className="rounded-lg bg-[#00d6ff] px-4 py-2 text-sm font-semibold text-black hover:bg-[#33e0ff] transition-colors disabled:opacity-40"
+          >
+            Send
+          </button>
+        </div>
       </div>
     </div>
   );
