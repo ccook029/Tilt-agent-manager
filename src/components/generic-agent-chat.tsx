@@ -74,6 +74,9 @@ async function fileToAttachment(file: File): Promise<Attachment | null> {
 // become a short spoken note.
 // ---------------------------------------------------------------------------
 const VOICE_KEY = "tilt.chat.voice";
+// Playback speed for spoken replies (applies to both the natural voice and
+// the browser fallback).
+const SPEECH_RATE = 1.5;
 
 function speakableText(text: string): string {
   return text
@@ -244,33 +247,94 @@ export default function GenericAgentChat({
     }
   };
 
+  const keepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const stopAllAudio = useCallback(() => {
+    window.speechSynthesis?.cancel();
+    if (keepaliveRef.current) clearInterval(keepaliveRef.current);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      if (audioRef.current.src.startsWith("blob:")) URL.revokeObjectURL(audioRef.current.src);
+      audioRef.current = null;
+    }
+  }, []);
+
+  const stopSpeaking = useCallback(() => {
+    stopAllAudio();
+    setSpeaking(false);
+  }, [stopAllAudio]);
+
   // Restore the voice preference; stop any speech when leaving the page.
   useEffect(() => {
     try {
       setVoiceOn(localStorage.getItem(VOICE_KEY) === "1");
     } catch {}
-    return () => window.speechSynthesis?.cancel();
-  }, []);
+    return stopAllAudio;
+  }, [stopAllAudio]);
 
-  const stopSpeaking = useCallback(() => {
-    window.speechSynthesis?.cancel();
-    setSpeaking(false);
-  }, []);
-
-  const speak = useCallback((text: string) => {
-    if (!("speechSynthesis" in window)) return;
-    const clean = speakableText(text);
-    if (!clean) return;
-    window.speechSynthesis.cancel();
+  // Fallback: the browser's built-in voice.
+  const speakWithBrowser = useCallback((clean: string) => {
+    if (!("speechSynthesis" in window)) {
+      setSpeaking(false);
+      return;
+    }
     const utterance = new SpeechSynthesisUtterance(clean);
     const voice = pickVoice();
     if (voice) utterance.voice = voice;
-    utterance.rate = 1.03;
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-    setSpeaking(true);
+    utterance.rate = SPEECH_RATE;
+    const done = () => {
+      setSpeaking(false);
+      if (keepaliveRef.current) clearInterval(keepaliveRef.current);
+    };
+    utterance.onend = done;
+    utterance.onerror = done;
     window.speechSynthesis.speak(utterance);
+    // Chrome quietly stops long utterances after ~15s; a periodic resume()
+    // keeps it talking. Harmless elsewhere.
+    keepaliveRef.current = setInterval(() => {
+      if (window.speechSynthesis.speaking) window.speechSynthesis.resume();
+      else if (keepaliveRef.current) clearInterval(keepaliveRef.current);
+    }, 10_000);
   }, []);
+
+  // Preferred: the natural server voice (Gemini TTS, per-employee), sped up.
+  const speak = useCallback(
+    (text: string) => {
+      const clean = speakableText(text);
+      if (!clean) return;
+      stopAllAudio();
+      setSpeaking(true);
+      void (async () => {
+        try {
+          const res = await fetch("/api/agents/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: clean, agentId }),
+          });
+          if (!res.ok) throw new Error(`tts ${res.status}`);
+          const blob = await res.blob();
+          const audio = new Audio(URL.createObjectURL(blob));
+          audio.playbackRate = SPEECH_RATE;
+          // Keep the pitch natural at 1.5× (default in modern browsers,
+          // set explicitly where supported).
+          if ("preservesPitch" in audio) audio.preservesPitch = true;
+          const done = () => {
+            setSpeaking(false);
+            if (audio.src.startsWith("blob:")) URL.revokeObjectURL(audio.src);
+          };
+          audio.onended = done;
+          audio.onerror = done;
+          audioRef.current = audio;
+          await audio.play();
+        } catch {
+          // No key / quota / autoplay refusal — use the browser voice.
+          speakWithBrowser(clean);
+        }
+      })();
+    },
+    [agentId, stopAllAudio, speakWithBrowser]
+  );
 
   const toggleVoice = () => {
     const next = !voiceOn;
@@ -402,6 +466,14 @@ export default function GenericAgentChat({
                   <AssignCard key={j} spec={part} />
                 )
               )}
+              <button
+                onClick={() => speak(m.content)}
+                title="Read this reply out loud"
+                aria-label="Read this reply out loud"
+                className="mt-1 text-[11px] text-gray-600 transition-colors hover:text-[#00d6ff]"
+              >
+                ▶ Listen
+              </button>
             </div>
           )
         )}
