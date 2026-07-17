@@ -264,6 +264,7 @@ function VoicePicker({ agentId, firstName }: { agentId: string; firstName: strin
   const [current, setCurrent] = useState<string>("");
   const [companyDefault, setCompanyDefault] = useState<string>("");
   const [state, setState] = useState<"loading" | "ok" | "unconfigured" | "error">("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
 
@@ -276,6 +277,7 @@ function VoicePicker({ agentId, firstName }: { agentId: string; firstName: strin
         }
         const d = await r.json().catch(() => null);
         if (!r.ok || !d?.ok) {
+          setLoadError(d?.error ?? `Failed (${r.status})`);
           setState("error");
           return;
         }
@@ -298,10 +300,13 @@ function VoicePicker({ agentId, firstName }: { agentId: string; firstName: strin
   }
   if (state === "error") {
     return (
-      <p className="px-1 text-[11px] text-amber-500/80">
-        Couldn&apos;t load your ElevenLabs voices — the API key may lack permission to list voices.
-        Create a key with full access (or Voices: Read + Text-to-Speech) and update it in Vercel.
-      </p>
+      <div className="space-y-1 px-1 text-[11px] text-amber-500/80">
+        <p>
+          Couldn&apos;t load your ElevenLabs voices — the API key may lack permission to list voices.
+          Create a key with full access (or Voices: Read + Text-to-Speech) and update it in Vercel.
+        </p>
+        {loadError && <p className="text-gray-500">{loadError}</p>}
+      </div>
     );
   }
 
