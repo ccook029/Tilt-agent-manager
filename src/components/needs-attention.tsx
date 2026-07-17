@@ -40,7 +40,7 @@ export default function NeedsAttention({ failures }: { failures: Failure[] }) {
               {failures.slice(0, 4).map((f) => (
                 <Link
                   key={f.agentId}
-                  href={`/dashboard/${f.agentId}`}
+                  href={`/org/${f.agentId}`}
                   className="rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-0.5 text-xs text-red-200 transition-colors hover:bg-red-500/20"
                 >
                   {f.name}

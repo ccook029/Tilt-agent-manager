@@ -30,7 +30,7 @@ function toMemberView(e: Employee, isBoss: boolean): MemberView {
     color: persona?.avatarColor ?? "bg-gray-700",
     accent: persona?.avatarAccent ?? "ring-gray-500",
     bio: persona?.bio ?? e.charter,
-    href: e.personaId ? `/dashboard/${e.personaId}` : "/org",
+    href: `/org/${e.id}`,
     isBoss,
   };
 }
