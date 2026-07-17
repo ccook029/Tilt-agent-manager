@@ -263,23 +263,47 @@ function VoicePicker({ agentId, firstName }: { agentId: string; firstName: strin
   const [voices, setVoices] = useState<{ id: string; name: string; category: string }[]>([]);
   const [current, setCurrent] = useState<string>("");
   const [companyDefault, setCompanyDefault] = useState<string>("");
-  const [available, setAvailable] = useState(false);
+  const [state, setState] = useState<"loading" | "ok" | "unconfigured" | "error">("loading");
   const [note, setNote] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     fetch("/api/agents/tts/voices")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!d?.ok) return;
+      .then(async (r) => {
+        if (r.status === 501) {
+          setState("unconfigured");
+          return;
+        }
+        const d = await r.json().catch(() => null);
+        if (!r.ok || !d?.ok) {
+          setState("error");
+          return;
+        }
         setVoices(d.voices ?? []);
         setCurrent(d.map?.[agentId] ?? "");
         setCompanyDefault(d.map?.["default"] ?? "");
-        setAvailable(true);
+        setState("ok");
       })
-      .catch(() => {});
+      .catch(() => setState("error"));
   }, [agentId]);
 
-  if (!available) return null;
+  if (state === "loading") return null;
+  if (state === "unconfigured") {
+    return (
+      <p className="px-1 text-[11px] text-gray-600">
+        Custom voices aren&apos;t linked yet — add <code className="text-gray-400">ELEVENLABS_API_KEY</code> in
+        Vercel and redeploy, then your ElevenLabs voices (including cloned ones) appear here.
+      </p>
+    );
+  }
+  if (state === "error") {
+    return (
+      <p className="px-1 text-[11px] text-amber-500/80">
+        Couldn&apos;t load your ElevenLabs voices — the API key may lack permission to list voices.
+        Create a key with full access (or Voices: Read + Text-to-Speech) and update it in Vercel.
+      </p>
+    );
+  }
 
   const save = async (id: string, voiceId: string) => {
     await fetch("/api/agents/tts/voices", {
@@ -306,6 +330,37 @@ function VoicePicker({ agentId, firstName }: { agentId: string; firstName: strin
     flash("set for the whole company ✓");
   };
 
+  // Play a sample in the selected voice, strictly — no silent fallback, so a
+  // real ElevenLabs problem (permissions, quota, missing voice) shows here.
+  const testVoice = async () => {
+    setTesting(true);
+    setNote(null);
+    try {
+      const res = await fetch("/api/agents/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: `Hey, it's ${firstName} from Tilt. This is exactly how I'll sound in chat.`,
+          agentId,
+          voiceId: current || undefined,
+          strict: true,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setNote(d.error ?? `Test failed (${res.status})`);
+        return;
+      }
+      const audio = new Audio(URL.createObjectURL(await res.blob()));
+      audio.onended = () => URL.revokeObjectURL(audio.src);
+      await audio.play();
+    } catch {
+      setNote("Test failed — network error.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const defaultName = voices.find((v) => v.id === companyDefault)?.name;
 
   return (
@@ -324,6 +379,13 @@ function VoicePicker({ agentId, firstName }: { agentId: string; firstName: strin
           </option>
         ))}
       </select>
+      <button
+        onClick={() => void testVoice()}
+        disabled={testing}
+        className="rounded-full border border-gray-800 bg-gray-900/60 px-2.5 py-0.5 text-[11px] text-gray-400 transition-colors hover:border-[#00d6ff]/50 hover:text-[#00d6ff] disabled:opacity-50"
+      >
+        {testing ? "…" : "▶ Test"}
+      </button>
       {current && current !== companyDefault && (
         <button
           onClick={() => void setForEveryone()}
@@ -332,7 +394,11 @@ function VoicePicker({ agentId, firstName }: { agentId: string; firstName: strin
           Use for everyone
         </button>
       )}
-      {note && <span className="text-emerald-400">{note}</span>}
+      {note && (
+        <span className={note.startsWith("saved") || note.startsWith("set") ? "text-emerald-400" : "text-amber-500/90"}>
+          {note}
+        </span>
+      )}
     </div>
   );
 }
