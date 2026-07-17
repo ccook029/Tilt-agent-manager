@@ -76,7 +76,7 @@ async function fileToAttachment(file: File): Promise<Attachment | null> {
 const VOICE_KEY = "tilt.chat.voice";
 // Playback speed for spoken replies (applies to both the natural voice and
 // the browser fallback).
-const SPEECH_RATE = 1.2;
+const SPEECH_RATE = 1.0;
 
 function speakableText(text: string): string {
   return text
