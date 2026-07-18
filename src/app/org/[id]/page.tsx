@@ -359,14 +359,20 @@ function VoicePicker({ agentId, firstName }: { agentId: string; firstName: strin
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         setNote(d.error ?? `Test failed (${res.status})`);
+        setTesting(false);
         return;
       }
       const audio = new Audio(URL.createObjectURL(await res.blob()));
-      audio.onended = () => URL.revokeObjectURL(audio.src);
+      // Stay disabled until the sample finishes so it can't play over itself.
+      const done = () => {
+        URL.revokeObjectURL(audio.src);
+        setTesting(false);
+      };
+      audio.onended = done;
+      audio.onerror = done;
       await audio.play();
     } catch {
       setNote("Test failed — network error.");
-    } finally {
       setTesting(false);
     }
   };
