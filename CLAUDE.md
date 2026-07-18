@@ -51,3 +51,9 @@ and the org-wide signals feed. Deployed on Vercel.
   Gemini image steered by the brief in `generate.ts` with code-stamped marks.
 - PDFs via `@react-pdf/renderer` (`src/lib/pdf.tsx`); Playwright chromium at
   `/opt/pw-browsers` for email-image rendering.
+- Chat voice (TTS): `/api/agents/tts` tries ElevenLabs (`ELEVENLABS_API_KEY`,
+  must be an unrestricted key or have Voices: Read — TTS-only keys 401 on the
+  voice list), then Gemini TTS (`GEMINI_API_KEY`, model override
+  `GEMINI_TTS_MODEL`), then the browser voice client-side. Per-employee voice
+  picks live in KV (`tts-voice-map`, `src/lib/tts-voices.ts`); the `default`
+  key is the company-wide voice set from the picker on `/org/[id]`.
