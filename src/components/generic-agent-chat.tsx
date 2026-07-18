@@ -249,6 +249,12 @@ export default function GenericAgentChat({
 
   const keepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Generation counter: each speak()/stop bumps it; an in-flight TTS request
+  // that finds itself superseded abandons instead of playing over the newer
+  // audio (the double-click-Listen overlap bug).
+  const speechGenRef = useRef(0);
+  // Which message index is loading/playing, so its Listen button becomes Stop.
+  const [speechFor, setSpeechFor] = useState<number | null>(null);
 
   const stopAllAudio = useCallback(() => {
     window.speechSynthesis?.cancel();
@@ -261,8 +267,10 @@ export default function GenericAgentChat({
   }, []);
 
   const stopSpeaking = useCallback(() => {
+    speechGenRef.current++; // abandon any in-flight TTS request
     stopAllAudio();
     setSpeaking(false);
+    setSpeechFor(null);
   }, [stopAllAudio]);
 
   // Restore the voice preference; stop any speech when leaving the page.
@@ -277,6 +285,7 @@ export default function GenericAgentChat({
   const speakWithBrowser = useCallback((clean: string) => {
     if (!("speechSynthesis" in window)) {
       setSpeaking(false);
+      setSpeechFor(null);
       return;
     }
     const utterance = new SpeechSynthesisUtterance(clean);
@@ -285,6 +294,7 @@ export default function GenericAgentChat({
     utterance.rate = SPEECH_RATE;
     const done = () => {
       setSpeaking(false);
+      setSpeechFor(null);
       if (keepaliveRef.current) clearInterval(keepaliveRef.current);
     };
     utterance.onend = done;
@@ -298,13 +308,16 @@ export default function GenericAgentChat({
     }, 10_000);
   }, []);
 
-  // Preferred: the natural server voice (Gemini TTS, per-employee), sped up.
+  // Preferred: the natural server voice, per-employee. msgIndex marks which
+  // message's Listen button is active (null = auto-speak of a fresh reply).
   const speak = useCallback(
-    (text: string) => {
+    (text: string, msgIndex: number | null = null) => {
       const clean = speakableText(text);
       if (!clean) return;
+      const gen = ++speechGenRef.current;
       stopAllAudio();
       setSpeaking(true);
+      setSpeechFor(msgIndex);
       void (async () => {
         try {
           const res = await fetch("/api/agents/tts", {
@@ -314,13 +327,18 @@ export default function GenericAgentChat({
           });
           if (!res.ok) throw new Error(`tts ${res.status}`);
           const blob = await res.blob();
+          // Superseded by another click / Stop while we were generating?
+          if (speechGenRef.current !== gen) return;
           const audio = new Audio(URL.createObjectURL(blob));
           audio.playbackRate = SPEECH_RATE;
-          // Keep the pitch natural at 1.5× (default in modern browsers,
+          // Keep the pitch natural when sped up (default in modern browsers,
           // set explicitly where supported).
           if ("preservesPitch" in audio) audio.preservesPitch = true;
           const done = () => {
-            setSpeaking(false);
+            if (speechGenRef.current === gen) {
+              setSpeaking(false);
+              setSpeechFor(null);
+            }
             if (audio.src.startsWith("blob:")) URL.revokeObjectURL(audio.src);
           };
           audio.onended = done;
@@ -328,8 +346,9 @@ export default function GenericAgentChat({
           audioRef.current = audio;
           await audio.play();
         } catch {
-          // No key / quota / autoplay refusal — use the browser voice.
-          speakWithBrowser(clean);
+          // No key / quota / autoplay refusal — use the browser voice
+          // (unless a newer click already took over).
+          if (speechGenRef.current === gen) speakWithBrowser(clean);
         }
       })();
     },
@@ -469,12 +488,18 @@ export default function GenericAgentChat({
                 )
               )}
               <button
-                onClick={() => speak(m.content)}
-                title="Read this reply out loud"
-                aria-label="Read this reply out loud"
-                className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-gray-800 bg-gray-900/60 px-2.5 py-0.5 text-[11px] text-gray-400 transition-colors hover:border-[#00d6ff]/50 hover:text-[#00d6ff]"
+                onClick={() =>
+                  speechFor === i && speaking ? stopSpeaking() : speak(m.content, i)
+                }
+                title={speechFor === i && speaking ? "Stop" : "Read this reply out loud"}
+                aria-label={speechFor === i && speaking ? "Stop" : "Read this reply out loud"}
+                className={`mt-1.5 inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
+                  speechFor === i && speaking
+                    ? "border-amber-700/60 bg-amber-950/40 text-amber-400 hover:text-amber-300"
+                    : "border-gray-800 bg-gray-900/60 text-gray-400 hover:border-[#00d6ff]/50 hover:text-[#00d6ff]"
+                }`}
               >
-                ▶ Listen
+                {speechFor === i && speaking ? "◼ Stop" : "▶ Listen"}
               </button>
             </div>
           )
