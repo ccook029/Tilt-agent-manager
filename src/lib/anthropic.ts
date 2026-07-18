@@ -132,6 +132,13 @@ export async function callClaude(
     .map((block) => block.text)
     .join("\n\n");
 
+  if (!text.trim()) {
+    // Diagnosable in the Vercel function logs when a caller sees a blank reply.
+    console.warn(
+      `[anthropic] ${model} returned no text — stop_reason=${response.stop_reason}, blocks=[${response.content.map((b) => b.type).join(",")}]`
+    );
+  }
+
   return {
     text,
     inputTokens: response.usage?.input_tokens ?? 0,

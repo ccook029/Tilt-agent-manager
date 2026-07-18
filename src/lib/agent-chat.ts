@@ -141,6 +141,7 @@ export async function runAgentConversation(
   const historyBlock =
     history
       .slice(-12)
+      .filter((m) => m.content.trim())
       .map((m) => `${m.role === "user" ? "Team" : name}: ${m.content.slice(0, 1500)}`)
       .join("\n\n") || "(no prior messages)";
 
@@ -198,14 +199,34 @@ ${historyBlock}
 ## Their message
 ${message}`;
 
-  const res = await callClaude({
+  const model = config?.model ?? (isManager ? CLAUDE_MANAGER_MODEL : CLAUDE_MODEL);
+  let res = await callClaude({
     systemPrompt,
     userMessage,
-    model: config?.model ?? (isManager ? CLAUDE_MANAGER_MODEL : CLAUDE_MODEL),
+    model,
     maxTokens: isManager ? 2200 : 1600,
     temperature: 0.4,
     images,
   });
+  // Rarely the API 200s with no text (observed in production as a ghost
+  // bubble). Retry once; if it's still empty, fail loudly so the UI shows a
+  // real error instead of silence.
+  if (!res.text.trim()) {
+    console.warn(
+      `[agent-chat] empty reply from ${model} for ${agentId} (in=${res.inputTokens}, out=${res.outputTokens}) — retrying once`
+    );
+    res = await callClaude({
+      systemPrompt,
+      userMessage,
+      model,
+      maxTokens: isManager ? 2200 : 1600,
+      temperature: 0.4,
+      images,
+    });
+    if (!res.text.trim()) {
+      throw new Error(`${name} came back empty twice — try sending that again.`);
+    }
+  }
 
   // The stored transcript is text-only — note the attachment instead of
   // persisting base64 blobs into KV.
