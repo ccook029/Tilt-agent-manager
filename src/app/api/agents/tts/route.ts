@@ -1,14 +1,17 @@
 // ---------------------------------------------------------------------------
 // /api/agents/tts — natural voice for the employee chats.
 //
-// POST { text, agentId } → audio (wav or mp3)
+// GET  ?text=&agentId=      → audio, STREAMED (playback starts immediately;
+//                             this is what the Listen button uses)
+// POST { text, agentId, voiceId?, strict? } → audio, buffered (the picker's
+//                             Test button — strict surfaces provider errors)
 //
 // Provider ladder, best available first:
 //   1. ElevenLabs (ELEVENLABS_API_KEY set) — the most human voices.
 //   2. Gemini TTS (GEMINI_API_KEY, same key as the announcement renders).
 //   3. 501 → the client falls back to the browser voice.
 // Each employee gets a consistent voice picked from the provider's pool by
-// hashing their id, so Harper doesn't sound like Stockton.
+// hashing their id; picks made on /org/[id] (KV tts-voice-map) win.
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
 import { getVoiceMap } from "@/lib/tts-voices";
@@ -32,7 +35,9 @@ const ELEVEN_VOICES = [
   "AZnzlk1XvdvUeBnXmlld", // Domi
   "ErXwobaYiN019PkySvjV", // Antoni
 ];
-const ELEVEN_MODEL = process.env.ELEVENLABS_MODEL ?? "eleven_multilingual_v2";
+// Turbo: near-instant generation, quality close to multilingual v2. Set
+// ELEVENLABS_MODEL=eleven_multilingual_v2 to trade latency for polish.
+const ELEVEN_MODEL = process.env.ELEVENLABS_MODEL ?? "eleven_turbo_v2_5";
 
 function hashPick(agentId: string, pool: string[]): string {
   let hash = 0;
@@ -42,18 +47,19 @@ function hashPick(agentId: string, pool: string[]): string {
   return pool[hash % pool.length];
 }
 
+async function resolveElevenVoice(agentId: string, override?: string): Promise<string> {
+  const map = await getVoiceMap().catch(() => ({}) as Record<string, string>);
+  return override ?? map[agentId] ?? map["default"] ?? hashPick(agentId, ELEVEN_VOICES);
+}
+
+/** Buffered ElevenLabs call (Test button — full body so errors surface). */
 async function elevenLabsTts(
   text: string,
   agentId: string,
   key: string,
   voiceIdOverride?: string
 ): Promise<{ audio: NextResponse } | { error: string }> {
-  // Explicit override (the picker's Test button) wins, then a voice Chris
-  // assigned on /org/[id] (can be a cloned/premium voice), then the
-  // company-wide default, then a stable pick from the premade pool.
-  const map = await getVoiceMap().catch(() => ({}) as Record<string, string>);
-  const voiceId =
-    voiceIdOverride ?? map[agentId] ?? map["default"] ?? hashPick(agentId, ELEVEN_VOICES);
+  const voiceId = await resolveElevenVoice(agentId, voiceIdOverride);
   const res = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
     {
@@ -79,6 +85,36 @@ async function elevenLabsTts(
   };
 }
 
+/** Streaming ElevenLabs call — the response body is piped straight through,
+ * so the browser starts playing while the rest is still generating. */
+async function elevenLabsStream(
+  text: string,
+  agentId: string,
+  key: string
+): Promise<NextResponse | null> {
+  const voiceId = await resolveElevenVoice(agentId);
+  const res = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_128&optimize_streaming_latency=2`,
+    {
+      method: "POST",
+      headers: { "xi-api-key": key, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        model_id: ELEVEN_MODEL,
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      }),
+    }
+  );
+  if (!res.ok || !res.body) {
+    const detail = await res.text().catch(() => "");
+    console.error(`[tts] ElevenLabs stream ${res.status}: ${detail.slice(0, 300)}`);
+    return null;
+  }
+  return new NextResponse(res.body, {
+    headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" },
+  });
+}
+
 function pcmToWav(pcm: Buffer, sampleRate: number): Buffer {
   const header = Buffer.alloc(44);
   header.write("RIFF", 0);
@@ -95,6 +131,89 @@ function pcmToWav(pcm: Buffer, sampleRate: number): Buffer {
   header.write("data", 36);
   header.writeUInt32LE(pcm.length, 40);
   return Buffer.concat([header, pcm]);
+}
+
+/** Gemini TTS (buffered — the API returns the whole PCM clip). */
+async function geminiTts(text: string, agentId: string, key: string): Promise<NextResponse> {
+  try {
+    const res = await fetch(`${API_BASE}/models/${TTS_MODEL}:generateContent?key=${key}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: `Read this in a natural, warm, conversational voice — like a sharp colleague talking, at a brisk pace: ${text}`,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: hashPick(agentId, GEMINI_VOICES) },
+            },
+          },
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      console.error(`[tts] Gemini ${res.status}: ${detail.slice(0, 300)}`);
+      return NextResponse.json({ error: `TTS unavailable (${res.status})` }, { status: 502 });
+    }
+
+    const data = (await res.json()) as {
+      candidates?: {
+        content?: { parts?: { inlineData?: { mimeType?: string; data?: string } }[] };
+      }[];
+    };
+    const inline = data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData;
+    if (!inline?.data) {
+      return NextResponse.json({ error: "TTS returned no audio" }, { status: 502 });
+    }
+
+    const rate = Number(/rate=(\d+)/.exec(inline.mimeType ?? "")?.[1] ?? 24000);
+    const wav = pcmToWav(Buffer.from(inline.data, "base64"), rate);
+    return new NextResponse(new Uint8Array(wav), {
+      headers: { "Content-Type": "audio/wav", "Cache-Control": "no-store" },
+    });
+  } catch (err) {
+    console.error("[tts] failed:", err);
+    return NextResponse.json({ error: "TTS failed" }, { status: 500 });
+  }
+}
+
+// Streaming path — what the Listen button plays directly via <audio src>.
+export async function GET(request: NextRequest) {
+  const params = request.nextUrl.searchParams;
+  const text = params.get("text")?.trim().slice(0, 2600);
+  if (!text) {
+    return NextResponse.json({ error: "text is required" }, { status: 400 });
+  }
+  const agentId = params.get("agentId") ?? "default";
+
+  const elevenKey = process.env.ELEVENLABS_API_KEY;
+  if (elevenKey) {
+    try {
+      const streamed = await elevenLabsStream(text, agentId, elevenKey);
+      if (streamed) return streamed;
+    } catch (err) {
+      console.error("[tts] ElevenLabs stream failed:", err);
+    }
+  }
+
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) {
+    return NextResponse.json(
+      { error: "No TTS key set — using the browser voice instead." },
+      { status: 501 }
+    );
+  }
+  return geminiTts(text, agentId, geminiKey);
 }
 
 export async function POST(request: NextRequest) {
@@ -145,61 +264,5 @@ export async function POST(request: NextRequest) {
       { status: 501 }
     );
   }
-
-  try {
-    const res = await fetch(`${API_BASE}/models/${TTS_MODEL}:generateContent?key=${key}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: `Read this in a natural, warm, conversational voice — like a sharp colleague talking, at a brisk pace: ${text}`,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: hashPick(agentId, GEMINI_VOICES) },
-            },
-          },
-        },
-      }),
-    });
-
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      console.error(`[tts] Gemini ${res.status}: ${detail.slice(0, 300)}`);
-      return NextResponse.json(
-        { error: `TTS unavailable (${res.status})` },
-        { status: 502 }
-      );
-    }
-
-    const data = (await res.json()) as {
-      candidates?: {
-        content?: { parts?: { inlineData?: { mimeType?: string; data?: string } }[] };
-      }[];
-    };
-    const inline = data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData;
-    if (!inline?.data) {
-      return NextResponse.json({ error: "TTS returned no audio" }, { status: 502 });
-    }
-
-    const rate = Number(/rate=(\d+)/.exec(inline.mimeType ?? "")?.[1] ?? 24000);
-    const wav = pcmToWav(Buffer.from(inline.data, "base64"), rate);
-    return new NextResponse(new Uint8Array(wav), {
-      headers: {
-        "Content-Type": "audio/wav",
-        "Cache-Control": "no-store",
-      },
-    });
-  } catch (err) {
-    console.error("[tts] failed:", err);
-    return NextResponse.json({ error: "TTS failed" }, { status: 500 });
-  }
+  return geminiTts(text, agentId, key);
 }
