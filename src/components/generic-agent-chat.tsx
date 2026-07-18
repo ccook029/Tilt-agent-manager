@@ -73,7 +73,6 @@ async function fileToAttachment(file: File): Promise<Attachment | null> {
 // are cleaned for the ear: no markdown symbols, no code fences, assign blocks
 // become a short spoken note.
 // ---------------------------------------------------------------------------
-const VOICE_KEY = "tilt.chat.voice";
 // Playback speed for spoken replies (applies to both the natural voice and
 // the browser fallback).
 const SPEECH_RATE = 1.0;
@@ -221,7 +220,6 @@ export default function GenericAgentChat({
   const [messages, setMessages] = useState<Msg[]>([intro]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [voiceOn, setVoiceOn] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -273,13 +271,8 @@ export default function GenericAgentChat({
     setSpeechFor(null);
   }, [stopAllAudio]);
 
-  // Restore the voice preference; stop any speech when leaving the page.
-  useEffect(() => {
-    try {
-      setVoiceOn(localStorage.getItem(VOICE_KEY) === "1");
-    } catch {}
-    return stopAllAudio;
-  }, [stopAllAudio]);
+  // Stop any speech when leaving the page.
+  useEffect(() => stopAllAudio, [stopAllAudio]);
 
   // Fallback: the browser's built-in voice.
   const speakWithBrowser = useCallback((clean: string) => {
@@ -308,61 +301,42 @@ export default function GenericAgentChat({
     }, 10_000);
   }, []);
 
-  // Preferred: the natural server voice, per-employee. msgIndex marks which
-  // message's Listen button is active (null = auto-speak of a fresh reply).
+  // Preferred: the natural server voice, per-employee. The audio element
+  // points straight at the streaming GET endpoint, so playback starts as the
+  // first chunks arrive instead of waiting for the whole clip.
   const speak = useCallback(
-    (text: string, msgIndex: number | null = null) => {
+    (text: string, msgIndex: number) => {
       const clean = speakableText(text);
       if (!clean) return;
       const gen = ++speechGenRef.current;
       stopAllAudio();
       setSpeaking(true);
       setSpeechFor(msgIndex);
-      void (async () => {
-        try {
-          const res = await fetch("/api/agents/tts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: clean, agentId }),
-          });
-          if (!res.ok) throw new Error(`tts ${res.status}`);
-          const blob = await res.blob();
-          // Superseded by another click / Stop while we were generating?
-          if (speechGenRef.current !== gen) return;
-          const audio = new Audio(URL.createObjectURL(blob));
-          audio.playbackRate = SPEECH_RATE;
-          // Keep the pitch natural when sped up (default in modern browsers,
-          // set explicitly where supported).
-          if ("preservesPitch" in audio) audio.preservesPitch = true;
-          const done = () => {
-            if (speechGenRef.current === gen) {
-              setSpeaking(false);
-              setSpeechFor(null);
-            }
-            if (audio.src.startsWith("blob:")) URL.revokeObjectURL(audio.src);
-          };
-          audio.onended = done;
-          audio.onerror = done;
-          audioRef.current = audio;
-          await audio.play();
-        } catch {
-          // No key / quota / autoplay refusal — use the browser voice
-          // (unless a newer click already took over).
-          if (speechGenRef.current === gen) speakWithBrowser(clean);
+      const url = `/api/agents/tts?agentId=${encodeURIComponent(agentId)}&text=${encodeURIComponent(clean)}`;
+      const audio = new Audio(url);
+      audio.playbackRate = SPEECH_RATE;
+      // Keep the pitch natural if sped up (default in modern browsers, set
+      // explicitly where supported).
+      if ("preservesPitch" in audio) audio.preservesPitch = true;
+      const done = () => {
+        if (speechGenRef.current === gen) {
+          setSpeaking(false);
+          setSpeechFor(null);
         }
-      })();
+      };
+      audio.onended = done;
+      // Server error / no TTS key — use the browser voice (unless a newer
+      // click already took over).
+      audio.onerror = () => {
+        if (speechGenRef.current === gen) speakWithBrowser(clean);
+      };
+      audioRef.current = audio;
+      audio.play().catch(() => {
+        if (speechGenRef.current === gen) speakWithBrowser(clean);
+      });
     },
     [agentId, stopAllAudio, speakWithBrowser]
   );
-
-  const toggleVoice = () => {
-    const next = !voiceOn;
-    setVoiceOn(next);
-    if (!next) stopSpeaking();
-    try {
-      localStorage.setItem(VOICE_KEY, next ? "1" : "0");
-    } catch {}
-  };
 
   const api = useCallback(
     (payload: object) =>
@@ -415,7 +389,6 @@ export default function GenericAgentChat({
         typeof data.reply === "string" && data.reply.trim() ? data.reply : null;
       const reply = replyText ?? data.error ?? "(no response — try sending that again)";
       setMessages((m) => [...m, { role: "assistant", content: reply }]);
-      if (voiceOn && replyText) speak(replyText);
     } catch {
       setMessages((m) => [...m, { role: "assistant", content: "Network error — try again." }]);
     } finally {
@@ -442,15 +415,6 @@ export default function GenericAgentChat({
               ◼ Stop
             </button>
           )}
-          <button
-            onClick={toggleVoice}
-            title="Speak replies out loud"
-            className={`text-xs transition-colors ${
-              voiceOn ? "text-[#00d6ff] hover:text-[#7be9ff]" : "text-gray-600 hover:text-gray-300"
-            }`}
-          >
-            {voiceOn ? "🔊 Voice on" : "🔇 Voice off"}
-          </button>
           <button
             onClick={clear}
             className="text-xs text-gray-600 hover:text-gray-300 transition-colors"
