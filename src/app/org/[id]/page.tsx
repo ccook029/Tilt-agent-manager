@@ -64,6 +64,11 @@ interface RunLog {
   tokensUsed?: number;
 }
 
+/** "Dr. Rex Polymer" → "Rex", "Harper Slate" → "Harper". */
+function firstNameOf(name: string): string {
+  return name.replace(/^(dr|mr|ms|mrs)\.?\s+/i, "").split(" ")[0] || name;
+}
+
 function statusTone(status: string): string {
   if (status === "approved" || status === "shipped") return "text-emerald-400 border-emerald-900/50";
   if (status === "escalated") return "text-amber-400 border-amber-900/50";
@@ -191,12 +196,12 @@ export default function EmployeePage() {
             name={employee.name}
             greeting={
               isBoss && hasReports
-                ? `Hey — it's ${employee.name.split(" ")[0]}. Ask me about the team's work and I'll give you the high level first — then we can drill into whatever's worth it. When we land on something to do, I'll set it up so you can assign it in one click.`
-                : `Hey — it's ${employee.name.split(" ")[0]}. Ask me anything about my area, or talk through a piece of work before you assign it.`
+                ? `Hey — it's ${firstNameOf(employee.name)}. Ask me about the team's work and I'll give you the high level first — then we can drill into whatever's worth it. When we land on something to do, I'll set it up so you can assign it in one click.`
+                : `Hey — it's ${firstNameOf(employee.name)}. Ask me anything about my area, or talk through a piece of work before you assign it.`
             }
-            placeholder={`Message ${employee.name.split(" ")[0]}…`}
+            placeholder={`Message ${firstNameOf(employee.name)}…`}
           />
-          <VoicePicker agentId={id} firstName={employee.name.split(" ")[0]} />
+          <VoicePicker agentId={id} firstName={firstNameOf(employee.name)} />
         </>
       )}
 

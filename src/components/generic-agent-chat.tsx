@@ -392,9 +392,11 @@ export default function GenericAgentChat({
         images: sending.map((a) => ({ mediaType: a.mediaType, data: a.data })),
       });
       const data = await res.json().catch(() => ({}));
-      const reply = data.reply ?? data.error ?? "(no response)";
+      const replyText =
+        typeof data.reply === "string" && data.reply.trim() ? data.reply : null;
+      const reply = replyText ?? data.error ?? "(no response — try sending that again)";
       setMessages((m) => [...m, { role: "assistant", content: reply }]);
-      if (voiceOn && data.reply) speak(data.reply);
+      if (voiceOn && replyText) speak(replyText);
     } catch {
       setMessages((m) => [...m, { role: "assistant", content: "Network error — try again." }]);
     } finally {
