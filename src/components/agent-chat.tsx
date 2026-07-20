@@ -43,6 +43,36 @@ export interface AgentChatConfig {
   workingLabel: string;
 }
 
+// ---------------------------------------------------------------------------
+// Voice replies (Listen) — natural per-agent server voice with a browser
+// speech-synthesis fallback. Mirrors the generic employee chat so Sterling and
+// Penny read aloud the same way every other employee does.
+// ---------------------------------------------------------------------------
+const SPEECH_RATE = 1.0;
+
+function speakableText(text: string): string {
+  return text
+    .replace(/```json[\s\S]*?```/g, " ")
+    .replace(/```[\s\S]*?```/g, " — details on screen — ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^#+\s*/gm, "")
+    .replace(/[*_`>~|]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 2600);
+}
+
+function pickVoice(): SpeechSynthesisVoice | null {
+  const voices = window.speechSynthesis.getVoices().filter((v) => v.lang.startsWith("en"));
+  if (!voices.length) return null;
+  const prefer = ["Natural", "Google US English", "Samantha", "Aria", "Zira"];
+  for (const hint of prefer) {
+    const hit = voices.find((v) => v.name.includes(hint));
+    if (hit) return hit;
+  }
+  return voices.find((v) => v.default) ?? voices[0];
+}
+
 export default function AgentChat({ config }: { config: AgentChatConfig }) {
   const greetingMsg: ChatMessage = {
     role: "assistant",
@@ -59,6 +89,92 @@ export default function AgentChat({ config }: { config: AgentChatConfig }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Voice (Listen) — which message is speaking, plus playback plumbing.
+  const [speaking, setSpeaking] = useState(false);
+  const [speechFor, setSpeechFor] = useState<number | null>(null);
+  const keepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Generation counter: each speak()/stop bumps it so a superseded in-flight
+  // request abandons instead of playing over newer audio.
+  const speechGenRef = useRef(0);
+
+  const stopAllAudio = useCallback(() => {
+    window.speechSynthesis?.cancel();
+    if (keepaliveRef.current) clearInterval(keepaliveRef.current);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      if (audioRef.current.src.startsWith("blob:")) URL.revokeObjectURL(audioRef.current.src);
+      audioRef.current = null;
+    }
+  }, []);
+
+  const stopSpeaking = useCallback(() => {
+    speechGenRef.current++;
+    stopAllAudio();
+    setSpeaking(false);
+    setSpeechFor(null);
+  }, [stopAllAudio]);
+
+  // Stop any speech when leaving the page.
+  useEffect(() => stopAllAudio, [stopAllAudio]);
+
+  const speakWithBrowser = useCallback((clean: string) => {
+    if (!("speechSynthesis" in window)) {
+      setSpeaking(false);
+      setSpeechFor(null);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(clean);
+    const voice = pickVoice();
+    if (voice) utterance.voice = voice;
+    utterance.rate = SPEECH_RATE;
+    const done = () => {
+      setSpeaking(false);
+      setSpeechFor(null);
+      if (keepaliveRef.current) clearInterval(keepaliveRef.current);
+    };
+    utterance.onend = done;
+    utterance.onerror = done;
+    window.speechSynthesis.speak(utterance);
+    // Chrome stops long utterances after ~15s; a periodic resume() keeps it going.
+    keepaliveRef.current = setInterval(() => {
+      if (window.speechSynthesis.speaking) window.speechSynthesis.resume();
+      else if (keepaliveRef.current) clearInterval(keepaliveRef.current);
+    }, 10_000);
+  }, []);
+
+  const speak = useCallback(
+    (text: string, msgIndex: number) => {
+      const clean = speakableText(text);
+      if (!clean) return;
+      const gen = ++speechGenRef.current;
+      stopAllAudio();
+      setSpeaking(true);
+      setSpeechFor(msgIndex);
+      const url = `/api/agents/tts?agentId=${encodeURIComponent(config.agent)}&text=${encodeURIComponent(clean)}`;
+      const audio = new Audio(url);
+      audio.playbackRate = SPEECH_RATE;
+      if ("preservesPitch" in audio) audio.preservesPitch = true;
+      const done = () => {
+        if (speechGenRef.current === gen) {
+          setSpeaking(false);
+          setSpeechFor(null);
+        }
+      };
+      audio.onended = done;
+      // Server error / no TTS key — fall back to the browser voice unless a
+      // newer click already took over.
+      audio.onerror = () => {
+        if (speechGenRef.current === gen) speakWithBrowser(clean);
+      };
+      audioRef.current = audio;
+      audio.play().catch(() => {
+        if (speechGenRef.current === gen) speakWithBrowser(clean);
+      });
+    },
+    [config.agent, stopAllAudio, speakWithBrowser]
+  );
 
   const loadOpen = useCallback(async () => {
     try {
@@ -291,28 +407,6 @@ export default function AgentChat({ config }: { config: AgentChatConfig }) {
         </button>
       </div>
 
-      {/* Open questions awaiting Chris */}
-      {open.length > 0 && (
-        <div className="border-b border-gray-800 bg-amber-950/20 p-3 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
-              {open.length} question{open.length > 1 ? "s" : ""} need your call
-            </p>
-            <a
-              href="/api/accounting/questions"
-              download
-              title="Download all open questions as Excel — fill in YOUR ANSWER and upload it back with the 📎 to record everything at once"
-              className="text-[11px] px-2.5 py-1 rounded-md bg-amber-600/20 border border-amber-700/50 text-amber-300 hover:bg-amber-600/30 transition-colors"
-            >
-              ⬇ Excel
-            </a>
-          </div>
-          {open.map((e) => (
-            <EscalationRow key={e.id} esc={e} onAnswer={answer} busy={answering === e.id} />
-          ))}
-        </div>
-      )}
-
       {/* Messages */}
       <div ref={scrollRef} className="h-[360px] overflow-y-auto p-4 space-y-4 chat-scroll">
         {messages.map((msg, i) => (
@@ -325,8 +419,26 @@ export default function AgentChat({ config }: { config: AgentChatConfig }) {
               }`}
             >
               <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
-              <div className="text-[10px] text-gray-600 mt-2">
-                {new Date(msg.timestamp).toLocaleTimeString()}
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-[10px] text-gray-600">
+                  {new Date(msg.timestamp).toLocaleTimeString()}
+                </span>
+                {msg.role === "assistant" && msg.content.trim() && (
+                  <button
+                    onClick={() =>
+                      speechFor === i && speaking ? stopSpeaking() : speak(msg.content, i)
+                    }
+                    title={speechFor === i && speaking ? "Stop" : "Read this reply out loud"}
+                    aria-label={speechFor === i && speaking ? "Stop" : "Read this reply out loud"}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
+                      speechFor === i && speaking
+                        ? "border-amber-700/60 bg-amber-950/40 text-amber-400 hover:text-amber-300"
+                        : "border-gray-700 bg-gray-900/60 text-gray-400 hover:border-[#00d6ff]/50 hover:text-[#00d6ff]"
+                    }`}
+                  >
+                    {speechFor === i && speaking ? "◼ Stop" : "▶ Listen"}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -413,6 +525,29 @@ export default function AgentChat({ config }: { config: AgentChatConfig }) {
           </button>
         </div>
       </div>
+
+      {/* Open questions awaiting Chris — kept BELOW the chat so the conversation
+          leads and his decision queue sits underneath it. */}
+      {open.length > 0 && (
+        <div className="border-t border-gray-800 bg-amber-950/20 p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+              {open.length} question{open.length > 1 ? "s" : ""} need your call
+            </p>
+            <a
+              href="/api/accounting/questions"
+              download
+              title="Download all open questions as Excel — fill in YOUR ANSWER and upload it back with the 📎 to record everything at once"
+              className="text-[11px] px-2.5 py-1 rounded-md bg-amber-600/20 border border-amber-700/50 text-amber-300 hover:bg-amber-600/30 transition-colors"
+            >
+              ⬇ Excel
+            </a>
+          </div>
+          {open.map((e) => (
+            <EscalationRow key={e.id} esc={e} onAnswer={answer} busy={answering === e.id} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
