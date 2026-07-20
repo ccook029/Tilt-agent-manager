@@ -214,13 +214,18 @@ export default function AgentChat({ config }: { config: AgentChatConfig }) {
       if (data.dispatched) {
         extras.push(`⚙️ Penny is now running "${data.dispatched}" — results will appear in her Report History shortly.`);
       }
+      const body = [data.reply ?? data.error ?? "", ...extras]
+        .filter(Boolean)
+        .join("\n\n");
       setMessages((p) => [
         ...p,
         {
           role: "assistant",
-          content: [data.reply ?? data.error ?? "Something went wrong.", ...extras]
-            .filter(Boolean)
-            .join("\n\n"),
+          // Never render an empty bubble — if the payload came back blank, say so
+          // instead of showing "nothing" (which reads as a broken chat).
+          content:
+            body.trim() ||
+            "Hmm — I didn't get a response back that time. Try sending that again.",
           timestamp: new Date().toISOString(),
         },
       ]);
