@@ -7,8 +7,8 @@
 // host). No Claude call, no email — returns instantly. Safe to delete after setup.
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
-import { fetchBooksSnapshot, isMcpConfigured } from "@/lib/zoho-books";
-import { getAccessToken } from "@/lib/zoho";
+import { isMcpConfigured } from "@/lib/zoho-books";
+import { checkZohoHealth } from "@/lib/zoho-health";
 import { isInboxConfigured, fetchInteracDetailed } from "@/lib/email-inbox";
 import { guardAccountingOwner } from "@/lib/os-identity";
 
@@ -35,24 +35,14 @@ export async function GET(request: NextRequest) {
     ZOHO_BOOKS_MCP_configured: isMcpConfigured(),
   };
 
-  // Step 1: can we even mint an access token from the refresh token?
-  let tokenStatus = "ok";
-  try {
-    const t = await getAccessToken();
-    tokenStatus = t ? "ok (access token obtained)" : "empty token returned";
-  } catch (err) {
-    tokenStatus = `FAILED — ${err instanceof Error ? err.message : String(err)}`;
-  }
+  // Structured Zoho health: token mint + per-product (Books / Inventory / Sheet)
+  // authorization + which orgs the token can see, with a one-line verdict that
+  // distinguishes a dead token from a scope/wrong-login denial.
+  const zoho = await checkZohoHealth().catch((err) => ({
+    verdict: `🔴 Health check crashed: ${err instanceof Error ? err.message : String(err)}`,
+  }));
 
-  // Step 2: the actual Books snapshot, which embeds each endpoint's raw error.
-  let snapshot = "";
-  try {
-    snapshot = await fetchBooksSnapshot();
-  } catch (err) {
-    snapshot = `fetchBooksSnapshot threw: ${err instanceof Error ? err.message : String(err)}`;
-  }
-
-  // Step 3: email inbox (Interac e-Transfer notifications) connection test.
+  // Email inbox (Interac e-Transfer notifications) connection test.
   let inbox: Record<string, unknown>;
   if (!isInboxConfigured()) {
     inbox = {
@@ -94,7 +84,7 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(
-    { deploy, env, tokenStatus, inbox, snapshot },
+    { deploy, verdict: zoho.verdict, zoho, env, inbox },
     {
       headers: {
         "Content-Type": "application/json",
