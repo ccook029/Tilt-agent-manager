@@ -20,6 +20,24 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 
+// Interac's notification emails are HTML; some carry no text/plain part, which
+// left `parsed.text` empty and dropped the "Message:" memo. Derive a readable
+// plain-text body from the HTML as a fallback (block tags → line breaks).
+function htmlToText(html: string): string {
+  if (!html) return "";
+  return html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|td|th|table|h[1-6]|li)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#(\d+);/g, (_m, d: string) => String.fromCharCode(Number(d)))
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n[ \t]*\n+/g, "\n")
+    .trim();
+}
+
 export interface InteracNotification {
   date: string; // YYYY-MM-DD
   name?: string;
@@ -133,7 +151,13 @@ export async function fetchInteracDetailed(opts?: {
         try {
           const parsed = msg.source ? await simpleParser(msg.source) : null;
           const subject = parsed?.subject ?? msg.envelope?.subject ?? "";
-          const text = (parsed?.text ?? "").slice(0, 3000);
+          // Prefer the plain-text body; fall back to text extracted from HTML so
+          // the "Message:" memo is captured even on HTML-only notifications.
+          const rawBody =
+            parsed?.text && parsed.text.trim()
+              ? parsed.text
+              : htmlToText(parsed?.html || "");
+          const text = rawBody.slice(0, 3000);
           const haystack = `${subject}\n${text}`;
 
           const amountMatch = haystack.match(/\$\s?([\d,]+\.\d{2})/);
