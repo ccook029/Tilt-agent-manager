@@ -156,15 +156,22 @@ export async function runCategorizationBatch(opts?: {
     accounts.map((a) => [a.account_name.trim().toLowerCase(), a])
   );
 
-  // Deterministic pre-match: for each money-in line, find the Interac email
-  // with the same amount within ±5 days. A unique hit is annotated directly on
-  // the transaction so Penny doesn't have to hunt for it.
+  // Deterministic pre-match: for each bank line, find the Interac email with the
+  // same amount within ±5 days AND the same money direction (a MONEY IN line
+  // pairs with a "received" notification; a MONEY OUT line with a "sent" one —
+  // e.g. an e-Transfer to a supplier for fuel). A unique hit is annotated right
+  // on the transaction, carrying the counterparty name AND the sender's memo
+  // ("Jer fuel - Jan.07"), which is often the whole answer to the category.
   const emailMatchFor = (t: BooksBankTxn): InteracNotification | null => {
-    if (txnDirection(t) !== "in" || interac.length === 0) return null;
+    if (interac.length === 0) return null;
+    const dir = txnDirection(t);
+    const wantDir =
+      dir === "in" ? "received" : dir === "out" ? "sent" : null;
+    if (!wantDir) return null;
     const txnTime = new Date(t.date).getTime();
     const hits = interac.filter(
       (n) =>
-        n.direction === "received" &&
+        n.direction === wantDir &&
         n.amount != null &&
         Math.abs(n.amount - (t.amount ?? 0)) < 0.005 &&
         n.date &&
@@ -175,11 +182,14 @@ export async function runCategorizationBatch(opts?: {
 
   const txnBlock = uncategorized.items
     .map((t) => {
-      const match = emailMatchFor(t);
-      const matchNote = match
-        ? ` | EMAIL MATCH: from "${match.name ?? "?"}"${match.message ? ` — message: "${match.message}"` : ""}`
-        : "";
       const dir = txnDirection(t);
+      const match = emailMatchFor(t);
+      const counterparty = match
+        ? `${match.direction === "sent" ? "to" : "from"} "${match.name ?? "?"}"`
+        : "";
+      const matchNote = match
+        ? ` | EMAIL MATCH: ${counterparty}${match.message ? ` — message: "${match.message}"` : ""}`
+        : "";
       const dirLabel =
         dir === "in" ? "MONEY IN" : dir === "out" ? "MONEY OUT" : "DIRECTION UNKNOWN — do not categorize; escalate";
       return `- id=${t.transaction_id} | ${t.date} | $${(t.amount ?? 0).toFixed(2)} | ${dirLabel} | ${t.payee ?? "—"} | ${(t.description ?? "").slice(0, 80)} | bank=${t.account_name ?? "?"}${matchNote}`;
@@ -203,7 +213,7 @@ export async function runCategorizationBatch(opts?: {
     "",
     ...(interac.length > 0 ? [renderInteracBlock(interac), ""] : []),
     `## Uncategorized Transactions to process (${uncategorized.items.length} of ~${uncategorized.total} total)`,
-    "Lines marked EMAIL MATCH have been deterministically matched to an Interac notification by amount + date — treat the matched name/message as the payee.",
+    "Lines marked EMAIL MATCH were deterministically matched to an Interac e-Transfer notification by amount + date + direction. Treat the matched name as the payee/payer, and treat the matched message memo (e.g. \"Jer fuel\", \"stick payment\") as a STRONG hint for the category — it's the counterparty's own description of what the money was for. If a memo makes the category obvious, use it and don't escalate.",
     txnBlock,
   ].join("\n");
 
