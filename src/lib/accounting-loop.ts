@@ -388,10 +388,25 @@ async function runAgentChat(
     systemPrompt,
     userMessage,
     model: config.model,
-    maxTokens: 2560,
+    maxTokens: 4096,
     temperature: 0.3,
   });
   const result = parseControlBlock(res.text);
+
+  // Safety net: the reply must never be empty. It can come back blank when the
+  // model returns ONLY the fenced control block (no prose) — stripping it then
+  // leaves nothing, and the chat renders an empty bubble ("no response"). Fall
+  // back to a plain-English acknowledgement of whatever action it took.
+  if (!result.reply.trim()) {
+    console.warn(
+      `[accounting-loop] ${agent} returned an empty reply (raw text length ${res.text.length}) — using fallback.`
+    );
+    result.reply = result.dispatch
+      ? `On it — I've put Penny on "${result.dispatch}". Results will land in her Report History, and any new questions right here, in a minute or two.`
+      : result.resolutions.length > 0
+        ? `Recorded — that's standing policy now, so I won't ask again.`
+        : "Sorry — I didn't get that one out cleanly. Give me a touch more to go on and I'll take another run at it.";
+  }
 
   // Persist the exchange, then compact if the transcript has grown too long.
   const now = new Date().toISOString();
