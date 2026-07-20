@@ -10,6 +10,7 @@ import CompanyTree, {
 } from "@/components/team-grid";
 import TiltCard from "@/components/tilt-card";
 import Hero from "@/components/hero";
+import DailyBriefPanel from "@/components/daily-brief";
 import ScrollReveal from "@/components/scroll-reveal";
 import { Stagger, StaggerItem } from "@/components/motion-primitives";
 
@@ -87,6 +88,11 @@ export default function Home() {
 
       {/* Cinematic hero */}
       <Hero />
+
+      {/* Daily Brief — pressing items + a standup line per employee */}
+      <ScrollReveal>
+        <DailyBriefPanel />
+      </ScrollReveal>
 
       {/* Key Metrics */}
       <ScrollReveal>
