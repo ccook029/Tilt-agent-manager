@@ -8,8 +8,11 @@
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useState } from "react";
 
+// Zoho Sheet has no ".fullaccess.all" scope — the API Console rejects it as
+// invalid. Sheet uses granular dataAPI scopes (READ for the stick tabs,
+// UPDATE for the custom-order row writes).
 const SCOPES =
-  "ZohoBooks.fullaccess.all,ZohoInventory.fullaccess.all,ZohoSheet.fullaccess.all";
+  "ZohoBooks.fullaccess.all,ZohoInventory.fullaccess.all,ZohoSheet.dataAPI.READ,ZohoSheet.dataAPI.UPDATE";
 const CONSOLE_URL = "https://api-console.zoho.com";
 
 type Status = {
