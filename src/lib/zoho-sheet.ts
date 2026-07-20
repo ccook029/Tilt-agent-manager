@@ -16,7 +16,7 @@
 //   ZOHO_SHEET_DOMAIN — Sheet API domain (defaults based on ZOHO_DOMAIN)
 // ---------------------------------------------------------------------------
 
-import { getAccessToken, getEnvOrThrow } from "./zoho";
+import { getAccessToken, getEnvOrThrow, invalidateTokenCache } from "./zoho";
 
 // ---- Types ----------------------------------------------------------------
 
@@ -105,12 +105,13 @@ const CUSTOM_TABS = ["Custom Player Sticks", "Custom Goalie Sticks"];
  */
 export async function fetchSheetRows(worksheetName: string): Promise<SheetRow[]> {
   const resourceId = getEnvOrThrow("ZOHO_SHEET_RESOURCE_ID");
-  const token = await getAccessToken();
+  let token = await getAccessToken();
   const sheetBase = getSheetApiBase();
 
   const allRows: SheetRow[] = [];
   let startIndex = 1;
   const batchSize = 1000;
+  let retriedAuth = false;
 
   while (true) {
     const url = new URL(`${sheetBase}/${resourceId}`);
@@ -125,6 +126,16 @@ export async function fetchSheetRows(worksheetName: string): Promise<SheetRow[]>
         Authorization: `Zoho-oauthtoken ${token}`,
       },
     });
+
+    // A cached access token can be silently invalidated by other minting
+    // (Zoho keeps only ~10 live access tokens per refresh token). One
+    // re-mint + retry turns that from a failed agent run into a blip.
+    if ((res.status === 401 || res.status === 403) && !retriedAuth) {
+      retriedAuth = true;
+      await invalidateTokenCache();
+      token = await getAccessToken();
+      continue;
+    }
 
     if (!res.ok) {
       const body = await res.text();
