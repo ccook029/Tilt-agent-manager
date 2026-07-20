@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
   try {
     // Swap in the new token, then force a fresh mint and confirm it works.
-    await exchangeAuthCodeForRefreshToken(code);
+    const refreshToken = await exchangeAuthCodeForRefreshToken(code);
     await invalidateTokenCache();
     const status = await checkConnection();
     if (!status.connected) {
@@ -77,7 +77,10 @@ export async function POST(request: NextRequest) {
         { status: 502 }
       );
     }
-    return NextResponse.json({ ok: true, connected: true });
+    // The token is returned so the owner can copy it into tiltweb's env —
+    // tiltweb holds its own ZOHO_REFRESH_TOKEN for sheet writes + invoices,
+    // and a revocation kills both apps at once. Owner-gated route.
+    return NextResponse.json({ ok: true, connected: true, refreshToken });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ ok: false, error: message }, { status: 400 });

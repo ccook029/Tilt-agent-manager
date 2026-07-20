@@ -24,7 +24,7 @@ export default function ZohoReconnectPage() {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<
-    { ok: boolean; message: string } | null
+    { ok: boolean; message: string; token?: string } | null
   >(null);
   const [copied, setCopied] = useState(false);
 
@@ -61,6 +61,7 @@ export default function ZohoReconnectPage() {
           ok: true,
           message:
             "Zoho is reconnected and verified. Books, Inventory, and the stick Sheet are live again — tell Sterling to put Penny back on the categorization pass.",
+          token: typeof data.refreshToken === "string" ? data.refreshToken : undefined,
         });
         setCode("");
         await loadStatus();
@@ -194,6 +195,31 @@ export default function ZohoReconnectPage() {
           }`}
         >
           {result.message}
+          {result.ok && result.token && (
+            <div className="mt-4 border-t border-green-500/20 pt-4">
+              <p className="font-semibold text-green-100">
+                One more step — the website uses its own copy of this token:
+              </p>
+              <p className="mt-1 text-green-200/80">
+                Copy the new refresh token below into Vercel →{" "}
+                <span className="font-semibold">tiltweb</span> → Settings →
+                Environment Variables → <code>ZOHO_REFRESH_TOKEN</code>, then
+                redeploy tiltweb. That fixes the custom-order sheet writes and
+                retailer invoices on the website side.
+              </p>
+              <div className="mt-3 flex items-stretch gap-2">
+                <code className="flex-1 overflow-x-auto whitespace-nowrap rounded-md border border-green-500/30 bg-black/40 px-3 py-2 text-xs text-green-100">
+                  {result.token}
+                </code>
+                <button
+                  onClick={() => void navigator.clipboard.writeText(result.token ?? "")}
+                  className="shrink-0 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-100 hover:bg-green-500/20"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
