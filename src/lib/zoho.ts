@@ -31,6 +31,10 @@ interface CachedToken {
 }
 
 const TOKEN_CACHE_KEY = "zoho-access-token-cache";
+// The long-lived refresh token, stored in KV so it can be rotated from the
+// in-app "Reconnect Zoho" page WITHOUT editing Vercel env vars or redeploying.
+// A KV value here overrides ZOHO_REFRESH_TOKEN; the env var is the seed/fallback.
+const REFRESH_TOKEN_KEY = "zoho-refresh-token";
 
 let cachedToken: CachedToken | null = null;
 let inflight: Promise<string> | null = null;
@@ -39,6 +43,101 @@ export function getEnvOrThrow(name: string): string {
   const val = process.env[name];
   if (!val) throw new Error(`${name} env var is not set`);
   return val;
+}
+
+/**
+ * The active refresh token: a KV-stored one (set via the Reconnect page) wins,
+ * otherwise the ZOHO_REFRESH_TOKEN env var. Not memory-cached — it's read only
+ * ~once per hour (when the access token is minted), and skipping the cache means
+ * a reconnect takes effect instantly across every warm serverless instance.
+ */
+export async function getRefreshToken(): Promise<string> {
+  try {
+    const stored = await kv.get<string>(REFRESH_TOKEN_KEY);
+    if (stored) return stored;
+  } catch {
+    /* KV optional — fall back to env */
+  }
+  const env = process.env.ZOHO_REFRESH_TOKEN;
+  if (env) return env;
+  throw new Error(
+    "No Zoho refresh token set — reconnect Zoho at /zoho/reconnect (or set ZOHO_REFRESH_TOKEN)."
+  );
+}
+
+/** Where the active refresh token is coming from — for the status display. */
+export async function getRefreshTokenSource(): Promise<"kv" | "env" | "none"> {
+  try {
+    if (await kv.get<string>(REFRESH_TOKEN_KEY)) return "kv";
+  } catch {
+    /* KV optional */
+  }
+  return process.env.ZOHO_REFRESH_TOKEN ? "env" : "none";
+}
+
+/** Persist a new refresh token to KV and drop the stale access-token cache. */
+export async function setRefreshToken(token: string): Promise<void> {
+  await kv.set(REFRESH_TOKEN_KEY, token.trim());
+  await invalidateTokenCache();
+}
+
+/**
+ * Exchange a one-time authorization/grant code (from the Zoho API Console's
+ * Self Client "Generate Code", or an OAuth redirect) for a permanent refresh
+ * token, and store it. Self-client codes need no redirect_uri. Also seeds the
+ * access-token cache from the same response so the next call is instant.
+ */
+export async function exchangeAuthCodeForRefreshToken(
+  code: string
+): Promise<string> {
+  const clientId = getEnvOrThrow("ZOHO_CLIENT_ID");
+  const clientSecret = getEnvOrThrow("ZOHO_CLIENT_SECRET");
+  const accountsUrl =
+    process.env.ZOHO_ACCOUNTS_URL ?? "https://accounts.zoho.com";
+
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    client_id: clientId,
+    client_secret: clientSecret,
+    code: code.trim(),
+  });
+  // A redirect_uri is only required when the code came from a redirect-based
+  // client; harmless to include if configured, omitted for Self Client codes.
+  if (process.env.ZOHO_REDIRECT_URI) {
+    body.set("redirect_uri", process.env.ZOHO_REDIRECT_URI);
+  }
+
+  const res = await fetch(`${accountsUrl}/oauth/v2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    refresh_token?: string;
+    access_token?: string;
+    expires_in?: number;
+    error?: string;
+  };
+
+  if (!res.ok || data.error || !data.refresh_token) {
+    throw new Error(
+      `Zoho code exchange failed (${data.error ?? res.status}). Grant codes expire within minutes — generate a fresh one and make sure it includes the ZohoBooks / ZohoInventory / ZohoSheet scopes.`
+    );
+  }
+
+  await setRefreshToken(data.refresh_token);
+  if (data.access_token && data.expires_in) {
+    cachedToken = {
+      accessToken: data.access_token,
+      expiresAt: Date.now() + data.expires_in * 1000,
+    };
+    try {
+      await kv.set(TOKEN_CACHE_KEY, cachedToken);
+    } catch {
+      /* KV optional */
+    }
+  }
+  return data.refresh_token;
 }
 
 function isValid(tok: CachedToken | null): tok is CachedToken {
@@ -79,7 +178,7 @@ async function acquireToken(): Promise<string> {
 
   const clientId = getEnvOrThrow("ZOHO_CLIENT_ID");
   const clientSecret = getEnvOrThrow("ZOHO_CLIENT_SECRET");
-  const refreshToken = getEnvOrThrow("ZOHO_REFRESH_TOKEN");
+  const refreshToken = await getRefreshToken();
   const accountsUrl =
     process.env.ZOHO_ACCOUNTS_URL ?? "https://accounts.zoho.com";
 
@@ -99,7 +198,7 @@ async function acquireToken(): Promise<string> {
     cachedToken = null;
     throw new Error(
       `Zoho OAuth token refresh failed (${res.status}): ${body}. ` +
-        "The refresh token may be expired or revoked — regenerate it in the Zoho API Console."
+        "The refresh token may be expired or revoked — reconnect Zoho at /zoho/reconnect (2 minutes, no redeploy)."
     );
   }
 
@@ -113,7 +212,7 @@ async function acquireToken(): Promise<string> {
     cachedToken = null;
     throw new Error(
       `Zoho OAuth error: ${data.error}. ` +
-        "The refresh token may be expired or revoked — regenerate it in the Zoho API Console."
+        "The refresh token may be expired or revoked — reconnect Zoho at /zoho/reconnect (2 minutes, no redeploy)."
     );
   }
 

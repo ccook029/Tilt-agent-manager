@@ -148,9 +148,18 @@ function AnalystTab() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-gray-500">
-        Talk to Sterling about strategy, projections, and reports.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-gray-500">
+          Talk to Sterling about strategy, projections, and reports.
+        </p>
+        <Link
+          href="/zoho/reconnect"
+          className="text-xs text-gray-500 transition-colors hover:text-[#00d6ff]"
+          title="Refresh the Zoho connection if agents report auth / 401 errors"
+        >
+          Reconnect Zoho ↗
+        </Link>
+      </div>
 
       <div className="flex flex-wrap gap-2">
         {REPORTS.map((r) => (
