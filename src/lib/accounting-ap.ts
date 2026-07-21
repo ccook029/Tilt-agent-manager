@@ -22,7 +22,9 @@ import {
   findOrCreateVendor,
   createBill,
   createExpense,
+  fetchRecentPayables,
   type BooksAccount,
+  type ExistingPayable,
 } from "./zoho-books";
 import { isInboxConfigured, fetchInteracNotifications } from "./email-inbox";
 
@@ -42,6 +44,8 @@ export interface ApProposal {
   paidVia?: string; // e.g. "e-Transfer 2026-07-21"
   confidence: "high" | "medium" | "low";
   rationale: string;
+  /** Set when this looks like it's already in Zoho — a short description of the match. */
+  duplicateOf?: string;
   status: "proposed" | "created" | "rejected" | "error";
   zohoId?: string;
   zohoNumber?: string;
@@ -121,6 +125,33 @@ function parseJson(text: string): Record<string, unknown> | null {
   }
 }
 
+// ---- Duplicate detection --------------------------------------------------
+const digitsOnly = (s?: string) => (s ?? "").replace(/\D/g, "");
+const vendorKey = (s?: string) => (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** Does this proposal already exist in Zoho? Matches $ + invoice number, or
+ *  $ + date + a similar vendor name (catches "Scott Brown" vs "Scotty Brown"). */
+function matchExisting(
+  p: { amount: number; reference?: string; vendor: string; date: string },
+  existing: ExistingPayable[]
+): ExistingPayable | null {
+  for (const e of existing) {
+    if (Math.abs(e.amount - p.amount) > 0.01) continue;
+    const pref = digitsOnly(p.reference);
+    const eref = digitsOnly(e.reference);
+    if (pref && eref && pref === eref) return e; // same $ + same invoice number
+    const pv = vendorKey(p.vendor);
+    const ev = vendorKey(e.vendor);
+    const vendorClose = !!pv && !!ev && (pv.includes(ev) || ev.includes(pv));
+    if (e.date === p.date && vendorClose) return e; // same $ + date + similar vendor
+  }
+  return null;
+}
+
+function describePayable(e: ExistingPayable): string {
+  return `${e.type} ${e.number || "(no #)"} — ${e.vendor || "?"}, $${e.amount.toFixed(2)}, ${e.date}`;
+}
+
 function errorProposal(doc: InboxDocument, error: string): ApProposal {
   return {
     id: `ap-${doc.id}`,
@@ -173,13 +204,14 @@ export async function buildApProposals(opts?: { limit?: number }): Promise<{
   skipped: string[];
 }> {
   const limit = opts?.limit ?? 5;
-  const [inbox, accounts, interac, existing] = await Promise.all([
+  const [inbox, accounts, interac, existing, payables] = await Promise.all([
     fetchInboxDocuments({ max: 50 }),
     fetchChartOfAccounts().catch(() => [] as BooksAccount[]),
     isInboxConfigured()
       ? fetchInteracNotifications({ max: 60 }).catch(() => [])
       : Promise.resolve([]),
     loadProposals(),
+    fetchRecentPayables().catch(() => [] as ExistingPayable[]),
   ]);
 
   const done = new Set(
@@ -232,7 +264,14 @@ export async function buildApProposals(opts?: { limit?: number }): Promise<{
           : undefined,
       });
       const parsed = parseJson(res.text);
-      fresh.push(parsed ? toProposal(doc, parsed) : errorProposal(doc, "Couldn't parse the extraction"));
+      if (parsed) {
+        const prop = toProposal(doc, parsed);
+        const dup = matchExisting(prop, payables);
+        if (dup) prop.duplicateOf = describePayable(dup);
+        fresh.push(prop);
+      } else {
+        fresh.push(errorProposal(doc, "Couldn't parse the extraction"));
+      }
     } catch (e) {
       fresh.push(errorProposal(doc, e instanceof Error ? e.message : String(e)));
     }
@@ -250,11 +289,25 @@ export async function buildApProposals(opts?: { limit?: number }): Promise<{
 
 // ---- Approve / reject -----------------------------------------------------
 
-export async function approveProposal(id: string): Promise<ApProposal> {
+export async function approveProposal(id: string, force = false): Promise<ApProposal> {
   const all = await loadProposals();
   const p = all.find((x) => x.id === id);
   if (!p) throw new Error("Proposal not found");
   if (p.status === "created") return p;
+
+  // Duplicate guard: don't book something already in Zoho unless Chris forces it.
+  if (!force) {
+    const payables = await fetchRecentPayables().catch(() => [] as ExistingPayable[]);
+    const dup = matchExisting(p, payables);
+    if (dup) {
+      p.duplicateOf = describePayable(dup);
+      p.status = "proposed";
+      p.error = undefined;
+      await saveProposals(all);
+      return p; // blocked — the UI shows the warning + a "Create anyway" action
+    }
+    p.duplicateOf = undefined;
+  }
 
   try {
     const accounts = await fetchChartOfAccounts();
