@@ -263,6 +263,273 @@ async function shaftRailsSvg(W: number, H: number): Promise<Buffer | null> {
   );
 }
 
+// ---------------------------------------------------------------------------
+// AMBASSADOR graphic — deterministic, code-composited, same rationale as the
+// partner card: the image model kept drifting (wrong blues, invented TILT
+// wordmarks, and in one case an entirely invented player). Now the REAL photo
+// is placed untouched in a framed panel, every word is typeset in code in the
+// exact brand cyan, and the TILT marks are stamped as fixed overlays. The only
+// AI involvement is an optional, verified competitor-logo blur on the photo
+// (see blurCompetitorMarks in generate.ts) BEFORE it reaches this composer.
+// ---------------------------------------------------------------------------
+
+export type AmbassadorGraphicInput = {
+  /** Player name — typeset huge, stacked into lines. */
+  name: string;
+  /** Team / location line under the name (optional). */
+  subtitle?: string | null;
+  /** The player's REAL photo bytes — shown as-is, never regenerated. */
+  photo: Buffer;
+  width?: number;
+  height?: number;
+};
+
+/** Diagonal brushed-silver ribbons across the top-left + bottom-right corners. */
+function ribbonSvg(W: number, H: number): Buffer {
+  const t = Math.round(W * 0.045);
+  const c1 = Math.round(W * 0.22);
+  const c2 = Math.round(W * 0.26);
+  return Buffer.from(
+    `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
+      `<defs><linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">` +
+      `<stop offset="0" stop-color="#eef1f4"/>` +
+      `<stop offset="0.45" stop-color="#8d949c"/>` +
+      `<stop offset="0.7" stop-color="#d9dde2"/>` +
+      `<stop offset="1" stop-color="#f4f6f8"/>` +
+      `</linearGradient></defs>` +
+      `<polygon points="0,${c1} ${c1},0 ${c1 + t},0 0,${c1 + t}" fill="url(#metal)"/>` +
+      `<polygon points="${W},${H - c2} ${W - c2},${H} ${W - c2 - t},${H} ${W},${H - c2 - t}" fill="url(#metal)"/>` +
+      `</svg>`,
+  );
+}
+
+/** Stack a name into 1–3 display lines (greedy word packing, ~12 chars/line). */
+function nameLines(name: string): string[] {
+  const words = name.toUpperCase().trim().split(/\s+/);
+  const lines: string[] = [];
+  for (const w of words) {
+    const last = lines[lines.length - 1];
+    if (last !== undefined && (last + " " + w).length <= 12) {
+      lines[lines.length - 1] = `${last} ${w}`;
+    } else {
+      lines.push(w);
+    }
+  }
+  return lines.slice(0, 3);
+}
+
+export async function composeAmbassadorGraphic(
+  input: AmbassadorGraphicInput,
+): Promise<Buffer> {
+  const W = input.width ?? 1080;
+  const H = input.height ?? 1350;
+  const cyan = BRAND.colors.cyan;
+
+  const base = await sharp(Buffer.from(backgroundSvg(W, H))).png().toBuffer();
+  const composites: sharp.OverlayOptions[] = [
+    { input: Buffer.from(checkerSvg(W, H)), left: 0, top: 0 },
+    { input: ribbonSvg(W, H), left: 0, top: 0 },
+  ];
+
+  // --- Top: TILT wordmark on a dark plate (same treatment as before). ---
+  const logo = await loadLogo();
+  let contentTop = Math.round(H * 0.13);
+  if (logo) {
+    const logoW = Math.round(W * 0.42);
+    const logoBuf = await sharp(logo, { density: 300 }).resize({ width: logoW }).png().toBuffer();
+    const meta = await sharp(logoBuf).metadata();
+    const logoH = meta.height ?? Math.round(logoW / 8);
+    const padX = Math.round(logoW * 0.12);
+    const padY = Math.round(logoH * 0.55);
+    const plateW = logoW + padX * 2;
+    const plateH = logoH + padY * 2;
+    const plateTop = Math.round(H * 0.025);
+    const plateLeft = Math.round((W - plateW) / 2);
+    composites.push({
+      input: Buffer.from(
+        `<svg width="${plateW}" height="${plateH}" xmlns="http://www.w3.org/2000/svg">` +
+          `<rect width="${plateW}" height="${plateH}" rx="16" fill="${BRAND.colors.black}" fill-opacity="0.85"/>` +
+          `<rect y="0" width="${plateW}" height="4" rx="2" fill="${cyan}"/></svg>`,
+      ),
+      left: plateLeft,
+      top: plateTop,
+    });
+    composites.push({ input: logoBuf, left: plateLeft + padX, top: plateTop + padY });
+    contentTop = plateTop + plateH + Math.round(H * 0.02);
+  }
+
+  // --- Bottom: soft scrim with the T-shield over a small wordmark. ---
+  const band = Math.round(H * 0.16);
+  composites.push({
+    input: Buffer.from(
+      `<svg width="${W}" height="${band}" xmlns="http://www.w3.org/2000/svg">` +
+        `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">` +
+        `<stop offset="0" stop-color="${BRAND.colors.black}" stop-opacity="0"/>` +
+        `<stop offset="1" stop-color="${BRAND.colors.black}" stop-opacity="0.85"/>` +
+        `</linearGradient></defs>` +
+        `<rect width="${W}" height="${band}" fill="url(#g)"/></svg>`,
+    ),
+    left: 0,
+    top: H - band,
+  });
+  const shield = await loadShield();
+  let cursorY = H - band + Math.round(band * 0.2);
+  if (shield) {
+    const shieldW = Math.round(W * 0.085);
+    const shieldBuf = await sharp(shield, { density: 300 }).resize({ width: shieldW }).png().toBuffer();
+    const sMeta = await sharp(shieldBuf).metadata();
+    composites.push({
+      input: shieldBuf,
+      left: Math.round((W - shieldW) / 2),
+      top: cursorY,
+    });
+    cursorY += (sMeta.height ?? shieldW) + Math.round(H * 0.012);
+  }
+  if (logo) {
+    const wmW = Math.round(W * 0.24);
+    const wmBuf = await sharp(logo, { density: 300 }).resize({ width: wmW }).png().toBuffer();
+    const wmMeta = await sharp(wmBuf).metadata();
+    const wmH = wmMeta.height ?? Math.round(wmW / 8);
+    composites.push({
+      input: wmBuf,
+      left: Math.round((W - wmW) / 2),
+      top: Math.min(cursorY, H - wmH - Math.round(H * 0.02)),
+    });
+  }
+
+  // --- Left: the REAL photo in a rounded panel, attention-cropped, framed. ---
+  const photoLeft = Math.round(W * 0.05);
+  const photoTop = contentTop;
+  const photoW = Math.round(W * 0.45);
+  const photoH = H - band - photoTop - Math.round(H * 0.015);
+  const rx = 18;
+  const photoFit = await sharp(input.photo)
+    .rotate() // respect EXIF orientation from phone uploads
+    .resize(photoW, photoH, { fit: "cover", position: "attention" })
+    .png()
+    .toBuffer();
+  const rounded = await sharp(photoFit)
+    .composite([
+      {
+        input: Buffer.from(
+          `<svg width="${photoW}" height="${photoH}" xmlns="http://www.w3.org/2000/svg">` +
+            `<rect width="${photoW}" height="${photoH}" rx="${rx}" fill="#ffffff"/></svg>`,
+        ),
+        blend: "dest-in",
+      },
+    ])
+    .png()
+    .toBuffer();
+  const photoShadow = shadowFor(photoW, photoH, rx);
+  composites.push({
+    input: photoShadow.svg,
+    left: photoLeft - photoShadow.margin,
+    top: photoTop - photoShadow.margin + Math.round(photoH * 0.02),
+  });
+  composites.push({ input: rounded, left: photoLeft, top: photoTop });
+  composites.push({
+    input: Buffer.from(
+      `<svg width="${photoW}" height="${photoH}" xmlns="http://www.w3.org/2000/svg">` +
+        `<rect x="1.5" y="1.5" width="${photoW - 3}" height="${photoH - 3}" rx="${rx}" fill="none" stroke="#c9ced6" stroke-width="3"/>` +
+        `<rect x="1.5" y="1.5" width="${photoW - 3}" height="6" rx="3" fill="${cyan}"/></svg>`,
+    ),
+    left: photoLeft,
+    top: photoTop,
+  });
+
+  // --- Right: the text column, every word typeset in exact brand color. ---
+  const colLeft = photoLeft + photoW + Math.round(W * 0.035);
+  const colRight = W - Math.round(W * 0.05);
+  const colW = colRight - colLeft;
+  const cx = colLeft + Math.round(colW / 2);
+  const texts: string[] = [];
+
+  let y = photoTop + Math.round(H * 0.035);
+
+  // WELCOME / TO THE TEAM
+  const h1 = fitFont("WELCOME", colW, Math.round(W * 0.075), 0.62);
+  y += h1;
+  texts.push(
+    `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${h1}" letter-spacing="2" fill="#ffffff">WELCOME</text>`,
+  );
+  const h2 = fitFont("TO THE TEAM", colW, Math.round(W * 0.058), 0.62);
+  y += Math.round(h2 * 1.25);
+  texts.push(
+    `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${h2}" letter-spacing="2" fill="${cyan}">TO THE TEAM</text>`,
+  );
+
+  // Player name, stacked, inside a thin silver outline.
+  const lines = nameLines(input.name);
+  const longest = lines.reduce((a, b) => (b.length > a.length ? b : a), "");
+  const nf = fitFont(longest, Math.round(colW * 0.84), Math.round(W * 0.085), 0.6);
+  const nameLineH = Math.round(nf * 1.08);
+  const namePad = Math.round(nf * 0.42);
+  const boxTop = y + Math.round(H * 0.028);
+  const boxH = namePad * 2 + nameLineH * lines.length;
+  texts.push(
+    `<rect x="${colLeft + Math.round(colW * 0.02)}" y="${boxTop}" width="${Math.round(colW * 0.96)}" height="${boxH}" fill="none" stroke="#c9ced6" stroke-width="2.5"/>`,
+  );
+  let ny = boxTop + namePad + Math.round(nf * 0.82);
+  for (const ln of lines) {
+    texts.push(
+      `<text x="${cx}" y="${ny}" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${nf}" letter-spacing="1.5" fill="#ffffff">${xmlEscape(ln)}</text>`,
+    );
+    ny += nameLineH;
+  }
+  y = boxTop + boxH;
+
+  // Team / location subtitle.
+  const subtitle = input.subtitle?.trim();
+  if (subtitle) {
+    const sf = fitFont(subtitle.toUpperCase(), Math.round(colW * 0.94), Math.round(W * 0.03), 0.56);
+    y += Math.round(H * 0.026) + sf;
+    texts.push(
+      `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="700" font-size="${sf}" letter-spacing="2" fill="#ffffff">${xmlEscape(subtitle.toUpperCase())}</text>`,
+    );
+  }
+
+  // "You're officially part of the" / TILT AMBASSADOR CLUB / subline.
+  const pf = Math.round(W * 0.026);
+  y += Math.round(H * 0.035) + pf;
+  texts.push(
+    `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="500" font-size="${pf}" fill="#e8eaed">You&apos;re officially part of the</text>`,
+  );
+  const cf = fitFont("TILT AMBASSADOR CLUB", colW, Math.round(W * 0.042), 0.6);
+  y += Math.round(cf * 1.35);
+  texts.push(
+    `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${cf}" letter-spacing="1" fill="${cyan}">TILT AMBASSADOR CLUB</text>`,
+  );
+  const slf = Math.round(W * 0.023);
+  const slLines = wrapLines(
+    "The ultimate squad for young hockey stars and future legends.",
+    Math.floor((colW * 0.95) / (slf * 0.47)),
+  ).slice(0, 3);
+  y += Math.round(H * 0.012);
+  for (const ln of slLines) {
+    y += Math.round(slf * 1.4);
+    texts.push(
+      `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="500" font-size="${slf}" fill="#d7dbe0">${xmlEscape(ln)}</text>`,
+    );
+  }
+
+  // "— TEAM TILT" sign-off (plain text, never a logo).
+  const tf = Math.round(W * 0.026);
+  y += Math.round(H * 0.032) + tf;
+  texts.push(
+    `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="700" font-size="${tf}" letter-spacing="3" fill="#ffffff">&#8212; TEAM TILT</text>`,
+  );
+
+  composites.push({
+    input: Buffer.from(
+      `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${texts.join("")}</svg>`,
+    ),
+    left: 0,
+    top: 0,
+  });
+
+  return sharp(base).composite(composites).png().toBuffer();
+}
+
 export async function composePartnerGraphic(input: PartnerGraphicInput): Promise<Buffer> {
   const W = input.width ?? 1080;
   const H = input.height ?? 1350;
