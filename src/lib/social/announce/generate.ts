@@ -155,42 +155,42 @@ async function verifySamePlayer(original: Buffer, edited: Buffer): Promise<boole
 
 /**
  * Blur competitor equipment logos (CCM, Bauer, Warrior, True…) on the player
- * photo. Narrow retouch brief + Claude-vision identity verification; if the
- * model changed ANYTHING about the player or the check can't pass, the
- * original photo is returned untouched. Never throws.
+ * photo. Narrow retouch brief + Claude-vision identity verification, tried up
+ * to twice; if the model changed ANYTHING about the player or the check can't
+ * pass, the original photo is returned untouched. Never throws.
  */
 async function blurCompetitorMarks(source: {
   buf: Buffer;
   mime: string;
 }): Promise<{ buf: Buffer; mime: string }> {
   if (!process.env.GEMINI_API_KEY) return { buf: source.buf, mime: source.mime };
-  try {
-    const edited = await nanoEdit({
-      sourceImage: source.buf,
-      sourceMimeType: source.mime,
-      brief: {
-        brief: [
-          `PHOTO RETOUCH ONLY — output this exact photograph, pixel-identical, except for ONE change:`,
-          `apply a small localized blur over any visible equipment manufacturer logos or wordmarks (stick, gloves, helmet, pants — e.g. CCM, Bauer, Warrior, True, Sherwood).`,
-          `Do NOT change the player, face, pose, body, team jersey, crest, numbers, colors, lighting, background, or crop. Same person, same photograph — only the blur patches differ.`,
-          `If there are no competitor logos visible, return the photo unchanged.`,
-        ].join("\n"),
-      },
-    });
-    const ok = await verifySamePlayer(source.buf, edited.image);
-    if (!ok) {
+  const brief = [
+    `PHOTO RETOUCH ONLY — output this exact photograph, pixel-identical, except for ONE change:`,
+    `apply a small localized blur over any visible equipment manufacturer logos or wordmarks (stick, gloves, helmet, pants — e.g. CCM, Bauer, Warrior, True, Sherwood).`,
+    `Do NOT change the player, face, pose, body, team jersey, crest, numbers, colors, lighting, background, or crop. Same person, same photograph — only the blur patches differ.`,
+    `If there are no competitor logos visible, return the photo unchanged.`,
+  ].join("\n");
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const edited = await nanoEdit({
+        sourceImage: source.buf,
+        sourceMimeType: source.mime,
+        brief: { brief },
+      });
+      if (await verifySamePlayer(source.buf, edited.image)) {
+        return { buf: edited.image, mime: edited.mimeType };
+      }
       console.warn(
-        "[announce] competitor-logo blur rejected by identity check — using the original photo.",
+        `[announce] competitor-logo blur attempt ${attempt} rejected by identity check.`,
       );
-      return { buf: source.buf, mime: source.mime };
+    } catch (err) {
+      console.warn(
+        `[announce] competitor-logo blur attempt ${attempt} failed (${err instanceof Error ? err.message : String(err)}).`,
+      );
     }
-    return { buf: edited.image, mime: edited.mimeType };
-  } catch (err) {
-    console.warn(
-      `[announce] competitor-logo blur skipped (${err instanceof Error ? err.message : String(err)}) — using the original photo.`,
-    );
-    return { buf: source.buf, mime: source.mime };
   }
+  console.warn("[announce] competitor-logo blur gave up — using the original photo.");
+  return { buf: source.buf, mime: source.mime };
 }
 
 
