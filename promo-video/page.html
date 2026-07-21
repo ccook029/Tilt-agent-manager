@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: "BC"; src: url("assets/BarlowCondensed-Bold.ttf"); font-weight: 700; }
+  @font-face { font-family: "BC"; src: url("assets/BarlowCondensed-ExtraBold.ttf"); font-weight: 800; }
+  @font-face { font-family: "BC"; src: url("assets/BarlowCondensed-Medium.ttf"); font-weight: 500; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: #000; }
+  #stage {
+    position: relative; width: 1080px; height: 1350px; overflow: hidden;
+    background: #0d0d0d; font-family: "BC", sans-serif;
+  }
+  .scene { position: absolute; inset: 0; display: none; overflow: hidden; }
+
+  .carbon {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,0.02) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(255,255,255,0.02) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.02) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.02) 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  }
+  .glow {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 115%, rgba(0,191,255,0.16) 0%, transparent 62%);
+  }
+  .callout { font-weight: 500; font-size: 34px; letter-spacing: 8px;
+    text-transform: uppercase; }
+
+  /* S1 — open (dark) */
+  #s1 .line { position: absolute; left: 70px; font-weight: 800; font-size: 270px;
+    line-height: 0.86; letter-spacing: -2px; color: #fff; text-transform: uppercase;
+    transform-origin: left center; }
+  #s1 #w1 { top: 385px; }
+  #s1 #w2 { top: 645px; color: #00bfff; font-size: 200px; }
+  #s1 #kicker { position: absolute; top: 300px; left: 76px; font-weight: 500; font-size: 34px;
+    letter-spacing: 10px; color: #9aa3ab; text-transform: uppercase; }
+  #s1 #corner { position: absolute; top: 64px; left: 70px; width: 170px; }
+
+  /* S2 — macro shaft pan (white) */
+  #s2 { background: #f4f5f6; }
+  #s2 #shaftwrap { position: absolute; left: -140px; top: -200px; width: 1400px; height: 1800px; }
+  #s2 #shaft { position: absolute; width: 640px; left: 640px; filter: drop-shadow(0 30px 60px rgba(0,0,0,0.25)); }
+  #s2 .big { position: absolute; left: 70px; top: 430px; font-weight: 800; font-size: 200px;
+    line-height: 0.88; color: #0d0d0d; text-transform: uppercase; }
+  #s2 .big .cy { color: #00a6e0; }
+  #s2 #callout2 { position: absolute; left: 74px; top: 880px; color: #333; }
+  #s2 #rule { position: absolute; left: 74px; top: 850px; height: 6px; background: #00bfff; width: 0; }
+
+  /* S2b — blade macro (dark, cyan glow) */
+  #s2b { background: #0b0d0e; }
+  #s2b .glow2 { position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 38% 68%, rgba(0,191,255,0.22) 0%, transparent 55%); }
+  #s2b #bladewrap { position: absolute; left: 0; top: 0; }
+  #s2b #blade { width: 3200px;
+    filter: drop-shadow(0 0 60px rgba(0,191,255,0.30)) drop-shadow(0 40px 80px rgba(0,0,0,0.6)); }
+  #s2b .big { position: absolute; left: 70px; top: 120px; font-weight: 800; font-size: 170px;
+    line-height: 0.9; color: #fff; text-transform: uppercase; }
+  #s2b .big .cy { color: #00bfff; }
+  #s2b #callout2b { position: absolute; left: 74px; top: 1210px; color: #8b969e; }
+  #s2b #tick { position: absolute; left: 74px; top: 1180px; height: 6px; width: 0; background: #00bfff; }
+
+  /* S3 — type wall + diagonal stick */
+  #s3 { background: #0d0d0d; }
+  #s3 .row { position: absolute; white-space: nowrap; font-weight: 800; font-size: 250px;
+    line-height: 1; color: #1d2226; text-transform: uppercase; letter-spacing: 2px; }
+  #s3 .row.hot { color: #00bfff; }
+  #s3 .row.white { color: #f2f2f2; }
+  #s3 #panel { position: absolute; top: -200px; left: 640px; width: 900px; height: 1800px;
+    background: #f4f5f6; transform: skewX(-10deg); box-shadow: -30px 0 80px rgba(0,0,0,0.55); }
+  #s3 #diag { position: absolute; top: 330px; left: 430px; width: 1150px;
+    transform: rotate(14deg); filter: drop-shadow(0 30px 50px rgba(0,0,0,0.28)); }
+
+  /* S3b — X1 blackout macro (dark) */
+  #s3b { background: #101214; }
+  #s3b .glow3 { position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 62% 40%, rgba(0,191,255,0.18) 0%, transparent 52%); }
+  #s3b #x1wrap { position: absolute; left: 0; top: 0; }
+  #s3b #x1zoom { width: 3000px;
+    filter: drop-shadow(0 0 50px rgba(0,191,255,0.38)) drop-shadow(0 0 130px rgba(0,191,255,0.18)); }
+  #s3b .big { position: absolute; left: 70px; top: 950px; font-weight: 800; font-size: 190px;
+    line-height: 0.88; color: #fff; text-transform: uppercase; }
+  #s3b .big .cy { color: #00bfff; }
+  #s3b #callout3b { position: absolute; left: 74px; top: 200px; color: #8b969e; }
+  #s3b #tick3 { position: absolute; left: 74px; top: 170px; height: 6px; width: 0; background: #00bfff; }
+
+  /* S4 — product hero (white) */
+  #s4 { background: #f4f5f6; }
+  #s4 #hero { position: absolute; top: 130px; left: -80px; width: 1350px;
+    filter: drop-shadow(0 40px 70px rgba(0,0,0,0.30)); }
+  #s4 #name { position: absolute; left: 70px; top: 800px; font-weight: 800; font-size: 190px;
+    line-height: 0.88; color: #0d0d0d; text-transform: uppercase; letter-spacing: -2px; }
+  #s4 #name .cy { color: #00a6e0; }
+  #s4 #chip { position: absolute; left: 76px; top: 722px; background: #00bfff; color: #001018;
+    font-weight: 700; font-size: 36px; letter-spacing: 6px; text-transform: uppercase;
+    padding: 10px 26px; }
+  #s4 #sub { position: absolute; left: 76px; top: 1190px; color: #444; }
+
+  /* S5 — end card */
+  #s5 { background: #0d0d0d; }
+  #s5 #logo { position: absolute; left: 50%; top: 560px; width: 640px; margin-left: -320px; }
+  #s5 #rule5 { position: absolute; left: 50%; top: 780px; height: 6px; background: #00bfff;
+    width: 0; transform: translateX(-50%); }
+  #s5 #tag { position: absolute; left: 0; right: 0; top: 830px; text-align: center;
+    font-weight: 500; font-size: 44px; letter-spacing: 12px; color: #cfd6db;
+    text-transform: uppercase; }
+
+  #flash { position: absolute; inset: 0; background: #00bfff; opacity: 0; pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+  #grain { position: absolute; inset: -140px; opacity: 0.05; pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="scene" id="s1">
+    <div class="carbon"></div><div class="glow"></div>
+    <img id="corner" src="assets/logo.png">
+    <div id="kicker">Tilt Hockey</div>
+    <div class="line" id="w1">Built</div>
+    <div class="line" id="w2">Different.</div>
+  </div>
+
+  <div class="scene" id="s2">
+    <div id="shaftwrap"><img id="shaft" src="assets/shaft.png"></div>
+    <div class="big">Pure<br><span class="cy">Carbon.</span></div>
+    <div id="rule"></div>
+    <div id="callout2" class="callout">Aero weave &middot; liquid gloss shaft</div>
+  </div>
+
+  <div class="scene" id="s2b">
+    <div class="glow2"></div>
+    <div id="bladewrap"><img id="blade" src="assets/holo-white.png"></div>
+    <div class="big">Feel<br><span class="cy">Everything.</span></div>
+    <div id="tick"></div>
+    <div id="callout2b" class="callout">Hex blade texture &middot; soft touch</div>
+  </div>
+
+  <div class="scene" id="s3">
+    <div class="row" id="r1" style="top:60px">Lighter &nbsp; Lighter &nbsp; Lighter &nbsp; Lighter</div>
+    <div class="row white" id="r2" style="top:330px">Faster &nbsp; Faster &nbsp; Faster &nbsp; Faster</div>
+    <div class="row hot" id="r3" style="top:600px">Meaner &nbsp; Meaner &nbsp; Meaner &nbsp; Meaner</div>
+    <div class="row" id="r4" style="top:870px">Lighter &nbsp; Lighter &nbsp; Lighter &nbsp; Lighter</div>
+    <div class="row white" id="r5" style="top:1140px">Faster &nbsp; Faster &nbsp; Faster &nbsp; Faster</div>
+    <div id="panel"></div>
+    <img id="diag" src="assets/stick-diag.png">
+  </div>
+
+  <div class="scene" id="s3b">
+    <div class="glow3"></div>
+    <div id="x1wrap"><img id="x1zoom" src="assets/x1-holo.png"></div>
+    <div id="tick3"></div>
+    <div id="callout3b" class="callout">Stealth blackout finish</div>
+    <div class="big">Built<br>to <span class="cy">rip.</span></div>
+  </div>
+
+  <div class="scene" id="s4">
+    <img id="hero" src="assets/x1-holo.png">
+    <div id="chip">Tilt Hockey</div>
+    <div id="name">Tilt<br><span class="cy">X1.</span></div>
+    <div id="sub" class="callout">Real carbon &middot; zero compromise</div>
+  </div>
+
+  <div class="scene" id="s5">
+    <div class="carbon"></div><div class="glow"></div>
+    <img id="logo" src="assets/logo.png">
+    <div id="rule5"></div>
+    <div id="tag">Don't be a sheep.</div>
+  </div>
+
+  <div id="grain"></div>
+  <div id="flash"></div>
+  <div id="fade"></div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const P = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+  const outExpo = (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x));
+  const outCubic = (x) => 1 - Math.pow(1 - x, 3);
+
+  // scene windows (seconds)
+  const CUT1 = 2.4;   // s1 -> s2 (shaft macro)
+  const CUT2 = 5.2;   // s2 -> s2b (blade macro)
+  const CUT3 = 8.0;   // s2b -> s3 (type wall)
+  const CUT4 = 10.4;  // s3 -> s3b (blackout macro)
+  const CUT5 = 13.0;  // s3b -> s4 (hero)
+  const CUT6 = 15.6;  // s4 -> s5 (end card)
+  const END = 18.0;
+
+  function shake(t, t0, amp) {
+    const d = t - t0;
+    if (d < 0 || d > 0.5) return { x: 0, y: 0 };
+    const k = amp * Math.exp(-d * 9);
+    return { x: Math.sin(d * 95) * k, y: Math.cos(d * 83) * k * 0.7 };
+  }
+
+  window.seek = function (t) {
+    for (const id of ["s1", "s2", "s2b", "s3", "s3b", "s4", "s5"]) $(id).style.display = "none";
+
+    $("grain").style.transform =
+      `translate(${(t * 137) % 120 - 60}px, ${(t * 91) % 120 - 60}px)`;
+
+    // cyan flash frames at dark<->light cuts
+    let flash = 0;
+    for (const c of [CUT1, CUT3, CUT5]) {
+      const d = Math.abs(t - c);
+      if (d < 0.07) flash = Math.max(flash, 1 - d / 0.07);
+    }
+    $("flash").style.opacity = (flash * 0.9).toFixed(3);
+    $("fade").style.opacity = P(t, END - 0.35, END).toFixed(3);
+
+    if (t < CUT1) {
+      $("s1").style.display = "block";
+      const k = P(t, 0.05, 0.5);
+      $("kicker").style.opacity = k;
+      $("kicker").style.letterSpacing = `${10 + (1 - outCubic(k)) * 26}px`;
+      $("corner").style.opacity = P(t, 0.05, 0.4);
+      const p1 = outExpo(P(t, 0.42, 0.95));
+      const s1s = shake(t, 0.62, 14);
+      $("w1").style.opacity = p1 > 0 ? 1 : 0;
+      $("w1").style.transform =
+        `translate(${s1s.x}px, ${(1 - p1) * 140 + s1s.y}px) scale(${1.5 - 0.5 * p1})`;
+      const p2 = outExpo(P(t, 0.95, 1.5));
+      const s2s = shake(t, 1.18, 14);
+      $("w2").style.opacity = p2 > 0 ? 1 : 0;
+      $("w2").style.transform =
+        `translate(${s2s.x}px, ${(1 - p2) * 140 + s2s.y}px) scale(${1.5 - 0.5 * p2})`;
+    } else if (t < CUT2) {
+      $("s2").style.display = "block";
+      const lt = t - CUT1, dur = CUT2 - CUT1;
+      const pan = P(lt, 0, dur);
+      $("shaftwrap").style.transform =
+        `translateY(${-pan * 560}px) rotate(${-16 + pan * 4}deg) scale(${1.06 - pan * 0.06})`;
+      const pb = outExpo(P(lt, 0.15, 0.75));
+      const big = document.querySelector("#s2 .big");
+      big.style.opacity = pb;
+      big.style.transform = `translateX(${(1 - pb) * -120}px)`;
+      $("rule").style.width = `${outCubic(P(lt, 0.5, 1.1)) * 420}px`;
+      $("callout2").style.opacity = P(lt, 0.75, 1.2);
+    } else if (t < CUT3) {
+      $("s2b").style.display = "block";
+      const lt = t - CUT2, dur = CUT3 - CUT2;
+      const pan = P(lt, 0, dur);
+      // holo-white.png is 1200x900 shown at 3200px wide (2.67x): the blade sits
+      // around source (250,500) -> keep it framed lower-left and drift across.
+      const bx = -127 - 40 - pan * 150;
+      const by = -658 + 40 - pan * 60;
+      $("bladewrap").style.transform =
+        `translate(${bx}px, ${by}px) scale(${1 + pan * 0.05}) rotate(${-2 + pan * 2}deg)`;
+      const pb = outExpo(P(lt, 0.2, 0.85));
+      const big = document.querySelector("#s2b .big");
+      big.style.opacity = pb;
+      big.style.transform = `translateY(${(1 - pb) * -90}px)`;
+      $("tick").style.width = `${outCubic(P(lt, 0.7, 1.25)) * 420}px`;
+      $("callout2b").style.opacity = P(lt, 0.95, 1.4);
+    } else if (t < CUT4) {
+      $("s3").style.display = "block";
+      const lt = t - CUT3;
+      const speeds = [-230, 300, -370, 260, -300];
+      ["r1", "r2", "r3", "r4", "r5"].forEach((id, i) => {
+        $(id).style.transform = `translateX(${-700 + lt * speeds[i]}px)`;
+      });
+      const pp = outExpo(P(lt, 0.55, 1.25));
+      $("panel").style.transform = `skewX(-10deg) translateX(${(1 - pp) * 1000}px)`;
+      $("diag").style.opacity = pp > 0.15 ? 1 : 0;
+      $("diag").style.transform =
+        `rotate(14deg) translate(${(1 - pp) * 900}px, ${(1 - pp) * -160}px)`;
+    } else if (t < CUT5) {
+      $("s3b").style.display = "block";
+      const lt = t - CUT4, dur = CUT5 - CUT4;
+      const pan = P(lt, 0, dur);
+      // x1-holo.png 1200x900 at 3000px (2.5x): frame the black blade upper-right
+      // of stage and push in slowly.
+      const bx = -97 + 60 - pan * 120;
+      const by = -575 - 120 + pan * 70;
+      $("x1wrap").style.transform =
+        `translate(${bx}px, ${by}px) scale(${1.02 + pan * 0.08}) rotate(${1 - pan * 2}deg)`;
+      $("tick3").style.width = `${outCubic(P(lt, 0.25, 0.8)) * 420}px`;
+      $("callout3b").style.opacity = P(lt, 0.45, 0.9);
+      const pb = outExpo(P(lt, 0.6, 1.25));
+      const big = document.querySelector("#s3b .big");
+      big.style.opacity = pb;
+      big.style.transform = `translateY(${(1 - pb) * 120}px)`;
+    } else if (t < CUT6) {
+      $("s4").style.display = "block";
+      const lt = t - CUT5;
+      const ph = outExpo(P(lt, 0, 0.8));
+      $("hero").style.transform =
+        `translate(${(1 - ph) * 620}px, ${(1 - ph) * -100}px) rotate(${(1 - ph) * 9}deg) scale(${1.12 - ph * 0.12})`;
+      const pc = outExpo(P(lt, 0.5, 0.95));
+      $("chip").style.opacity = pc;
+      $("chip").style.transform = `translateY(${(1 - pc) * 60}px)`;
+      const pn = outExpo(P(lt, 0.65, 1.3));
+      $("name").style.opacity = pn;
+      $("name").style.transform = `translateY(${(1 - pn) * 160}px)`;
+      $("sub").style.opacity = P(lt, 1.15, 1.6);
+    } else {
+      $("s5").style.display = "block";
+      const lt = t - CUT6;
+      const pl = outExpo(P(lt, 0.05, 0.7));
+      $("logo").style.opacity = pl;
+      $("logo").style.transform = `scale(${0.82 + pl * 0.18})`;
+      $("rule5").style.width = `${outCubic(P(lt, 0.45, 1.0)) * 560}px`;
+      const pt = P(lt, 0.7, 1.25);
+      $("tag").style.opacity = pt;
+      $("tag").style.letterSpacing = `${12 + (1 - outCubic(pt)) * 18}px`;
+    }
+  };
+</script>
+</body>
+</html>

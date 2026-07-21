@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/* ── Tilt brand tokens (src/lib/social/brand.ts is the canonical source) ── */
+@theme {
+  --color-tilt-black: #0d0d0d;
+  --color-tilt-panel: #141414;
+  --color-tilt-card: #1a1a1a;
+  --color-tilt-gray: #1e1e1e;
+  --color-tilt-line: #2a2a2a;
+  --color-tilt-cyan: #00bfff;
+  --color-tilt-cyan-dark: #0099cc;
+  --color-tilt-ice: #d4e5f7;
+  --font-display: var(--font-barlow-condensed), "Barlow Condensed", "Arial Narrow", sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-tilt-black);
+  color: #ededed;
+  font-family: "Barlow", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/* Visible keyboard focus ring (mouse clicks stay clean) */
+:focus-visible {
+  outline: 2px solid var(--color-tilt-cyan);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: rgba(0, 191, 255, 0.35);
+}
+
+/* Slim dark scrollbars to match the panel chrome */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #333 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.thinking-dot {
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-dot {
+    animation: none;
+    opacity: 0.8;
+  }
+}
