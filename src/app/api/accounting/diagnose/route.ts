@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isMcpConfigured } from "@/lib/zoho-books";
 import { checkZohoHealth } from "@/lib/zoho-health";
 import { isInboxConfigured, fetchInteracDetailed } from "@/lib/email-inbox";
-import { fetchInboxDocuments } from "@/lib/zoho-documents";
+import { fetchInboxDocuments, probeDocument } from "@/lib/zoho-documents";
 import { guardAccountingOwner } from "@/lib/os-identity";
 
 export const dynamic = "force-dynamic";
@@ -105,8 +105,14 @@ export async function GET(request: NextRequest) {
         : undefined,
   };
 
+  // Probe a single document (?docId=… , else the first inbox doc) to see what
+  // slice 2 can extract: autoscan detail fields and/or the raw PDF bytes.
+  const probeId =
+    request.nextUrl.searchParams.get("docId") || docsRes.documents[0]?.id || "";
+  const documentProbe = probeId ? await probeDocument(probeId) : { note: "no document to probe" };
+
   return NextResponse.json(
-    { deploy, verdict: zoho.verdict, zoho, env, inbox, documents },
+    { deploy, verdict: zoho.verdict, zoho, env, inbox, documents, documentProbe },
     {
       headers: {
         "Content-Type": "application/json",
