@@ -98,7 +98,8 @@ export async function writeAnnouncementCopy(
 // ---- Graphic generation ----
 
 const STYLE = [
-  `Style: premium sports-brand announcement graphic. Deep black/dark-navy background with a subtle dark checkered texture, electric cyan (${BRAND.colors.cyan}) accent color, bold condensed uppercase typography (Barlow Condensed feel), brushed-silver metallic ribbon accents across the top-left and bottom-right corners.`,
+  `Style: premium sports-brand announcement graphic. Deep black/dark-navy background with a subtle dark checkered texture, electric ice-cyan accent color — EXACTLY ${BRAND.colors.cyan}, a bright sky-blue cyan — bold condensed uppercase typography (Barlow Condensed feel), brushed-silver metallic ribbon accents across the top-left and bottom-right corners.`,
+  `HARD COLOR RULE: ${BRAND.colors.cyan} is the ONLY accent color. Every cyan/blue element on the graphic must be this exact same bright ice-cyan hue — NEVER royal blue, navy, indigo, teal, periwinkle, or a washed-out/darkened blue, and never two different blues on one graphic.`,
   `Portrait 4:5 canvas.`,
   `STRICT RULES: this is pure graphic DESIGN — do NOT generate any people, players, hockey products, scenes, logos, crests, brand marks, signatures, or badge emblems. Logos are composited by code afterwards.`,
 ].join("\n");
@@ -127,6 +128,7 @@ function ambassadorBrief(name: string, subtitle?: string | null): string {
     `- Render ONLY the exact quoted words above. Never draw placeholder labels (like "WORDMARK", "LOGO", or "TEXT HERE") or any other lettering.`,
     `- The word "TILT" may appear ONLY inside the quoted phrases "TILT AMBASSADOR CLUB" and "— TEAM TILT", typeset as plain text. NEVER draw a TILT wordmark, logotype, stylized brand mark, or invented logo anywhere — the real TILT logos are stamped onto the graphic by code afterwards.`,
     `- Do not draw any logos, crests, signatures, or badges anywhere.`,
+    `- The player photo: if the player's equipment shows another manufacturer's logo or wordmark (stick, gloves, helmet, pants — e.g. CCM, Bauer, Warrior, True, Sherwood), blur or cleanly retouch those marks away so no competitor branding is readable. Do NOT alter the player's face or body, and leave their team's jersey crest and numbers exactly as they are.`,
   ]
     .filter(Boolean)
     .join("\n");
