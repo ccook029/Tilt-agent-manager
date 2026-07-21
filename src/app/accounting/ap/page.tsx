@@ -47,6 +47,35 @@ interface Account {
   type: string;
 }
 
+// A <select> that always includes the current value even if it's off-list.
+function AccountSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: Account[];
+  placeholder: string;
+}) {
+  return (
+    <select
+      className="mt-1 w-full rounded-md border border-gray-700 bg-gray-800/50 px-2 py-1.5 text-xs text-gray-200 focus:border-[#00d6ff] focus:outline-none"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">{placeholder}</option>
+      {value && !options.some((a) => a.name === value) && <option value={value}>{value}</option>}
+      {options.map((a) => (
+        <option key={a.name} value={a.name}>
+          {a.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export default function ApInboxPage() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -268,8 +297,14 @@ function ProposalCard({
     alreadyPaid,
   });
 
-  const expenseAccts = accounts.filter((a) => /expense|cost of goods/i.test(a.type));
+  // Zoho account types use underscores (cost_of_goods_sold), so match loosely.
+  const expenseAccts = accounts.filter((a) =>
+    /expense|cost.?of.?goods|cogs/i.test(a.type)
+  );
   const bankAccts = accounts.filter((a) => /bank|cash|credit/i.test(a.type));
+  // Fall back to every account if the type filter comes up empty.
+  const acctOptions = expenseAccts.length > 0 ? expenseAccts : accounts;
+  const bankOptions = bankAccts.length > 0 ? bankAccts : accounts;
   const inputCls =
     "w-full rounded-md border border-gray-700 bg-gray-800/50 px-2 py-1.5 text-xs text-gray-200 focus:border-[#00d6ff] focus:outline-none";
   const needPaidThrough = entryType === "expense" || alreadyPaid;
@@ -326,34 +361,22 @@ function ProposalCard({
         </label>
         <label className="col-span-2 text-[10px] uppercase tracking-wider text-gray-500">
           Account
-          <input
-            className={`mt-1 ${inputCls}`}
+          <AccountSelect
             value={expenseAccount}
-            onChange={(e) => setExpenseAccount(e.target.value)}
-            list={`acct-${p.id}`}
-            placeholder="expense account"
+            onChange={setExpenseAccount}
+            options={acctOptions}
+            placeholder="— choose account —"
           />
-          <datalist id={`acct-${p.id}`}>
-            {expenseAccts.map((a) => (
-              <option key={a.name} value={a.name} />
-            ))}
-          </datalist>
         </label>
         {needPaidThrough && (
           <label className="col-span-2 text-[10px] uppercase tracking-wider text-gray-500">
             Paid through
-            <input
-              className={`mt-1 ${inputCls}`}
+            <AccountSelect
               value={paidThroughAccount}
-              onChange={(e) => setPaidThroughAccount(e.target.value)}
-              list={`bank-${p.id}`}
-              placeholder="bank/cash account"
+              onChange={setPaidThroughAccount}
+              options={bankOptions}
+              placeholder="— choose bank/cash —"
             />
-            <datalist id={`bank-${p.id}`}>
-              {bankAccts.map((a) => (
-                <option key={a.name} value={a.name} />
-              ))}
-            </datalist>
           </label>
         )}
         <label className="col-span-2 flex items-center gap-2 text-[11px] text-gray-400">
