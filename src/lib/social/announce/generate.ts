@@ -154,10 +154,11 @@ async function verifySamePlayer(original: Buffer, edited: Buffer): Promise<boole
 }
 
 /**
- * Blur competitor equipment logos (CCM, Bauer, Warrior, True…) on the player
- * photo. Narrow retouch brief + Claude-vision identity verification, tried up
- * to twice; if the model changed ANYTHING about the player or the check can't
- * pass, the original photo is returned untouched. Never throws.
+ * Blur competitor logos (CCM, Bauer, Warrior, True…) on the player's STICK
+ * and GLOVES only — helmet, pants, and jersey stay as photographed. Narrow
+ * retouch brief + Claude-vision identity verification, tried up to twice; if
+ * the model changed ANYTHING about the player or the check can't pass, the
+ * original photo is returned untouched. Never throws.
  */
 async function blurCompetitorMarks(source: {
   buf: Buffer;
@@ -165,10 +166,12 @@ async function blurCompetitorMarks(source: {
 }): Promise<{ buf: Buffer; mime: string }> {
   if (!process.env.GEMINI_API_KEY) return { buf: source.buf, mime: source.mime };
   const brief = [
-    `PHOTO RETOUCH ONLY — output this exact photograph, pixel-identical, except for ONE change:`,
-    `apply a small localized blur over any visible equipment manufacturer logos or wordmarks (stick, gloves, helmet, pants — e.g. CCM, Bauer, Warrior, True, Sherwood).`,
-    `Do NOT change the player, face, pose, body, team jersey, crest, numbers, colors, lighting, background, or crop. Same person, same photograph — only the blur patches differ.`,
-    `If there are no competitor logos visible, return the photo unchanged.`,
+    `PHOTO RETOUCH ONLY — output this exact photograph, pixel-identical, except for small localized blur patches over competitor brand marks:`,
+    `- ALWAYS blur manufacturer logos or wordmarks on the player's STICK and GLOVES (e.g. CCM, Bauer, Warrior, True, Sherwood).`,
+    `- On the HELMET and PANTS, blur a manufacturer's mark ONLY if it is large and clearly readable; leave small or subtle marks alone.`,
+    `- NEVER touch the team jersey, crest, or numbers.`,
+    `Do NOT change the player, face, pose, body, colors, lighting, background, or crop. Same person, same photograph — only the blur patches differ.`,
+    `If no such logos are visible, return the photo unchanged.`,
   ].join("\n");
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
