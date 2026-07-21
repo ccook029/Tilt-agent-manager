@@ -481,6 +481,57 @@ export async function fetchRecentPayables(): Promise<ExistingPayable[]> {
   return [...bills, ...expenses];
 }
 
+/** Record a vendor payment against a bill, so an already-paid bill isn't left
+ *  sitting in A/P as overdue. */
+export async function recordVendorPayment(input: {
+  vendorId: string;
+  billId: string;
+  amount: number;
+  date: string;
+  paidThroughAccountId: string;
+}): Promise<void> {
+  await booksPost("/vendorpayments", {
+    vendor_id: input.vendorId,
+    payment_mode: "banktransfer",
+    amount: input.amount,
+    date: input.date,
+    paid_through_account_id: input.paidThroughAccountId,
+    bills: [{ bill_id: input.billId, amount_applied: input.amount }],
+  });
+}
+
+/** Attach a file (the source bill PDF) to a created bill/expense. Multipart. */
+export async function attachToTransaction(
+  kind: "bills" | "expenses",
+  id: string,
+  fileName: string,
+  base64: string,
+  contentType: string
+): Promise<void> {
+  const token = await getAccessToken();
+  const orgId = getEnvOrThrow("ZOHO_ORGANIZATION_ID");
+  const domain = process.env.ZOHO_DOMAIN ?? "https://www.zohoapis.com";
+  const url = new URL(`${domain}/books/v3/${kind}/${id}/attachment`);
+  url.searchParams.set("organization_id", orgId);
+
+  const bytes = Buffer.from(base64, "base64");
+  const form = new FormData();
+  form.append(
+    "attachment",
+    new Blob([bytes], { type: contentType.split(";")[0] || "application/pdf" }),
+    fileName
+  );
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`attachment ${res.status}: ${text.slice(0, 200)}`);
+  }
+}
+
 // ---- Books health snapshot (read-only) ------------------------------------
 
 /**

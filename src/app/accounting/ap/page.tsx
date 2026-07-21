@@ -28,6 +28,7 @@ interface Proposal {
   status: "proposed" | "created" | "rejected" | "error";
   zohoNumber?: string;
   error?: string;
+  warning?: string;
 }
 
 const confColor: Record<Proposal["confidence"], string> = {
@@ -164,16 +165,19 @@ export default function ApInboxPage() {
           {done.map((p) => (
             <div
               key={p.id}
-              className="flex items-center justify-between rounded-lg border border-gray-800/50 bg-[#0d0d0d] px-4 py-2 text-xs text-gray-400"
+              className="rounded-lg border border-gray-800/50 bg-[#0d0d0d] px-4 py-2 text-xs text-gray-400"
             >
-              <span className="truncate">
-                {p.fileName} — {p.vendor || "?"} ${p.amount.toFixed(2)}
-              </span>
-              <span className={p.status === "created" ? "text-green-500" : "text-gray-600"}>
-                {p.status === "created"
-                  ? `✓ ${p.entryType}${p.zohoNumber ? ` ${p.zohoNumber}` : ""}`
-                  : "dismissed"}
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="truncate">
+                  {p.fileName} — {p.vendor || "?"} ${p.amount.toFixed(2)}
+                </span>
+                <span className={p.status === "created" ? "text-green-500" : "text-gray-600"}>
+                  {p.status === "created"
+                    ? `✓ ${p.entryType}${p.alreadyPaid ? " · paid" : ""}${p.zohoNumber ? ` ${p.zohoNumber}` : ""}`
+                    : "dismissed"}
+                </span>
+              </div>
+              {p.warning && <p className="mt-1 text-amber-400/80">⚠ {p.warning}</p>}
             </div>
           ))}
         </div>
