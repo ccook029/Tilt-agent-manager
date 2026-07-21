@@ -23,6 +23,8 @@ import {
   createBill,
   createExpense,
   fetchRecentPayables,
+  recordVendorPayment,
+  attachToTransaction,
   type BooksAccount,
   type ExistingPayable,
 } from "./zoho-books";
@@ -50,6 +52,8 @@ export interface ApProposal {
   zohoId?: string;
   zohoNumber?: string;
   error?: string;
+  /** Non-fatal note after a successful create (e.g. payment/attach couldn't complete). */
+  warning?: string;
   createdAt: string;
   decidedAt?: string;
 }
@@ -88,10 +92,10 @@ ${coa}
 ${etransfers}
 
 Decide:
-- entryType: "expense" if it's already been paid (e.g. a matching e-Transfer above, or it's a receipt), otherwise "bill" (money we still owe).
+- entryType: "bill" for a vendor INVOICE (keeps the invoice on file), even if it's already been paid. Use "expense" only for a paid receipt with no formal invoice.
+- alreadyPaid + paidVia: whether it's been paid and how — cross-check the e-Transfers above and cite the match (vendor + amount + date). A paid invoice is still a "bill"; the payment gets recorded separately.
 - expenseAccount: the best-fit EXPENSE account name from the list above.
-- paidThroughAccount: ONLY for an expense — the bank/cash account it was paid from (from the list). Omit for a bill.
-- alreadyPaid + paidVia: whether it's paid and how (cite the e-Transfer if matched).
+- paidThroughAccount: the bank/cash account the money left — REQUIRED whenever alreadyPaid is true (for BOTH bill and expense). Pick it from the list (an e-Transfer leaves the main chequing account).
 
 Respond with ONLY a JSON object, no prose:
 \`\`\`json
@@ -319,9 +323,10 @@ export async function approveProposal(id: string, force = false): Promise<ApProp
     if (!expense) throw new Error(`Expense account "${p.expenseAccount}" not found in the Chart of Accounts`);
     if (!p.vendor) throw new Error("No vendor on the proposal");
     if (!p.date || !(p.amount > 0)) throw new Error("Missing date or amount");
+    const paidThrough = find(p.paidThroughAccount);
+    const warnings: string[] = [];
 
     if (p.entryType === "expense") {
-      const paidThrough = find(p.paidThroughAccount);
       if (!paidThrough)
         throw new Error(`Paid-through account "${p.paidThroughAccount ?? "(none)"}" not found`);
       const vendorId = await findOrCreateVendor(p.vendor).catch(() => undefined);
@@ -335,6 +340,7 @@ export async function approveProposal(id: string, force = false): Promise<ApProp
         description: `${p.fileName} — ${p.rationale}`.slice(0, 200),
       });
       p.zohoId = r.expense_id;
+      // An expense already records the payment from the paid-through account.
     } else {
       const vendorId = await findOrCreateVendor(p.vendor);
       const r = await createBill({
@@ -346,9 +352,50 @@ export async function approveProposal(id: string, force = false): Promise<ApProp
       });
       p.zohoId = r.bill_id;
       p.zohoNumber = r.bill_number;
+
+      // Already paid → record the vendor payment so it isn't left overdue in A/P.
+      if (p.alreadyPaid) {
+        if (paidThrough) {
+          try {
+            await recordVendorPayment({
+              vendorId,
+              billId: r.bill_id,
+              amount: p.amount,
+              date: p.date,
+              paidThroughAccountId: paidThrough.account_id,
+            });
+          } catch (e) {
+            warnings.push(
+              `booked the bill but couldn't record the payment (${e instanceof Error ? e.message : String(e)}) — mark it paid in Zoho`
+            );
+          }
+        } else {
+          warnings.push(
+            "flagged already-paid but no paid-through account was set, so it'll show unpaid until you record the payment"
+          );
+        }
+      }
     }
+
+    // Attach the source PDF to the created entry (best-effort audit trail).
+    try {
+      const dl = await downloadDocument(p.documentId);
+      if (dl) {
+        await attachToTransaction(
+          p.entryType === "bill" ? "bills" : "expenses",
+          p.zohoId,
+          p.fileName,
+          dl.base64,
+          dl.contentType
+        );
+      }
+    } catch {
+      warnings.push("couldn't attach the source PDF to the entry");
+    }
+
     p.status = "created";
     p.error = undefined;
+    p.warning = warnings.length > 0 ? warnings.join("; ") : undefined;
     p.decidedAt = new Date().toISOString();
   } catch (e) {
     p.status = "error";
