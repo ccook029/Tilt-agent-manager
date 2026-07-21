@@ -14,6 +14,7 @@ import {
   approveProposal,
   rejectProposal,
 } from "@/lib/accounting-ap";
+import { fetchChartOfAccounts } from "@/lib/zoho-books";
 import { guardAccountingOwner } from "@/lib/os-identity";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,17 @@ export const maxDuration = 300;
 export async function GET(request: NextRequest) {
   const denied = await guardAccountingOwner(request);
   if (denied) return denied;
-  return NextResponse.json({ ok: true, proposals: await listProposals() });
+  const [proposals, accounts] = await Promise.all([
+    listProposals(),
+    fetchChartOfAccounts()
+      .then((a) =>
+        a
+          .filter((x) => x.is_active !== false)
+          .map((x) => ({ name: x.account_name, type: x.account_type }))
+      )
+      .catch(() => [] as { name: string; type: string }[]),
+  ]);
+  return NextResponse.json({ ok: true, proposals, accounts });
 }
 
 export async function POST(request: NextRequest) {
@@ -34,6 +45,7 @@ export async function POST(request: NextRequest) {
     id?: string;
     limit?: number;
     force?: boolean;
+    edits?: Record<string, unknown>;
   };
   const mode = body.mode ?? "scan";
 
@@ -44,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
     if (mode === "approve") {
       if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 400 });
-      const p = await approveProposal(body.id, body.force === true);
+      const p = await approveProposal(body.id, body.force === true, body.edits);
       return NextResponse.json({
         ok: p.status === "created",
         blockedAsDuplicate: p.status === "proposed" && !!p.duplicateOf,

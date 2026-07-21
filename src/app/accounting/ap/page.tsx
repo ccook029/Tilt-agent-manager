@@ -29,6 +29,7 @@ interface Proposal {
   zohoNumber?: string;
   error?: string;
   warning?: string;
+  learnedRule?: boolean;
 }
 
 const confColor: Record<Proposal["confidence"], string> = {
@@ -37,8 +38,14 @@ const confColor: Record<Proposal["confidence"], string> = {
   low: "text-red-400 border-red-900/50 bg-red-500/10",
 };
 
+interface Account {
+  name: string;
+  type: string;
+}
+
 export default function ApInboxPage() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -49,6 +56,7 @@ export default function ApInboxPage() {
       const res = await fetch("/api/accounting/ap");
       const data = await res.json();
       setProposals(data.proposals ?? []);
+      if (Array.isArray(data.accounts)) setAccounts(data.accounts);
     } catch {
       /* ignore */
     } finally {
@@ -86,7 +94,8 @@ export default function ApInboxPage() {
   const decide = async (
     id: string,
     mode: "approve" | "reject",
-    force = false
+    force = false,
+    edits?: Record<string, unknown>
   ) => {
     setBusyId(id);
     setNote(null);
@@ -94,7 +103,7 @@ export default function ApInboxPage() {
       const res = await fetch("/api/accounting/ap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, id, force }),
+        body: JSON.stringify({ mode, id, force, edits }),
       });
       const data = await res.json();
       setProposals(data.proposals ?? []);
@@ -152,7 +161,13 @@ export default function ApInboxPage() {
       ) : (
         <div className="space-y-3">
           {open.map((p) => (
-            <ProposalCard key={p.id} p={p} busy={busyId === p.id} onDecide={decide} />
+            <ProposalCard
+              key={p.id}
+              p={p}
+              accounts={accounts}
+              busy={busyId === p.id}
+              onDecide={decide}
+            />
           ))}
         </div>
       )}
@@ -188,39 +203,63 @@ export default function ApInboxPage() {
 
 function ProposalCard({
   p,
+  accounts,
   busy,
   onDecide,
 }: {
   p: Proposal;
+  accounts: Account[];
   busy: boolean;
-  onDecide: (id: string, mode: "approve" | "reject", force?: boolean) => void;
+  onDecide: (
+    id: string,
+    mode: "approve" | "reject",
+    force?: boolean,
+    edits?: Record<string, unknown>
+  ) => void;
 }) {
   const errored = p.status === "error";
   const isDup = !!p.duplicateOf;
+
+  // Editable working copy of the fields Chris might tweak before approving.
+  const [entryType, setEntryType] = useState(p.entryType);
+  const [vendor, setVendor] = useState(p.vendor);
+  const [amount, setAmount] = useState(String(p.amount || ""));
+  const [date, setDate] = useState(p.date);
+  const [reference, setReference] = useState(p.reference ?? "");
+  const [expenseAccount, setExpenseAccount] = useState(p.expenseAccount);
+  const [paidThroughAccount, setPaidThroughAccount] = useState(p.paidThroughAccount ?? "");
+  const [alreadyPaid, setAlreadyPaid] = useState(p.alreadyPaid);
+
+  const edits = () => ({
+    entryType,
+    vendor,
+    amount: parseFloat(amount) || 0,
+    date,
+    reference,
+    expenseAccount,
+    paidThroughAccount,
+    alreadyPaid,
+  });
+
+  const expenseAccts = accounts.filter((a) => /expense|cost of goods/i.test(a.type));
+  const bankAccts = accounts.filter((a) => /bank|cash|credit/i.test(a.type));
+  const inputCls =
+    "w-full rounded-md border border-gray-700 bg-gray-800/50 px-2 py-1.5 text-xs text-gray-200 focus:border-[#00d6ff] focus:outline-none";
+  const needPaidThrough = entryType === "expense" || alreadyPaid;
+
   return (
     <div className="rounded-xl border border-gray-800 bg-[#0d0d0d] p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="rounded-full border border-gray-700 bg-gray-800/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-300">
-              {p.entryType}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${confColor[p.confidence]}`}>
+            {p.confidence}
+          </span>
+          {p.learnedRule && (
+            <span className="rounded-full border border-[#00d6ff]/40 bg-[#00d6ff]/10 px-2 py-0.5 text-[10px] font-semibold text-[#00d6ff]">
+              saved rule
             </span>
-            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${confColor[p.confidence]}`}>
-              {p.confidence}
-            </span>
-            {p.alreadyPaid && (
-              <span className="rounded-full border border-[#00d6ff]/40 bg-[#00d6ff]/10 px-2 py-0.5 text-[10px] font-semibold text-[#00d6ff]">
-                already paid{p.paidVia ? ` · ${p.paidVia}` : ""}
-              </span>
-            )}
-          </div>
-          <p className="mt-1.5 truncate text-sm font-semibold text-white">
-            {p.vendor || "(vendor?)"} — ${p.amount.toFixed(2)} {p.currency}
-          </p>
-          <p className="text-xs text-gray-500">
-            {p.date || "no date"}
-            {p.reference ? ` · ref ${p.reference}` : ""} · {p.fileName}
-          </p>
+          )}
+          <span className="truncate text-[11px] text-gray-500">{p.fileName}</span>
         </div>
         <a
           href={`/api/accounting/ap/doc?id=${p.documentId}`}
@@ -233,19 +272,71 @@ function ProposalCard({
         </a>
       </div>
 
-      <div className="mt-3 rounded-lg border border-gray-800/70 bg-[#111]/50 p-3 text-xs text-gray-300">
-        <p>
-          <span className="text-gray-500">Account:</span> {p.expenseAccount || "—"}
-          {p.entryType === "expense" && (
-            <>
-              {"  ·  "}
-              <span className="text-gray-500">Paid through:</span> {p.paidThroughAccount || "—"}
-            </>
-          )}
-        </p>
-        {p.rationale && <p className="mt-1 text-gray-400">{p.rationale}</p>}
-        {errored && p.error && <p className="mt-1 text-red-400">⚠ {p.error}</p>}
+      {/* Editable fields */}
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <label className="col-span-2 text-[10px] uppercase tracking-wider text-gray-500 sm:col-span-2">
+          Vendor
+          <input className={`mt-1 ${inputCls}`} value={vendor} onChange={(e) => setVendor(e.target.value)} />
+        </label>
+        <label className="text-[10px] uppercase tracking-wider text-gray-500">
+          Amount
+          <input className={`mt-1 ${inputCls}`} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" />
+        </label>
+        <label className="text-[10px] uppercase tracking-wider text-gray-500">
+          Date
+          <input className={`mt-1 ${inputCls}`} value={date} onChange={(e) => setDate(e.target.value)} placeholder="YYYY-MM-DD" />
+        </label>
+        <label className="text-[10px] uppercase tracking-wider text-gray-500">
+          Type
+          <select className={`mt-1 ${inputCls}`} value={entryType} onChange={(e) => setEntryType(e.target.value as "bill" | "expense")}>
+            <option value="bill">bill</option>
+            <option value="expense">expense</option>
+          </select>
+        </label>
+        <label className="text-[10px] uppercase tracking-wider text-gray-500">
+          Ref #
+          <input className={`mt-1 ${inputCls}`} value={reference} onChange={(e) => setReference(e.target.value)} />
+        </label>
+        <label className="col-span-2 text-[10px] uppercase tracking-wider text-gray-500">
+          Account
+          <input
+            className={`mt-1 ${inputCls}`}
+            value={expenseAccount}
+            onChange={(e) => setExpenseAccount(e.target.value)}
+            list={`acct-${p.id}`}
+            placeholder="expense account"
+          />
+          <datalist id={`acct-${p.id}`}>
+            {expenseAccts.map((a) => (
+              <option key={a.name} value={a.name} />
+            ))}
+          </datalist>
+        </label>
+        {needPaidThrough && (
+          <label className="col-span-2 text-[10px] uppercase tracking-wider text-gray-500">
+            Paid through
+            <input
+              className={`mt-1 ${inputCls}`}
+              value={paidThroughAccount}
+              onChange={(e) => setPaidThroughAccount(e.target.value)}
+              list={`bank-${p.id}`}
+              placeholder="bank/cash account"
+            />
+            <datalist id={`bank-${p.id}`}>
+              {bankAccts.map((a) => (
+                <option key={a.name} value={a.name} />
+              ))}
+            </datalist>
+          </label>
+        )}
+        <label className="col-span-2 flex items-center gap-2 text-[11px] text-gray-400">
+          <input type="checkbox" checked={alreadyPaid} onChange={(e) => setAlreadyPaid(e.target.checked)} />
+          Already paid{p.paidVia ? ` (${p.paidVia})` : ""}
+        </label>
       </div>
+
+      {p.rationale && <p className="mt-2 text-xs text-gray-500">{p.rationale}</p>}
+      {errored && p.error && <p className="mt-2 text-xs text-red-400">⚠ {p.error}</p>}
 
       {isDup && (
         <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-xs text-amber-300">
@@ -257,19 +348,13 @@ function ProposalCard({
 
       <div className="mt-3 flex items-center gap-2">
         <button
-          onClick={() => onDecide(p.id, "approve", isDup)}
+          onClick={() => onDecide(p.id, "approve", isDup, edits())}
           disabled={busy}
           className={`rounded-lg px-4 py-2 text-xs font-semibold text-white transition-colors disabled:opacity-40 ${
             isDup ? "bg-amber-600 hover:bg-amber-500" : "bg-green-600 hover:bg-green-500"
           }`}
         >
-          {busy
-            ? "Creating…"
-            : isDup
-              ? "Create anyway"
-              : errored
-                ? "Retry create"
-                : `Approve → create ${p.entryType}`}
+          {busy ? "Creating…" : isDup ? "Create anyway" : errored ? "Retry create" : `Approve → create ${entryType}`}
         </button>
         <button
           onClick={() => onDecide(p.id, "reject")}
