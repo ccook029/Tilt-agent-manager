@@ -64,6 +64,8 @@ export interface ApProposal {
   warning?: string;
   /** Set when a learned rule for this vendor pre-filled the account. */
   learnedRule?: boolean;
+  /** Back-and-forth: Chris's comments and Penny's revision notes on this bill. */
+  messages?: { role: "chris" | "penny"; text: string; at: string }[];
   createdAt: string;
   decidedAt?: string;
 }
@@ -578,6 +580,120 @@ export async function rejectProposal(id: string): Promise<ApProposal | null> {
   if (!p) return null;
   p.status = "rejected";
   p.decidedAt = new Date().toISOString();
+  await saveProposals(all);
+  return p;
+}
+
+// ---- Refine: Chris comments, Penny revises --------------------------------
+
+function refinePrompt(coa: string, current: Record<string, unknown>, comment: string): string {
+  return `You proposed an entry for the attached AP document, and Chris has a comment. Re-read the document, take his comment as a correction/instruction, and produce a REVISED proposal.
+
+## Your current proposal
+${JSON.stringify(current, null, 2)}
+
+## Chart of Accounts (choose account names EXACTLY from this list)
+${coa}
+
+## Chris's comment
+${comment}
+
+Respond with ONLY a JSON object (same shape as before), applying his instruction, plus a short "note" telling him what you changed:
+\`\`\`json
+{
+  "entryType": "bill" | "expense",
+  "vendor": "…", "date": "YYYY-MM-DD", "reference": "… or null",
+  "amount": 0.00, "currency": "CAD", "exchangeRate": null,
+  "taxAmount": 0.00, "taxRate": 0, "taxName": "… or null",
+  "expenseAccount": "exact account name", "paidThroughAccount": "exact name or null",
+  "alreadyPaid": true | false, "paidVia": "… or null",
+  "confidence": "high" | "medium" | "low",
+  "rationale": "updated one-line",
+  "note": "one line to Chris on what you changed"
+}
+\`\`\``;
+}
+
+/** Chris comments on a proposal; Penny re-reads the bill and revises it. */
+export async function refineProposal(id: string, comment: string): Promise<ApProposal> {
+  const all = await loadProposals();
+  const p = all.find((x) => x.id === id);
+  if (!p) throw new Error("Proposal not found");
+  const c = comment.trim();
+  if (!c) return p;
+  p.messages = p.messages ?? [];
+  p.messages.push({ role: "chris", text: c, at: new Date().toISOString() });
+
+  try {
+    const [dl, accounts, payables] = await Promise.all([
+      downloadDocument(p.documentId),
+      fetchChartOfAccounts().catch(() => [] as BooksAccount[]),
+      fetchRecentPayables().catch(() => [] as ExistingPayable[]),
+    ]);
+    const coaBlock =
+      accounts
+        .filter((a) => a.is_active !== false)
+        .map((a) => `- ${a.account_name} [${a.account_type}]`)
+        .join("\n") || "(chart of accounts unavailable)";
+    const current = {
+      entryType: p.entryType,
+      vendor: p.vendor,
+      date: p.date,
+      reference: p.reference,
+      amount: p.amount,
+      currency: p.currency,
+      taxAmount: p.taxAmount,
+      taxRate: p.taxRate,
+      taxName: p.taxName,
+      expenseAccount: p.expenseAccount,
+      paidThroughAccount: p.paidThroughAccount,
+      alreadyPaid: p.alreadyPaid,
+    };
+    const ct = (dl?.contentType ?? "").toLowerCase();
+    const res = await callClaude({
+      systemPrompt: AP_SYSTEM,
+      userMessage: refinePrompt(coaBlock, current, c),
+      model: CLAUDE_MODEL,
+      maxTokens: 1500,
+      temperature: 0,
+      documents: dl && ct.includes("pdf") ? [{ base64: dl.base64 }] : undefined,
+      images: dl && ct.startsWith("image/") ? [{ mediaType: ct.split(";")[0], data: dl.base64 }] : undefined,
+    });
+    const parsed = parseJson(res.text);
+    if (parsed) {
+      const revised = toProposal({ id: p.documentId, fileName: p.fileName } as InboxDocument, parsed);
+      p.entryType = revised.entryType;
+      p.vendor = revised.vendor;
+      p.date = revised.date;
+      p.reference = revised.reference;
+      p.amount = revised.amount;
+      p.currency = revised.currency;
+      p.exchangeRate = revised.exchangeRate;
+      p.taxAmount = revised.taxAmount;
+      p.taxRate = revised.taxRate;
+      p.taxName = revised.taxName;
+      p.expenseAccount = revised.expenseAccount;
+      p.paidThroughAccount = revised.paidThroughAccount;
+      p.alreadyPaid = revised.alreadyPaid;
+      p.paidVia = revised.paidVia;
+      p.confidence = revised.confidence;
+      p.rationale = revised.rationale;
+      p.learnedRule = false; // now a manual refinement
+      if (p.status === "error") p.status = "proposed";
+      const dup = matchExisting(p, payables);
+      p.duplicateOf = dup ? describePayable(dup) : undefined;
+      const note = typeof parsed.note === "string" && parsed.note.trim() ? parsed.note.trim() : "Updated the proposal.";
+      p.messages.push({ role: "penny", text: note, at: new Date().toISOString() });
+    } else {
+      p.messages.push({ role: "penny", text: "Sorry — I couldn't work that into a revision. Mind rephrasing?", at: new Date().toISOString() });
+    }
+  } catch (e) {
+    p.messages.push({
+      role: "penny",
+      text: `Couldn't revise it: ${e instanceof Error ? e.message : String(e)}`,
+      at: new Date().toISOString(),
+    });
+  }
   await saveProposals(all);
   return p;
 }

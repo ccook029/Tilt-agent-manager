@@ -13,6 +13,7 @@ import {
   buildApProposals,
   approveProposal,
   rejectProposal,
+  refineProposal,
 } from "@/lib/accounting-ap";
 import { fetchChartOfAccounts } from "@/lib/zoho-books";
 import { guardAccountingOwner } from "@/lib/os-identity";
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
     limit?: number;
     force?: boolean;
     edits?: Record<string, unknown>;
+    comment?: string;
   };
   const mode = body.mode ?? "scan";
 
@@ -68,6 +70,13 @@ export async function POST(request: NextRequest) {
       if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 400 });
       await rejectProposal(body.id);
       return NextResponse.json({ ok: true, proposals: await listProposals() });
+    }
+    if (mode === "refine") {
+      if (!body.id || !body.comment?.trim()) {
+        return NextResponse.json({ error: "id and comment are required" }, { status: 400 });
+      }
+      const p = await refineProposal(body.id, body.comment);
+      return NextResponse.json({ ok: true, proposal: p, proposals: await listProposals() });
     }
     return NextResponse.json({ error: `Unknown mode "${mode}"` }, { status: 400 });
   } catch (err) {
