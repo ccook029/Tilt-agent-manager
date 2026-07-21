@@ -120,10 +120,12 @@ function ambassadorBrief(name: string, subtitle?: string | null): string {
     `- Right side, starting BELOW the reserved top strip, top to bottom: big headline "WELCOME TO THE TEAM" ("WELCOME" white, "TO THE TEAM" cyan);`,
     `  then the player's name "${name.toUpperCase()}" huge in white inside a thin silver outline;`,
     subtitle ? `  then "${subtitle.toUpperCase()}" smaller in white;` : ``,
-    `  then "You're officially part of the" in white and "TILT AMBASSADOR CLUB" in bold cyan, with the subline "The ultimate squad for young hockey stars and future legends."`,
+    `  then "You're officially part of the" in white and "TILT AMBASSADOR CLUB" in bold cyan, with the subline "The ultimate squad for young hockey stars and future legends.";`,
+    `  then, as the LAST element of the column, a small plain-text sign-off "— TEAM TILT" in white — same condensed typeface as the body text, simple lettering, NOT styled as a logo, wordmark, badge, or emblem.`,
     `- TOP: the entire top 18% of the canvas, full width, must be plain background — no text, no shapes, nothing. A wordmark is stamped there by code afterwards, so anything you place there gets covered. Every piece of text starts below that strip.`,
     `- BOTTOM: keep the lowest tenth of the canvas calm and free of text.`,
     `- Render ONLY the exact quoted words above. Never draw placeholder labels (like "WORDMARK", "LOGO", or "TEXT HERE") or any other lettering.`,
+    `- The word "TILT" may appear ONLY inside the quoted phrases "TILT AMBASSADOR CLUB" and "— TEAM TILT", typeset as plain text. NEVER draw a TILT wordmark, logotype, stylized brand mark, or invented logo anywhere — the real TILT logos are stamped onto the graphic by code afterwards.`,
     `- Do not draw any logos, crests, signatures, or badges anywhere.`,
   ]
     .filter(Boolean)
