@@ -23,6 +23,7 @@ import { runFactoryReorder } from "@/lib/pipelines/factory-reorder";
 import { runResearchScan } from "@/lib/pipelines/materials-rd";
 import { runInnovation } from "@/lib/pipelines/product-design";
 import { runDispatchedTask } from "@/lib/accounting-loop";
+import { autoScanAndFile } from "@/lib/accounting-ap";
 import { runSocialPlanWeekly } from "@/lib/pipelines/social-plan";
 import { runMarketingWeekly } from "@/lib/pipelines/marketing";
 import { isDispatchDue } from "@/lib/org/dispatch-cadence";
@@ -66,6 +67,9 @@ async function getScheduledTasks(now: Date): Promise<PipelineTask[]> {
       name: "Accounting Auto-Categorize",
       run: () => runDispatchedTask("auto-categorize"),
     });
+    // Penny reads new AP bills from the Zoho Documents inbox so they're queued
+    // for approval (and, if AP_AUTOFILE=1, files clean known-vendor ones).
+    tasks.push({ name: "Penny AP Inbox", run: () => autoScanAndFile() });
   }
 
   // Inventory Reconciliation: Mon–Fri — runs first to keep Zoho Inventory in sync with the Sheet
