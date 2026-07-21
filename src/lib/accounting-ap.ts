@@ -25,8 +25,12 @@ import {
   fetchRecentPayables,
   recordVendorPayment,
   attachToTransaction,
+  fetchTaxes,
+  fetchCurrencies,
   type BooksAccount,
   type ExistingPayable,
+  type ZohoTax,
+  type ZohoCurrency,
 } from "./zoho-books";
 import { isInboxConfigured, fetchInteracNotifications } from "./email-inbox";
 
@@ -38,8 +42,12 @@ export interface ApProposal {
   vendor: string;
   date: string; // YYYY-MM-DD
   reference?: string; // invoice / bill number
-  amount: number;
-  currency?: string;
+  amount: number; // grand total (incl. tax)
+  currency?: string; // e.g. CAD, USD
+  exchangeRate?: number; // foreign → base, when currency isn't CAD
+  taxAmount?: number; // tax portion of the total (for ITCs)
+  taxRate?: number; // e.g. 13 for HST
+  taxName?: string; // e.g. "HST", "GST"
   expenseAccount: string; // GL account name Penny chose
   paidThroughAccount?: string; // for an expense: which bank/cash it was paid from
   alreadyPaid: boolean;
@@ -147,6 +155,11 @@ Decide:
 - expenseAccount: the best-fit EXPENSE account name from the list above.
 - paidThroughAccount: the bank/cash account the money left — REQUIRED whenever alreadyPaid is true (for BOTH bill and expense). Pick it from the list (an e-Transfer leaves the main chequing account).
 
+Also capture:
+- amount: the GRAND TOTAL including tax.
+- taxAmount / taxRate / taxName: the sales tax on the bill (e.g. 13 / "HST" / GST) so we can claim the input tax credit. Use null if there's no tax line.
+- currency: the document's currency (CAD unless the bill clearly states otherwise — factory bills are often USD). exchangeRate only if the document shows one.
+
 Respond with ONLY a JSON object, no prose:
 \`\`\`json
 {
@@ -156,6 +169,10 @@ Respond with ONLY a JSON object, no prose:
   "reference": "invoice or bill number, or null",
   "amount": 0.00,
   "currency": "CAD",
+  "exchangeRate": null,
+  "taxAmount": 0.00,
+  "taxRate": 0,
+  "taxName": "HST/GST/… or null",
   "expenseAccount": "exact account name from the list",
   "paidThroughAccount": "exact account name, or null",
   "alreadyPaid": true | false,
@@ -206,6 +223,32 @@ function describePayable(e: ExistingPayable): string {
   return `${e.type} ${e.number || "(no #)"} — ${e.vendor || "?"}, $${e.amount.toFixed(2)}, ${e.date}`;
 }
 
+/** Match the bill's tax to a configured Zoho tax (by rate, then by name). */
+function resolveTax(p: ApProposal, taxes: ZohoTax[]): ZohoTax | null {
+  if (!((p.taxAmount ?? 0) > 0)) return null;
+  if (p.taxRate && p.taxRate > 0) {
+    const byRate = taxes.find((t) => Math.abs(t.tax_percentage - (p.taxRate as number)) < 0.4);
+    if (byRate) return byRate;
+  }
+  if (p.taxName) {
+    const n = p.taxName.toLowerCase();
+    const byName = taxes.find((t) => t.tax_name.toLowerCase().includes(n));
+    if (byName) return byName;
+  }
+  return null;
+}
+
+/** Match the bill's currency to a Zoho currency (null when it's the base currency). */
+function resolveCurrency(
+  code: string | undefined,
+  currencies: ZohoCurrency[]
+): { currency: ZohoCurrency; foreign: boolean } | null {
+  if (!code) return null;
+  const hit = currencies.find((c) => c.currency_code.toUpperCase() === code.toUpperCase());
+  if (!hit) return null;
+  return { currency: hit, foreign: !hit.is_base_currency };
+}
+
 function errorProposal(doc: InboxDocument, error: string): ApProposal {
   return {
     id: `ap-${doc.id}`,
@@ -228,7 +271,13 @@ function errorProposal(doc: InboxDocument, error: string): ApProposal {
 function toProposal(doc: InboxDocument, p: Record<string, unknown>): ApProposal {
   const s = (k: string) => (typeof p[k] === "string" ? (p[k] as string).trim() : undefined);
   const entryType = s("entryType") === "expense" ? "expense" : "bill";
-  const amount = typeof p.amount === "number" ? p.amount : parseFloat(String(p.amount ?? "0")) || 0;
+  const num = (k: string) => {
+    const v = p[k];
+    if (typeof v === "number") return v;
+    const n = parseFloat(String(v ?? ""));
+    return Number.isNaN(n) ? undefined : n;
+  };
+  const amount = num("amount") ?? 0;
   const conf = s("confidence");
   return {
     id: `ap-${doc.id}`,
@@ -239,7 +288,11 @@ function toProposal(doc: InboxDocument, p: Record<string, unknown>): ApProposal 
     date: s("date") ?? "",
     reference: s("reference") || undefined,
     amount,
-    currency: s("currency") || "CAD",
+    currency: (s("currency") || "CAD").toUpperCase(),
+    exchangeRate: num("exchangeRate"),
+    taxAmount: num("taxAmount"),
+    taxRate: num("taxRate"),
+    taxName: s("taxName") || undefined,
     expenseAccount: s("expenseAccount") ?? "",
     paidThroughAccount: s("paidThroughAccount") || undefined,
     alreadyPaid: p.alreadyPaid === true,
@@ -403,6 +456,29 @@ export async function approveProposal(
     const paidThrough = find(p.paidThroughAccount);
     const warnings: string[] = [];
 
+    // Resolve tax + currency (best-effort — degrade to plain if unmatched).
+    const [taxes, currencies] = await Promise.all([
+      fetchTaxes().catch(() => [] as ZohoTax[]),
+      fetchCurrencies().catch(() => [] as ZohoCurrency[]),
+    ]);
+    const tax = resolveTax(p, taxes);
+    if ((p.taxAmount ?? 0) > 0 && !tax) {
+      warnings.push(
+        `saw ${p.taxName ?? "tax"} of $${(p.taxAmount ?? 0).toFixed(2)} but couldn't match a Zoho tax rate — booked tax-inclusive; add the tax manually to claim the ITC`
+      );
+    }
+    const cur = resolveCurrency(p.currency, currencies);
+    if (p.currency && p.currency !== "CAD" && (!cur || !cur.foreign)) {
+      warnings.push(
+        `bill is in ${p.currency} but that currency isn't set up in Zoho — booked in the base currency`
+      );
+    }
+    const currencyId = cur?.foreign ? cur.currency.currency_id : undefined;
+    const exchangeRate = cur?.foreign ? p.exchangeRate : undefined;
+    // When a tax is applied, the line/amount must be PRE-tax (Zoho adds the tax).
+    const preTax =
+      tax && (p.taxAmount ?? 0) > 0 ? Number((p.amount - (p.taxAmount as number)).toFixed(2)) : p.amount;
+
     if (p.entryType === "expense") {
       if (!paidThrough)
         throw new Error(`Paid-through account "${p.paidThroughAccount ?? "(none)"}" not found`);
@@ -411,10 +487,13 @@ export async function approveProposal(
         accountId: expense.account_id,
         paidThroughAccountId: paidThrough.account_id,
         date: p.date,
-        amount: p.amount,
+        amount: preTax,
         vendorId,
         reference: p.reference,
         description: `${p.fileName} — ${p.rationale}`.slice(0, 200),
+        taxId: tax?.tax_id,
+        currencyId,
+        exchangeRate,
       });
       p.zohoId = r.expense_id;
       // An expense already records the payment from the paid-through account.
@@ -424,8 +503,12 @@ export async function approveProposal(
         vendorId,
         billNumber: p.reference,
         date: p.date,
-        lineItems: [{ accountId: expense.account_id, description: p.fileName, amount: p.amount }],
+        lineItems: [
+          { accountId: expense.account_id, description: p.fileName, amount: preTax, taxId: tax?.tax_id },
+        ],
         notes: p.rationale,
+        currencyId,
+        exchangeRate,
       });
       p.zohoId = r.bill_id;
       p.zohoNumber = r.bill_number;

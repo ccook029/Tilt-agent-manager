@@ -372,8 +372,10 @@ export interface CreateBillInput {
   vendorId: string;
   billNumber?: string;
   date: string;
-  lineItems: { accountId: string; description?: string; amount: number }[];
+  lineItems: { accountId: string; description?: string; amount: number; taxId?: string }[];
   notes?: string;
+  currencyId?: string;
+  exchangeRate?: number;
 }
 
 /** Create an Accounts Payable bill (unpaid). */
@@ -384,11 +386,14 @@ export async function createBill(
     vendor_id: input.vendorId,
     ...(input.billNumber ? { bill_number: input.billNumber } : {}),
     date: input.date,
+    ...(input.currencyId ? { currency_id: input.currencyId } : {}),
+    ...(input.exchangeRate ? { exchange_rate: input.exchangeRate } : {}),
     line_items: input.lineItems.map((li) => ({
       account_id: li.accountId,
       description: li.description ?? "",
       rate: li.amount,
       quantity: 1,
+      ...(li.taxId ? { tax_id: li.taxId } : {}),
     })),
     ...(input.notes ? { notes: input.notes } : {}),
   });
@@ -400,10 +405,13 @@ export interface CreateExpenseInput {
   accountId: string; // expense (GL) account
   paidThroughAccountId: string; // bank/cash it was paid from
   date: string;
-  amount: number;
+  amount: number; // pre-tax (Zoho adds the tax when tax_id is set)
   vendorId?: string;
   reference?: string;
   description?: string;
+  taxId?: string;
+  currencyId?: string;
+  exchangeRate?: number;
 }
 
 /** Create an Expense (already-paid). */
@@ -415,6 +423,9 @@ export async function createExpense(
     paid_through_account_id: input.paidThroughAccountId,
     date: input.date,
     amount: input.amount,
+    ...(input.taxId ? { tax_id: input.taxId, is_inclusive_tax: false } : {}),
+    ...(input.currencyId ? { currency_id: input.currencyId } : {}),
+    ...(input.exchangeRate ? { exchange_rate: input.exchangeRate } : {}),
     ...(input.vendorId ? { vendor_id: input.vendorId } : {}),
     ...(input.reference ? { reference_number: input.reference } : {}),
     description: input.description ?? "",
@@ -479,6 +490,28 @@ export async function fetchRecentPayables(): Promise<ExistingPayable[]> {
     })
   );
   return [...bills, ...expenses];
+}
+
+export interface ZohoTax {
+  tax_id: string;
+  tax_name: string;
+  tax_percentage: number;
+}
+/** The org's configured taxes (GST/HST/…), for matching a bill's tax to record ITCs. */
+export async function fetchTaxes(): Promise<ZohoTax[]> {
+  const res = await booksGet<{ taxes?: ZohoTax[] }>("/settings/taxes").catch(() => ({ taxes: [] as ZohoTax[] }));
+  return res.taxes ?? [];
+}
+
+export interface ZohoCurrency {
+  currency_id: string;
+  currency_code: string;
+  is_base_currency?: boolean;
+}
+/** The org's currencies, for foreign (e.g. USD factory) bills. */
+export async function fetchCurrencies(): Promise<ZohoCurrency[]> {
+  const res = await booksGet<{ currencies?: ZohoCurrency[] }>("/settings/currencies").catch(() => ({ currencies: [] as ZohoCurrency[] }));
+  return res.currencies ?? [];
 }
 
 /** Record a vendor payment against a bill, so an already-paid bill isn't left

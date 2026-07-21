@@ -18,6 +18,9 @@ interface Proposal {
   reference?: string;
   amount: number;
   currency?: string;
+  taxAmount?: number;
+  taxName?: string;
+  taxRate?: number;
   expenseAccount: string;
   paidThroughAccount?: string;
   alreadyPaid: boolean;
@@ -335,6 +338,14 @@ function ProposalCard({
         </label>
       </div>
 
+      {(p.taxAmount || (p.currency && p.currency !== "CAD")) && (
+        <p className="mt-2 text-[11px] text-gray-500">
+          {p.taxAmount
+            ? `Tax: $${p.taxAmount.toFixed(2)}${p.taxRate ? ` (${p.taxRate}%${p.taxName ? ` ${p.taxName}` : ""})` : ""}`
+            : ""}
+          {p.currency && p.currency !== "CAD" ? `  ·  ${p.currency}` : ""}
+        </p>
+      )}
       {p.rationale && <p className="mt-2 text-xs text-gray-500">{p.rationale}</p>}
       {errored && p.error && <p className="mt-2 text-xs text-red-400">⚠ {p.error}</p>}
 
