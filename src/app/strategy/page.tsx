@@ -152,13 +152,22 @@ function AnalystTab() {
         <p className="text-sm text-gray-500">
           Talk to Sterling about strategy, projections, and reports.
         </p>
-        <Link
-          href="/zoho/reconnect"
-          className="text-xs text-gray-500 transition-colors hover:text-[#00d6ff]"
-          title="Refresh the Zoho connection if agents report auth / 401 errors"
-        >
-          Reconnect Zoho ↗
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/accounting/ap"
+            className="text-xs text-gray-500 transition-colors hover:text-[#00d6ff]"
+            title="Penny reads AP bills from the Zoho Documents inbox and proposes entries for your approval"
+          >
+            AP Inbox ↗
+          </Link>
+          <Link
+            href="/zoho/reconnect"
+            className="text-xs text-gray-500 transition-colors hover:text-[#00d6ff]"
+            title="Refresh the Zoho connection if agents report auth / 401 errors"
+          >
+            Reconnect Zoho ↗
+          </Link>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">

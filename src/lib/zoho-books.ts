@@ -342,6 +342,87 @@ export async function uncategorizeTxn(transactionId: string): Promise<void> {
   await booksPost(`/banktransactions/${transactionId}/uncategorize`, {});
 }
 
+// ---- AP writes: vendors, bills, expenses (behind human approval) -----------
+
+interface ZohoContact {
+  contact_id: string;
+  contact_name: string;
+}
+
+/** Find a vendor contact by name, creating it if it doesn't exist. */
+export async function findOrCreateVendor(name: string): Promise<string> {
+  const clean = name.trim();
+  const found = await booksGet<{ contacts?: ZohoContact[] }>("/contacts", {
+    contact_name: clean,
+    contact_type: "vendor",
+  }).catch(() => ({ contacts: [] as ZohoContact[] }));
+  const list = found.contacts ?? [];
+  const hit =
+    list.find((c) => c.contact_name.trim().toLowerCase() === clean.toLowerCase()) ?? list[0];
+  if (hit) return hit.contact_id;
+  const created = await booksPost<{ contact?: ZohoContact }>("/contacts", {
+    contact_name: clean,
+    contact_type: "vendor",
+  });
+  if (!created.contact?.contact_id) throw new Error(`Could not create vendor "${clean}"`);
+  return created.contact.contact_id;
+}
+
+export interface CreateBillInput {
+  vendorId: string;
+  billNumber?: string;
+  date: string;
+  lineItems: { accountId: string; description?: string; amount: number }[];
+  notes?: string;
+}
+
+/** Create an Accounts Payable bill (unpaid). */
+export async function createBill(
+  input: CreateBillInput
+): Promise<{ bill_id: string; bill_number: string }> {
+  const res = await booksPost<{ bill?: { bill_id: string; bill_number: string } }>("/bills", {
+    vendor_id: input.vendorId,
+    ...(input.billNumber ? { bill_number: input.billNumber } : {}),
+    date: input.date,
+    line_items: input.lineItems.map((li) => ({
+      account_id: li.accountId,
+      description: li.description ?? "",
+      rate: li.amount,
+      quantity: 1,
+    })),
+    ...(input.notes ? { notes: input.notes } : {}),
+  });
+  if (!res.bill?.bill_id) throw new Error("Zoho did not return a created bill");
+  return { bill_id: res.bill.bill_id, bill_number: res.bill.bill_number };
+}
+
+export interface CreateExpenseInput {
+  accountId: string; // expense (GL) account
+  paidThroughAccountId: string; // bank/cash it was paid from
+  date: string;
+  amount: number;
+  vendorId?: string;
+  reference?: string;
+  description?: string;
+}
+
+/** Create an Expense (already-paid). */
+export async function createExpense(
+  input: CreateExpenseInput
+): Promise<{ expense_id: string }> {
+  const res = await booksPost<{ expense?: { expense_id: string } }>("/expenses", {
+    account_id: input.accountId,
+    paid_through_account_id: input.paidThroughAccountId,
+    date: input.date,
+    amount: input.amount,
+    ...(input.vendorId ? { vendor_id: input.vendorId } : {}),
+    ...(input.reference ? { reference_number: input.reference } : {}),
+    description: input.description ?? "",
+  });
+  if (!res.expense?.expense_id) throw new Error("Zoho did not return a created expense");
+  return { expense_id: res.expense.expense_id };
+}
+
 // ---- Books health snapshot (read-only) ------------------------------------
 
 /**
