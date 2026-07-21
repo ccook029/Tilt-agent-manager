@@ -25,6 +25,7 @@ import { renderConsignmentSnapshot } from "../sales/retailers";
 import { renderRecentInvoicesSnapshot } from "../sales/invoices";
 import { fetchBooksSnapshot } from "../zoho-books";
 import { renderShipmentsSnapshot } from "../supply/shipments";
+import { renderProductionSnapshot } from "../supply/production";
 import { getOwnerQueue } from "./work-orders";
 
 /** Roles that plan around performance data get the (pricier) GA4 block. */
@@ -64,13 +65,14 @@ async function latestFindings(
 }
 
 async function renderOperationsContext(): Promise<string> {
-  const [sheet, sync, inventory, shipments] = await Promise.all([
+  const [sheet, sync, inventory, shipments, production] = await Promise.all([
     safeBlock("MASTER ZOHO SHEET (source of truth for stick counts)", fetchSheetSnapshot()),
     safeBlock("SHEET ↔ INVENTORY RECONCILIATION", fetchSyncReport(), 3000),
     safeBlock("ZOHO INVENTORY SNAPSHOT", fetchInventorySnapshot()),
     renderShipmentsSnapshot().catch(() => "(shipment register unavailable this run)"),
+    renderProductionSnapshot().catch(() => "(production status unavailable this run)"),
   ]);
-  return `\n\n${sheet}\n\n${sync}\n\n${inventory}\n\n=== OPEN SHIPMENTS (track each against its timeline; flag at-risk/overdue) ===\n${shipments}\n=== END SHIPMENTS ===`;
+  return `\n\n${sheet}\n\n${sync}\n\n${inventory}\n\n=== OPEN SHIPMENTS (track each against its timeline; flag at-risk/overdue) ===\n${shipments}\n=== END SHIPMENTS ===\n\n=== UNDER PRODUCTION → WEBSITE (what the site shows as being made; set the public ETA per line) ===\n${production}\n=== END UNDER PRODUCTION ===`;
 }
 
 async function renderProductContext(): Promise<string> {
