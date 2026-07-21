@@ -54,6 +54,8 @@ export interface ApProposal {
   error?: string;
   /** Non-fatal note after a successful create (e.g. payment/attach couldn't complete). */
   warning?: string;
+  /** Set when a learned rule for this vendor pre-filled the account. */
+  learnedRule?: boolean;
   createdAt: string;
   decidedAt?: string;
 }
@@ -66,6 +68,51 @@ async function loadProposals(): Promise<ApProposal[]> {
 }
 async function saveProposals(rows: ApProposal[]): Promise<void> {
   await kv.set(KEY, rows.slice(-MAX));
+}
+
+// ---- Learned vendor rules -------------------------------------------------
+// When Chris approves a bill, we remember vendor → account so the same vendor
+// is coded consistently next time without him re-picking.
+export interface VendorRule {
+  expenseAccount: string;
+  paidThroughAccount?: string;
+  entryType?: "bill" | "expense";
+  updatedAt: string;
+}
+const RULES_KEY = "accounting-ap-vendor-rules";
+
+export async function getVendorRules(): Promise<Record<string, VendorRule>> {
+  return (await kv.get<Record<string, VendorRule>>(RULES_KEY)) ?? {};
+}
+async function setVendorRule(
+  vendor: string,
+  r: Omit<VendorRule, "updatedAt">
+): Promise<void> {
+  const key = vendorKey(vendor);
+  if (!key || !r.expenseAccount) return;
+  const all = await getVendorRules();
+  all[key] = { ...r, updatedAt: new Date().toISOString() };
+  await kv.set(RULES_KEY, all);
+}
+
+/** Apply Chris's edits to a proposal before it's created. */
+function applyEdits(p: ApProposal, e: Record<string, unknown>): void {
+  const s = (k: string) => (typeof e[k] === "string" ? (e[k] as string).trim() : undefined);
+  if (e.entryType === "bill" || e.entryType === "expense") p.entryType = e.entryType;
+  const v = s("vendor");
+  if (v) p.vendor = v;
+  const d = s("date");
+  if (d) p.date = d;
+  if ("reference" in e) p.reference = s("reference") || undefined;
+  const ea = s("expenseAccount");
+  if (ea) p.expenseAccount = ea;
+  if ("paidThroughAccount" in e) p.paidThroughAccount = s("paidThroughAccount") || undefined;
+  if (typeof e.amount === "number" && e.amount > 0) p.amount = e.amount;
+  else {
+    const n = parseFloat(String(e.amount ?? ""));
+    if (!Number.isNaN(n) && n > 0) p.amount = n;
+  }
+  if (typeof e.alreadyPaid === "boolean") p.alreadyPaid = e.alreadyPaid;
 }
 
 export async function listProposals(): Promise<ApProposal[]> {
@@ -82,11 +129,14 @@ export async function listProposals(): Promise<ApProposal[]> {
 
 const AP_SYSTEM = `You are Penny Quill, Staff Accountant at Tilt Hockey. You read an accounts-payable document (a vendor bill or a paid receipt) and produce ONE structured entry proposal. You are precise and conservative: if a figure isn't clearly on the document, mark confidence "low" and say what's uncertain. You never invent a vendor or amount.`;
 
-function apUserPrompt(coa: string, etransfers: string, fileName: string): string {
+function apUserPrompt(coa: string, etransfers: string, rules: string, fileName: string): string {
   return `Read the attached AP document ("${fileName}") and propose how to record it in Zoho Books.
 
 ## Chart of Accounts (choose account names EXACTLY from this list)
 ${coa}
+
+## Saved vendor rules (Chris's past decisions — if this vendor matches, USE this account)
+${rules}
 
 ## Recent e-Transfer payments (to decide if this bill is ALREADY PAID — match by vendor + amount + date)
 ${etransfers}
@@ -208,7 +258,7 @@ export async function buildApProposals(opts?: { limit?: number }): Promise<{
   skipped: string[];
 }> {
   const limit = opts?.limit ?? 5;
-  const [inbox, accounts, interac, existing, payables] = await Promise.all([
+  const [inbox, accounts, interac, existing, payables, rules] = await Promise.all([
     fetchInboxDocuments({ max: 50 }),
     fetchChartOfAccounts().catch(() => [] as BooksAccount[]),
     isInboxConfigured()
@@ -216,6 +266,7 @@ export async function buildApProposals(opts?: { limit?: number }): Promise<{
       : Promise.resolve([]),
     loadProposals(),
     fetchRecentPayables().catch(() => [] as ExistingPayable[]),
+    getVendorRules().catch(() => ({} as Record<string, VendorRule>)),
   ]);
 
   const done = new Set(
@@ -238,6 +289,16 @@ export async function buildApProposals(opts?: { limit?: number }): Promise<{
           )
           .join("\n")
       : "(no e-Transfer notifications available)";
+  const ruleEntries = Object.entries(rules);
+  const rulesBlock =
+    ruleEntries.length > 0
+      ? ruleEntries
+          .map(
+            ([k, r]) =>
+              `- ${k}: ${r.entryType ?? "bill"} → ${r.expenseAccount}${r.paidThroughAccount ? ` (paid through ${r.paidThroughAccount})` : ""}`
+          )
+          .join("\n")
+      : "(no saved rules yet)";
 
   const fresh: ApProposal[] = [];
   const skipped: string[] = [];
@@ -258,7 +319,7 @@ export async function buildApProposals(opts?: { limit?: number }): Promise<{
     try {
       const res = await callClaude({
         systemPrompt: AP_SYSTEM,
-        userMessage: apUserPrompt(coaBlock, etBlock, doc.fileName),
+        userMessage: apUserPrompt(coaBlock, etBlock, rulesBlock, doc.fileName),
         model: CLAUDE_MODEL,
         maxTokens: 1500,
         temperature: 0,
@@ -270,6 +331,15 @@ export async function buildApProposals(opts?: { limit?: number }): Promise<{
       const parsed = parseJson(res.text);
       if (parsed) {
         const prop = toProposal(doc, parsed);
+        // A saved rule for this vendor wins over the model's account pick.
+        const rule = rules[vendorKey(prop.vendor)];
+        if (rule) {
+          prop.expenseAccount = rule.expenseAccount;
+          if (rule.paidThroughAccount) prop.paidThroughAccount = rule.paidThroughAccount;
+          if (rule.entryType) prop.entryType = rule.entryType;
+          prop.learnedRule = true;
+          prop.confidence = "high";
+        }
         const dup = matchExisting(prop, payables);
         if (dup) prop.duplicateOf = describePayable(dup);
         fresh.push(prop);
@@ -293,11 +363,18 @@ export async function buildApProposals(opts?: { limit?: number }): Promise<{
 
 // ---- Approve / reject -----------------------------------------------------
 
-export async function approveProposal(id: string, force = false): Promise<ApProposal> {
+export async function approveProposal(
+  id: string,
+  force = false,
+  edits?: Record<string, unknown>
+): Promise<ApProposal> {
   const all = await loadProposals();
   const p = all.find((x) => x.id === id);
   if (!p) throw new Error("Proposal not found");
   if (p.status === "created") return p;
+
+  // Apply Chris's edits (account/vendor/amount/…) before anything else.
+  if (edits) applyEdits(p, edits);
 
   // Duplicate guard: don't book something already in Zoho unless Chris forces it.
   if (!force) {
@@ -397,6 +474,13 @@ export async function approveProposal(id: string, force = false): Promise<ApProp
     p.error = undefined;
     p.warning = warnings.length > 0 ? warnings.join("; ") : undefined;
     p.decidedAt = new Date().toISOString();
+
+    // Remember how Chris coded this vendor, so next time is one click.
+    await setVendorRule(p.vendor, {
+      expenseAccount: p.expenseAccount,
+      paidThroughAccount: p.paidThroughAccount,
+      entryType: p.entryType,
+    }).catch(() => {});
   } catch (e) {
     p.status = "error";
     p.error = e instanceof Error ? e.message : String(e);
