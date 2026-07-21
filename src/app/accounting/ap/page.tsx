@@ -24,6 +24,7 @@ interface Proposal {
   paidVia?: string;
   confidence: "high" | "medium" | "low";
   rationale: string;
+  duplicateOf?: string;
   status: "proposed" | "created" | "rejected" | "error";
   zohoNumber?: string;
   error?: string;
@@ -81,19 +82,27 @@ export default function ApInboxPage() {
     }
   };
 
-  const decide = async (id: string, mode: "approve" | "reject") => {
+  const decide = async (
+    id: string,
+    mode: "approve" | "reject",
+    force = false
+  ) => {
     setBusyId(id);
     setNote(null);
     try {
       const res = await fetch("/api/accounting/ap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, id }),
+        body: JSON.stringify({ mode, id, force }),
       });
       const data = await res.json();
       setProposals(data.proposals ?? []);
       if (mode === "approve" && !data.ok) {
-        setNote(data.proposal?.error ?? "Couldn't create the entry in Zoho.");
+        setNote(
+          data.blockedAsDuplicate
+            ? "Held back — this looks like it's already in Zoho. Review it and hit “Create anyway” only if it's genuinely a new bill."
+            : data.proposal?.error ?? "Couldn't create the entry in Zoho."
+        );
       }
     } catch {
       setNote("Action failed — try again.");
@@ -180,9 +189,10 @@ function ProposalCard({
 }: {
   p: Proposal;
   busy: boolean;
-  onDecide: (id: string, mode: "approve" | "reject") => void;
+  onDecide: (id: string, mode: "approve" | "reject", force?: boolean) => void;
 }) {
   const errored = p.status === "error";
+  const isDup = !!p.duplicateOf;
   return (
     <div className="rounded-xl border border-gray-800 bg-[#0d0d0d] p-4">
       <div className="flex items-start justify-between gap-3">
@@ -233,13 +243,29 @@ function ProposalCard({
         {errored && p.error && <p className="mt-1 text-red-400">⚠ {p.error}</p>}
       </div>
 
+      {isDup && (
+        <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-xs text-amber-300">
+          ⚠ Possible duplicate — already in Zoho as{" "}
+          <span className="font-semibold">{p.duplicateOf}</span>. Only create if this
+          is genuinely a separate bill.
+        </p>
+      )}
+
       <div className="mt-3 flex items-center gap-2">
         <button
-          onClick={() => onDecide(p.id, "approve")}
+          onClick={() => onDecide(p.id, "approve", isDup)}
           disabled={busy}
-          className="rounded-lg bg-green-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-500 disabled:opacity-40"
+          className={`rounded-lg px-4 py-2 text-xs font-semibold text-white transition-colors disabled:opacity-40 ${
+            isDup ? "bg-amber-600 hover:bg-amber-500" : "bg-green-600 hover:bg-green-500"
+          }`}
         >
-          {busy ? "Creating…" : errored ? "Retry create" : `Approve → create ${p.entryType}`}
+          {busy
+            ? "Creating…"
+            : isDup
+              ? "Create anyway"
+              : errored
+                ? "Retry create"
+                : `Approve → create ${p.entryType}`}
         </button>
         <button
           onClick={() => onDecide(p.id, "reject")}

@@ -423,6 +423,64 @@ export async function createExpense(
   return { expense_id: res.expense.expense_id };
 }
 
+export interface ExistingPayable {
+  type: "bill" | "expense";
+  number: string;
+  vendor: string;
+  amount: number;
+  date: string;
+  reference: string;
+}
+
+interface ZohoExpenseRow {
+  expense_id: string;
+  date: string;
+  total?: number;
+  amount?: number;
+  reference_number?: string;
+  vendor_name?: string;
+}
+
+/**
+ * Recent bills + expenses, for duplicate detection before creating a new one.
+ * Newest first, one page each — enough to catch a bill entered twice.
+ */
+export async function fetchRecentPayables(): Promise<ExistingPayable[]> {
+  const [billsResp, expResp] = await Promise.all([
+    booksGet<{ bills?: BooksBill[] }>("/bills", {
+      per_page: "200",
+      sort_column: "date",
+      sort_order: "D",
+    }).catch(() => ({ bills: [] as BooksBill[] })),
+    booksGet<{ expenses?: ZohoExpenseRow[] }>("/expenses", {
+      per_page: "200",
+      sort_column: "date",
+      sort_order: "D",
+    }).catch(() => ({ expenses: [] as ZohoExpenseRow[] })),
+  ]);
+  const bills = (billsResp.bills ?? []).map(
+    (b): ExistingPayable => ({
+      type: "bill",
+      number: b.bill_number,
+      vendor: b.vendor_name,
+      amount: b.total,
+      date: b.date,
+      reference: b.bill_number,
+    })
+  );
+  const expenses = (expResp.expenses ?? []).map(
+    (e): ExistingPayable => ({
+      type: "expense",
+      number: e.expense_id,
+      vendor: e.vendor_name ?? "",
+      amount: e.total ?? e.amount ?? 0,
+      date: e.date,
+      reference: e.reference_number ?? "",
+    })
+  );
+  return [...bills, ...expenses];
+}
+
 // ---- Books health snapshot (read-only) ------------------------------------
 
 /**

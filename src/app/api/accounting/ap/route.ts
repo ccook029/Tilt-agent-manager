@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
     mode?: string;
     id?: string;
     limit?: number;
+    force?: boolean;
   };
   const mode = body.mode ?? "scan";
 
@@ -43,8 +44,13 @@ export async function POST(request: NextRequest) {
     }
     if (mode === "approve") {
       if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 400 });
-      const p = await approveProposal(body.id);
-      return NextResponse.json({ ok: p.status === "created", proposal: p, proposals: await listProposals() });
+      const p = await approveProposal(body.id, body.force === true);
+      return NextResponse.json({
+        ok: p.status === "created",
+        blockedAsDuplicate: p.status === "proposed" && !!p.duplicateOf,
+        proposal: p,
+        proposals: await listProposals(),
+      });
     }
     if (mode === "reject") {
       if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 400 });
