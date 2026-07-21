@@ -581,3 +581,46 @@ export async function rejectProposal(id: string): Promise<ApProposal | null> {
   await saveProposals(all);
   return p;
 }
+
+// ---- Auto-pilot (scheduled) -----------------------------------------------
+
+/** Safe to file without a human? Only known-vendor, high-confidence, non-dup,
+ *  small-dollar bills — everything else waits for approval. */
+function autoFileEligible(p: ApProposal): boolean {
+  if (p.status !== "proposed" || p.duplicateOf) return false;
+  if (!p.learnedRule || p.confidence !== "high") return false;
+  if (!p.vendor || !p.expenseAccount || !p.date || !(p.amount > 0)) return false;
+  const cap = Number(process.env.AP_AUTOFILE_MAX ?? "250");
+  if (p.amount > cap) return false;
+  if ((p.entryType === "expense" || p.alreadyPaid) && !p.paidThroughAccount) return false;
+  return true;
+}
+
+/**
+ * Scheduled AP pass: scan the inbox so bills are queued automatically. If
+ * AP_AUTOFILE=1, also file the clean known-vendor bills (still duplicate-guarded);
+ * everything else waits for Chris. Returns a one-line report for the cron log.
+ */
+export async function autoScanAndFile(): Promise<string> {
+  const { proposals, scanned } = await buildApProposals({ limit: 15 });
+  const pending = proposals.filter((p) => p.status === "proposed").length;
+
+  if (process.env.AP_AUTOFILE !== "1") {
+    return `Scanned ${scanned} document(s); ${pending} bill(s) waiting for approval in the AP Inbox.`;
+  }
+
+  const eligible = proposals.filter(autoFileEligible);
+  let filed = 0;
+  const notes: string[] = [];
+  for (const p of eligible) {
+    const r = await approveProposal(p.id); // dup guard still applies (no force)
+    if (r.status === "created") {
+      filed += 1;
+      if (r.warning) notes.push(`${r.vendor}: ${r.warning}`);
+    }
+  }
+  const waiting = Math.max(0, pending - filed);
+  return `Scanned ${scanned}; auto-filed ${filed} known-vendor bill(s); ${waiting} waiting for approval.${
+    notes.length ? ` Notes: ${notes.join("; ")}` : ""
+  }`;
+}

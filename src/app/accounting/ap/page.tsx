@@ -136,7 +136,8 @@ export default function ApInboxPage() {
           </h1>
           <p className="mt-1 text-sm text-gray-400">
             Penny reads bills from the Zoho Books Documents inbox and proposes the
-            entry. You approve each one before it&apos;s created.
+            entry. You approve each one before it&apos;s created. She also scans
+            automatically each weekday, so new bills are waiting here.
           </p>
         </div>
         <button
