@@ -104,6 +104,71 @@ export async function downloadDocument(
   }
 }
 
+function trimObj(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[k] = typeof v === "string" && v.length > 80 ? `${v.slice(0, 80)}…` : v;
+  }
+  return out;
+}
+
+/**
+ * One-document probe for the diagnostic: what can we actually extract for a
+ * given inbox document? Tries the detail endpoint (autoscan fields?) and a raw
+ * download (real PDF bytes?), so we know exactly what slice 2 has to work with.
+ */
+export async function probeDocument(id: string): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = { id };
+  // 1) Detail endpoint — may carry autoscan-extracted vendor/amount/date.
+  try {
+    const orgId = getEnvOrThrow("ZOHO_ORGANIZATION_ID");
+    const url = new URL(`${booksBase()}/books/v3/documents/${encodeURIComponent(id)}`);
+    url.searchParams.set("organization_id", orgId);
+    const res = await fetch(url.toString(), { headers: await authHeader() });
+    const ct = res.headers.get("content-type") ?? "";
+    if (ct.includes("application/json")) {
+      const j = (await res.json()) as Record<string, unknown>;
+      const doc = (j.document ??
+        (Array.isArray(j.documents) ? (j.documents as unknown[])[0] : null)) as
+        | Record<string, unknown>
+        | null;
+      out.detail = {
+        status: res.status,
+        topKeys: Object.keys(j),
+        documentKeys: doc ? Object.keys(doc) : null,
+        document: doc ? trimObj(doc) : null,
+      };
+    } else {
+      const buf = Buffer.from(await res.arrayBuffer());
+      out.detail = {
+        status: res.status,
+        contentType: ct,
+        bytes: buf.length,
+        isPdf: buf.subarray(0, 4).toString("latin1") === "%PDF",
+      };
+    }
+  } catch (e) {
+    out.detailError = e instanceof Error ? e.message : String(e);
+  }
+  // 2) Raw download attempt (the path slice 2 would use to read the PDF).
+  try {
+    const dl = await downloadDocument(id);
+    if (dl) {
+      const buf = Buffer.from(dl.base64, "base64");
+      out.download = {
+        contentType: dl.contentType,
+        bytes: buf.length,
+        isPdf: buf.subarray(0, 4).toString("latin1") === "%PDF",
+      };
+    } else {
+      out.download = null;
+    }
+  } catch (e) {
+    out.downloadError = e instanceof Error ? e.message : String(e);
+  }
+  return out;
+}
+
 /** Prose snapshot of the AP inbox for Penny's context. */
 export async function renderApInboxSnapshot(max = 15): Promise<string> {
   const res = await fetchInboxDocuments({ max });
