@@ -51,6 +51,11 @@ export interface CallClaudeOptions {
    * paste a screenshot of what he's talking about.
    */
   images?: { mediaType: string; data: string }[];
+  /**
+   * PDF documents to attach to the user turn — base64, no data: prefix. Used by
+   * Penny to read AP bills pulled from the Zoho Books Documents inbox.
+   */
+  documents?: { base64: string }[];
 }
 
 // Anthropic's server-side web search (dynamic filtering) — supported on our
@@ -74,23 +79,31 @@ export async function callClaude(
   const client = getClient();
   const model = opts.model ?? CLAUDE_MODEL;
 
-  // With images attached, the user turn becomes image blocks + a text block.
-  const content: string | Anthropic.Messages.ContentBlockParam[] =
-    opts.images && opts.images.length > 0
-      ? [
-          ...opts.images.map(
-            (img): Anthropic.Messages.ContentBlockParam => ({
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: img.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-                data: img.data,
-              },
-            })
-          ),
-          { type: "text", text: opts.userMessage },
-        ]
-      : opts.userMessage;
+  // With images or PDFs attached, the user turn becomes media blocks + text.
+  const hasMedia =
+    (opts.images && opts.images.length > 0) ||
+    (opts.documents && opts.documents.length > 0);
+  const content: string | Anthropic.Messages.ContentBlockParam[] = hasMedia
+    ? [
+        ...(opts.images ?? []).map(
+          (img): Anthropic.Messages.ContentBlockParam => ({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: img.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+              data: img.data,
+            },
+          })
+        ),
+        ...(opts.documents ?? []).map(
+          (doc): Anthropic.Messages.ContentBlockParam => ({
+            type: "document",
+            source: { type: "base64", media_type: "application/pdf", data: doc.base64 },
+          })
+        ),
+        { type: "text", text: opts.userMessage },
+      ]
+    : opts.userMessage;
 
   const basePayload = {
     model,
