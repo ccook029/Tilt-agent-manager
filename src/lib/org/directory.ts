@@ -214,6 +214,27 @@ const departments: Department[] = [
     ],
   },
   {
+    id: "web",
+    name: "Web & Digital",
+    mission:
+      "Own tilthockey.com day to day: merchandising, product copy, pricing, and page content live; larger design/feature work drafted and shipped as reviewed pull requests. The founders request changes in plain language and the site keeps pace.",
+    managerId: "web-manager",
+    tools: [
+      {
+        label: "Tilt Web Admin",
+        href: staffToolUrl("/admin"),
+        description: "tilthockey.com back office — orders, products, site ops",
+        external: true,
+      },
+      {
+        label: "Live Store",
+        href: "https://tilthockey.com/store",
+        description: "The storefront you manage",
+        external: true,
+      },
+    ],
+  },
+  {
     id: "intelligence",
     name: "Business Intelligence",
     mission:
@@ -446,6 +467,21 @@ const employees: Employee[] = [
     skills: ["material-spec", "patent-brief", "literature-review"],
     charter:
       "PhD-level materials research — polymers, composites, coatings — delivered as factory-ready specs and patent-grade documentation.",
+    staffed: true,
+    enabled: true,
+  },
+
+  // ---- Web & Digital ---------------------------------------------------------
+  {
+    id: "web-manager",
+    name: "Nova Vale",
+    title: "Website Manager",
+    departmentId: "web",
+    role: "manager",
+    reportsTo: null, // the founders talk to Nova directly
+    skills: ["site-content", "merchandising", "product-copy", "web-change-request"],
+    charter:
+      "Runs tilthockey.com: makes merchandising and content changes (prices, product copy, badges, in-stock, homepage/banners) and drafts larger design/feature work as reviewed pull requests. Chris and Jeremy ask for changes in plain language and Nova turns them into precise, shippable edits.",
     staffed: true,
     enabled: true,
   },

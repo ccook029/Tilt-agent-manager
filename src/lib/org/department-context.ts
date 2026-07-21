@@ -26,6 +26,7 @@ import { renderRecentInvoicesSnapshot } from "../sales/invoices";
 import { fetchBooksSnapshot } from "../zoho-books";
 import { renderShipmentsSnapshot } from "../supply/shipments";
 import { renderProductionSnapshot } from "../supply/production";
+import { renderWebContext } from "./web-context";
 import { getOwnerQueue } from "./work-orders";
 
 /** Roles that plan around performance data get the (pricier) GA4 block. */
@@ -263,6 +264,8 @@ export async function renderDepartmentContext(
         return await renderCxContext();
       case "executive":
         return await renderExecutiveContext();
+      case "web":
+        return renderWebContext();
       default:
         return "";
     }
