@@ -28,6 +28,7 @@ import {
 import { runCategorizationBatch } from "./accounting-execute";
 import { buildQuestionsWorkbook } from "./questions-export";
 import { getDocuments, renderDocumentsBlock } from "./documents";
+import { renderApInboxSnapshot } from "./zoho-documents";
 import { buildStrategistContext } from "./strategist-context";
 import { renderOrgKnowledge } from "./org-knowledge";
 import { renderCrossAgentSignals } from "./cross-agent";
@@ -365,9 +366,10 @@ async function runAgentChat(
     .join("\n\n");
 
   const docs = await getDocuments().catch(() => []);
+  const apInbox = await renderApInboxSnapshot().catch(() => "");
 
   const config = agent === "sterling" ? cfoConfig : workerConfig;
-  const userMessage = substituteVariables(config.chatPrompt, {
+  let userMessage = substituteVariables(config.chatPrompt, {
     policy_block: await renderPolicyBlock(),
     open_escalations: openBlock,
     penny_work: pennyWork,
@@ -375,6 +377,9 @@ async function runAgentChat(
     history: historyBlock,
     message,
   });
+  // The Zoho Books Documents inbox (AP bills awaiting entry) — appended so both
+  // Penny (who proposes the entries) and Sterling (who reviews) can see it.
+  if (apInbox) userMessage += `\n\n${apInbox}`;
 
   // Every agent shares the company knowledge; Sterling additionally gets the
   // financial-strategist context (Tilt Business Strategist + pipeline/projection).
