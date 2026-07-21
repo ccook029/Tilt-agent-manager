@@ -33,6 +33,7 @@ interface Proposal {
   error?: string;
   warning?: string;
   learnedRule?: boolean;
+  messages?: { role: "chris" | "penny"; text: string; at: string }[];
 }
 
 const confColor: Record<Proposal["confidence"], string> = {
@@ -124,6 +125,24 @@ export default function ApInboxPage() {
     }
   };
 
+  const refine = async (id: string, comment: string) => {
+    setBusyId(id);
+    setNote(null);
+    try {
+      const res = await fetch("/api/accounting/ap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "refine", id, comment }),
+      });
+      const data = await res.json();
+      setProposals(data.proposals ?? []);
+    } catch {
+      setNote("Couldn't reach Penny — try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const open = proposals.filter((p) => p.status === "proposed" || p.status === "error");
   const done = proposals.filter((p) => p.status === "created" || p.status === "rejected");
 
@@ -166,11 +185,12 @@ export default function ApInboxPage() {
         <div className="space-y-3">
           {open.map((p) => (
             <ProposalCard
-              key={p.id}
+              key={`${p.id}-${p.messages?.length ?? 0}`}
               p={p}
               accounts={accounts}
               busy={busyId === p.id}
               onDecide={decide}
+              onRefine={refine}
             />
           ))}
         </div>
@@ -210,6 +230,7 @@ function ProposalCard({
   accounts,
   busy,
   onDecide,
+  onRefine,
 }: {
   p: Proposal;
   accounts: Account[];
@@ -220,9 +241,11 @@ function ProposalCard({
     force?: boolean,
     edits?: Record<string, unknown>
   ) => void;
+  onRefine: (id: string, comment: string) => void;
 }) {
   const errored = p.status === "error";
   const isDup = !!p.duplicateOf;
+  const [comment, setComment] = useState("");
 
   // Editable working copy of the fields Chris might tweak before approving.
   const [entryType, setEntryType] = useState(p.entryType);
@@ -357,6 +380,58 @@ function ProposalCard({
           is genuinely a separate bill.
         </p>
       )}
+
+      {/* Chat with Penny about this bill */}
+      {p.messages && p.messages.length > 0 && (
+        <div className="mt-3 space-y-1.5 rounded-lg border border-gray-800/70 bg-[#0a0a0a] p-2.5">
+          {p.messages.map((m, i) => (
+            <div
+              key={i}
+              className={`text-xs ${m.role === "chris" ? "text-right" : "text-left"}`}
+            >
+              <span
+                className={`inline-block rounded-lg px-2.5 py-1 ${
+                  m.role === "chris"
+                    ? "bg-[#00d6ff]/15 text-gray-200"
+                    : "bg-gray-800/70 text-gray-300"
+                }`}
+              >
+                <span className="mr-1 text-[9px] uppercase tracking-wider text-gray-500">
+                  {m.role === "chris" ? "you" : "penny"}
+                </span>
+                {m.text}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && comment.trim() && !busy) {
+              onRefine(p.id, comment.trim());
+              setComment("");
+            }
+          }}
+          placeholder="Tell Penny how to change this — e.g. “code to COGS, not Inventory Asset”"
+          className="flex-1 rounded-md border border-gray-700 bg-gray-800/50 px-3 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:border-[#00d6ff] focus:outline-none"
+          disabled={busy}
+        />
+        <button
+          onClick={() => {
+            if (comment.trim()) {
+              onRefine(p.id, comment.trim());
+              setComment("");
+            }
+          }}
+          disabled={busy || !comment.trim()}
+          className="shrink-0 rounded-md border border-gray-700 bg-gray-900/60 px-3 py-1.5 text-xs font-semibold text-gray-300 transition-colors hover:border-[#00d6ff]/50 hover:text-[#00d6ff] disabled:opacity-40"
+        >
+          {busy ? "…" : "Ask Penny"}
+        </button>
+      </div>
 
       <div className="mt-3 flex items-center gap-2">
         <button
