@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isMcpConfigured } from "@/lib/zoho-books";
 import { checkZohoHealth } from "@/lib/zoho-health";
 import { isInboxConfigured, fetchInteracDetailed } from "@/lib/email-inbox";
+import { fetchInboxDocuments } from "@/lib/zoho-documents";
 import { guardAccountingOwner } from "@/lib/os-identity";
 
 export const dynamic = "force-dynamic";
@@ -83,8 +84,29 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Zoho Books Documents inbox (AP bills awaiting entry) reachability.
+  const docsRes = await fetchInboxDocuments({ max: 25 });
+  const documents = {
+    reachable: docsRes.reachable,
+    count: docsRes.documents.length,
+    error: docsRes.error,
+    sample: docsRes.documents.slice(0, 5).map((d) => ({
+      id: d.id,
+      fileName: d.fileName,
+      vendor: d.vendor ?? null,
+      amount: d.amount ?? null,
+      date: d.date ?? null,
+      status: d.status ?? null,
+    })),
+    hint: !docsRes.reachable
+      ? "Couldn't list the Books Documents inbox. Confirm the token has ZohoBooks.fullaccess.all, then check the endpoint shape — Slice 2 refines the exact download path."
+      : docsRes.documents.length === 0
+        ? "Connected but the inbox is empty (or these docs are already processed)."
+        : undefined,
+  };
+
   return NextResponse.json(
-    { deploy, verdict: zoho.verdict, zoho, env, inbox },
+    { deploy, verdict: zoho.verdict, zoho, env, inbox, documents },
     {
       headers: {
         "Content-Type": "application/json",
