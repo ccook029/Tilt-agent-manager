@@ -12,18 +12,29 @@ import { Resend } from "resend";
 import { readBlobBytes } from "@/lib/social/blob";
 import type { Announcement } from "@/lib/social/db/schema";
 
-/** Chris + Jeremy, parsed from MORNING_BRIEF_RECIPIENTS ("email=tag, …"). */
+/**
+ * Who gets announcement emails. ANNOUNCEMENT_NOTIFY (comma-separated) is the
+ * explicit override and is used exactly as given. Otherwise we parse
+ * MORNING_BRIEF_RECIPIENTS ("email=tag, …") / EMAIL_TO and ALWAYS add Jeremy —
+ * those fallbacks historically resolved to Chris only, so ambassador
+ * announcements never reached him.
+ */
 function teamRecipients(): string[] {
-  const raw =
-    process.env.ANNOUNCEMENT_NOTIFY ??
-    process.env.MORNING_BRIEF_RECIPIENTS ??
-    process.env.EMAIL_TO ??
-    "";
-  const emails = raw
-    .split(",")
-    .map((s) => s.split("=")[0].trim())
-    .filter((s) => s.includes("@"));
-  return emails.length ? Array.from(new Set(emails)) : ["chris@tilthockey.com"];
+  const parse = (raw: string): string[] =>
+    raw
+      .split(",")
+      .map((s) => s.split("=")[0].trim())
+      .filter((s) => s.includes("@"));
+
+  const configured = parse(process.env.ANNOUNCEMENT_NOTIFY ?? "");
+  if (configured.length) return Array.from(new Set(configured));
+
+  const fallback = parse(
+    process.env.MORNING_BRIEF_RECIPIENTS ?? process.env.EMAIL_TO ?? "",
+  );
+  if (!fallback.length) fallback.push("chris@tilthockey.com");
+  fallback.push("jeremy@tilthockey.com");
+  return Array.from(new Set(fallback));
 }
 
 function slug(s: string): string {
