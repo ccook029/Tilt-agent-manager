@@ -28,7 +28,12 @@ export const BRAND = {
   ],
   colors: {
     black: "#0D0D0D",
-    cyan: "#00BFFF",
+    // HARD RULE — this is the one true TILT cyan, `tilt-blue` (#00CFFF) in
+    // the website's DESIGN_SYSTEM.md. Every accent, headline, and graphic
+    // must use EXACTLY this hue. Never change it, and never let a model
+    // substitute another blue. (#00BFFF previously lived here and shipped
+    // off-brand graphics — do not regress.)
+    cyan: "#00CFFF",
     darkGray: "#1A1A1A",
     midGray: "#333333",
   },
@@ -56,6 +61,8 @@ export type PillarId = (typeof PILLARS)[number]["id"];
  */
 export const HARD_RULES = [
   "Logo is never rendered by an AI model — the TILT logo and team crests are composited by code as fixed PNG overlays.",
+  `Brand color is exact — the ONLY accent color in any graphic or typeset text is TILT cyan ${BRAND.colors.cyan} (the website's tilt-blue), a bright electric ice-cyan. Never royal blue, navy, indigo, teal, or any other blue, and never a washed-out or darkened variant.`,
+  "No competitor branding — if a photo shows another manufacturer's logo or wordmark on equipment (stick, gloves, helmet, pants — e.g. CCM, Bauer, Warrior, True), blur or cleanly remove it so it is not readable. Team jersey crests and numbers stay untouched.",
   "Real assets only — never AI-generate players, sticks, or hockey scenes; only edit/brand/format existing photos and clips.",
   "Never expose internal data — factory costs, margins, wholesale pricing, negotiation terms. Public MSRP and product names are fine.",
   "Tilt Hockey only — never reference Gaimchanger Golf or Tilt Baseball in Tilt Hockey content.",
