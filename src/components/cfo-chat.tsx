@@ -5,6 +5,7 @@ import AgentChat from "@/components/agent-chat";
 export default function CfoChat() {
   return (
     <AgentChat
+      enableVoice
       config={{
         agent: "sterling",
         name: "Sterling",

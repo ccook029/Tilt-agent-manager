@@ -310,7 +310,8 @@ function parseControlBlock(text: string): {
 async function runAgentChat(
   agent: ChatAgent,
   message: string,
-  clientHistory: CfoChatMessage[] = []
+  clientHistory: CfoChatMessage[] = [],
+  options: { concise?: boolean } = {}
 ): Promise<CfoChatResult> {
   const speaker = agent === "sterling" ? "Sterling" : "Penny";
   const stored = await loadCfoChat(agent);
@@ -387,7 +388,12 @@ async function runAgentChat(
     config.systemPrompt +
     (await renderOrgKnowledge().catch(() => "")) +
     (await renderCrossAgentSignals(agent === "sterling" ? "sterling" : "penny").catch(() => "")) +
-    (agent === "sterling" ? await buildStrategistContext().catch(() => "") : "");
+    (agent === "sterling" ? await buildStrategistContext().catch(() => "") : "") +
+    // Voice Mode: the reply is read ALOUD to someone driving — keep it short and
+    // ear-friendly. (Same brain and context; only the delivery changes.)
+    (options.concise
+      ? "\n\n=== HANDS-FREE / DRIVING MODE ===\nThe user is talking to you by voice while driving; your reply is spoken aloud, not shown on screen. Answer in 1–3 short, natural sentences: lead with the answer, then at most one key number or next step. NO markdown, headings, bullet lists, tables, or code blocks — it all gets read out literally. If the full detail is long, give the headline out loud and offer to drop the rest on their screen for later. Speak numbers naturally (say “about twelve thousand dollars,” not a table)."
+      : "");
 
   const res = await callClaude({
     systemPrompt,
@@ -451,16 +457,18 @@ async function runAgentChat(
 
 export async function runCfoChat(
   message: string,
-  history: CfoChatMessage[] = []
+  history: CfoChatMessage[] = [],
+  options: { concise?: boolean } = {}
 ): Promise<CfoChatResult> {
-  return runAgentChat("sterling", message, history);
+  return runAgentChat("sterling", message, history, options);
 }
 
 export async function runPennyChat(
   message: string,
-  history: CfoChatMessage[] = []
+  history: CfoChatMessage[] = [],
+  options: { concise?: boolean } = {}
 ): Promise<CfoChatResult> {
-  return runAgentChat("penny", message, history);
+  return runAgentChat("penny", message, history, options);
 }
 
 /**
