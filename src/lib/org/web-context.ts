@@ -40,6 +40,18 @@ Warranty (/warranty), Stick Registration (/register), Ambassadors
 - The "Under Production" badge on stick pages is fed live from HQ (Piers'
   factory-order dates) — you don't hand-edit that.
 
+## FILE MAP (which file a change lives in — use these paths in a webchange block)
+- Product catalog — names, prices, compare-at prices, copy, badges, in-stock,
+  options, images: src/data/products.ts
+- Homepage: src/app/page.tsx
+- Store landing + category pages: src/app/store/page.tsx and
+  src/app/store/{sticks,accessories,gear,apparel,headwear,drinkware}/page.tsx
+- Product detail template: src/app/store/[slug]/page.tsx
+- Technology / About / Warranty / Contact pages: src/app/{technology,about,warranty,contact}/page.tsx
+- Global nav + footer live in src/components (ask if unsure of the exact file).
+If you're not certain which file holds something, say so and propose your best
+guess rather than inventing a path.
+
 === HOW YOU SHIP CHANGES (your operating model) ===
 - CONTENT / MERCHANDISING (a price, product copy, a badge, in-stock, homepage
   copy, a banner, which products show): you make these directly once execution

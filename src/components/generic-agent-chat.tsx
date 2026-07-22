@@ -111,16 +111,28 @@ interface AssignSpec {
   brief: string;
 }
 
-function parseAssistant(content: string): (string | AssignSpec)[] {
-  const parts: (string | AssignSpec)[] = [];
-  const re = /```assign\s*([\s\S]*?)```/g;
+// ```webchange blocks — the Website Manager (Nova) turns an agreed change into
+// a pull request against the storefront repo.
+interface WebChangeSpec {
+  path: string;
+  title: string;
+  request: string;
+}
+
+type Part = string | AssignSpec | WebChangeSpec;
+
+function parseAssistant(content: string): Part[] {
+  const parts: Part[] = [];
+  const re = /```(assign|webchange)\s*([\s\S]*?)```/g;
   let last = 0;
   for (let m = re.exec(content); m; m = re.exec(content)) {
     if (m.index > last) parts.push(content.slice(last, m.index));
     try {
-      const raw = JSON.parse(m[1].trim()) as Partial<AssignSpec>;
-      if (raw.assignee && raw.title && raw.brief) {
+      const raw = JSON.parse(m[2].trim()) as Record<string, string>;
+      if (m[1] === "assign" && raw.assignee && raw.title && raw.brief) {
         parts.push({ assignee: raw.assignee, title: raw.title, brief: raw.brief });
+      } else if (m[1] === "webchange" && raw.path && raw.title && raw.request) {
+        parts.push({ path: raw.path, title: raw.title, request: raw.request });
       } else {
         parts.push(m[0]);
       }
@@ -193,6 +205,74 @@ function AssignCard({ spec }: { spec: AssignSpec }) {
               className="rounded-md bg-[#0094b8] px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#00a8d1] disabled:opacity-50"
             >
               {state === "busy" ? "Working (takes a minute)…" : "Assign & run"}
+            </button>
+            {note && <span className="text-[11px] text-red-400">{note}</span>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WebChangeCard({ spec }: { spec: WebChangeSpec }) {
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [prUrl, setPrUrl] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const run = async () => {
+    setState("busy");
+    setNote(null);
+    try {
+      const res = await fetch("/api/web/change", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request: spec.request, path: spec.path, title: spec.title }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.ok) {
+        setState("done");
+        setPrUrl(d.prUrl ?? null);
+        setNote(d.summary ?? null);
+      } else {
+        setState("error");
+        setNote(d.error ?? "Couldn't open the PR.");
+      }
+    } catch {
+      setState("error");
+      setNote("Network error — try again.");
+    }
+  };
+
+  return (
+    <div className="my-2 rounded-xl border border-[#0094b8]/40 bg-[#0094b8]/10 p-3.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-[#00d6ff]">
+        Website change → pull request
+      </p>
+      <p className="mt-1 text-sm font-medium text-gray-100">{spec.title}</p>
+      <p className="mt-0.5 text-[11px] text-gray-500">{spec.path}</p>
+      <p className="mt-1 text-xs leading-relaxed text-gray-400">{spec.request}</p>
+      <div className="mt-2.5 flex items-center gap-2">
+        {state === "done" ? (
+          prUrl ? (
+            <a
+              href={prUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-semibold text-emerald-400 hover:underline"
+            >
+              ✓ PR opened — review &amp; merge to ship →
+            </a>
+          ) : (
+            <span className="text-xs text-emerald-400">✓ {note ?? "Done."}</span>
+          )
+        ) : (
+          <>
+            <button
+              onClick={run}
+              disabled={state === "busy"}
+              className="rounded-md bg-[#0094b8] px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#00a8d1] disabled:opacity-50"
+            >
+              {state === "busy" ? "Opening PR…" : "Open PR"}
             </button>
             {note && <span className="text-[11px] text-red-400">{note}</span>}
           </>
@@ -447,6 +527,8 @@ export default function GenericAgentChat({
                   part.trim() ? (
                     <ReportRenderer key={j} text={part} agentName={name} />
                   ) : null
+                ) : "path" in part ? (
+                  <WebChangeCard key={j} spec={part} />
                 ) : (
                   <AssignCard key={j} spec={part} />
                 )
