@@ -1,31 +1,58 @@
-# Voice Mode (hands-free / driving)
+# Voice Mode (hands-free, real-time)
 
-A hands-free voice layer on top of the **existing** Sterling (CFO) chat. It does
-**not** add a parallel agent or a new datastore — it drives the same backend the
-typed chat uses, so the system prompt, business context, and saved transcript
-are identical to typing.
+A hands-free, **real-time** voice conversation on top of the **existing**
+Sterling (CFO) chat. It does **not** add a parallel agent or a new datastore —
+it drives the same agent, persona, and KV transcript as typing. Tuned to feel
+like ChatGPT/Claude voice: Sterling starts talking about a second after you
+finish, and keeps talking as the rest of his answer streams in.
 
 ## The loop
 
 ```
-tap 🎙 Voice → listen → transcribe → POST /api/accounting-manager/run (mode:"chat")
-            → speak the reply aloud → auto-reopen the mic → (repeat) → End
+tap 🎙 Voice → listen → transcribe → STREAM the reply from Sterling
+            → speak it sentence-by-sentence (starts before it's fully written)
+            → auto-reopen the mic → (repeat) → End
 ```
 
-Everything the voice turn produces is persisted by the **same** route into the
-**same** Vercel KV transcript (`cfo-chat-store`) — no new schema.
+Everything a voice turn produces is persisted into the **same** Vercel KV
+transcript (`cfo-chat-store`) as the typed chat — no new schema.
+
+## Why it feels real-time (the snappy path)
+
+The typed CFO chat is thorough-but-slow: it assembles heavy live-Zoho context
+(financial projections, the AP inbox) and returns one big block. Voice Mode uses
+a **separate, lighter path** built for conversation:
+
+- **Streaming route** `POST /api/agents/voice-chat` streams tokens as they're
+  written (`streamClaudeText` in `anthropic.ts`).
+- **Light, fast context** (`src/lib/voice/voice-chat.ts`): company knowledge +
+  open decisions + Penny's latest headlines — all fast KV reads. It skips the
+  slow live-Zoho assembly; Sterling offers to pull deep numbers in the full chat
+  when a question needs them.
+- **Short spoken answers** (1–3 sentences, no markdown).
+- **Sentence-chunked speech** (`src/lib/voice/speech-queue.ts`): the client
+  speaks each sentence the moment it lands instead of waiting for the whole
+  reply.
+
+Same brain (Sterling on Sonnet 5), same persona (`cfoConfig.systemPrompt`), same
+transcript — only the delivery is faster.
 
 ## Files
 
 | Piece | File | Notes |
 |---|---|---|
-| Voice UI (car overlay + loop) | `src/components/voice/car-voice-mode.tsx` | one big button, 5-state loop, barge-in, End |
+| Voice UI (overlay + loop) | `src/components/voice/car-voice-mode.tsx` | one big button, 5-state loop, barge-in, End |
+| Streaming voice brain | `src/lib/voice/voice-chat.ts` | light context + short spoken answers; persists to the shared transcript |
+| Streaming route | `src/app/api/agents/voice-chat/route.ts` | streams Sterling's reply token-by-token |
+| Streaming Claude helper | `src/lib/anthropic.ts` (`streamClaudeText`) | text-only streaming completion |
+| Sentence-chunked speech | `src/lib/voice/speech-queue.ts` | speak each sentence as it lands |
+| Stream reader (client) | `src/lib/voice/voice-client.ts` | reads the streamed reply, yields deltas |
 | Speech-to-text | `src/lib/voice/stt.ts` | **Deepgram swap point here** |
 | Text-to-speech playback | `src/lib/voice/tts-playback.ts` | plays existing `/api/agents/tts` (ElevenLabs swap is in that route) |
 | Spoken-text cleaner | `src/lib/voice/speakable.ts` | strips markdown/JSON so TTS doesn't read symbols |
-| Mount + reuse of chat send | `src/components/agent-chat.tsx` | `sendMessage()` returns the reply text; `enableVoice` prop |
+| Shared transcript persist | `src/lib/accounting-loop.ts` (`persistCfoChatTurn`) | typed + voice write the same KV store |
+| Mount + streaming glue | `src/components/agent-chat.tsx` | `streamReply()` shows the turn + streams deltas; `enableVoice` prop |
 | Enabled for Sterling | `src/components/cfo-chat.tsx` | `<AgentChat enableVoice … />` |
-| Concise-for-driving hint | `src/lib/accounting-loop.ts`, `src/app/api/accounting-manager/run/route.ts` | `voice:true` → 1–3 short spoken sentences (same brain, shorter delivery) |
 
 ## Reused, not rebuilt
 

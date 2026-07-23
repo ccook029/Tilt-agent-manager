@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 import { useState, useRef, useEffect, useCallback } from "react";
 import CarVoiceMode from "@/components/voice/car-voice-mode";
+import { streamVoiceReply } from "@/lib/voice/voice-client";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -375,6 +376,26 @@ export default function AgentChat({
 
   // Voice Mode reads the reply aloud, so it wants the concise variant.
   const sendVoice = useCallback((text: string) => sendMessage(text, { voice: true }), [sendMessage]);
+
+  // Real-time streaming path for Voice Mode: shows the turn in the transcript
+  // and streams deltas back so the overlay can speak sentence-by-sentence. The
+  // streaming route persists to the SAME KV transcript, so nothing is doubled.
+  const streamReply = useCallback(
+    async (message: string, handlers: { onDelta: (delta: string) => void }): Promise<string> => {
+      setMessages((p) => [...p, { role: "user", content: message, timestamp: new Date().toISOString() }]);
+      let full = "";
+      try {
+        full = await streamVoiceReply(message, { onDelta: handlers.onDelta });
+      } catch {
+        full = "Sorry — I couldn't reach you just now. Try again.";
+      }
+      const content = full.trim() || "…";
+      setMessages((p) => [...p, { role: "assistant", content, timestamp: new Date().toISOString() }]);
+      return content;
+    },
+    []
+  );
+
   const [voiceOpen, setVoiceOpen] = useState(false);
 
   const answer = async (esc: OpenEscalation, decision: string) => {
@@ -590,6 +611,9 @@ export default function AgentChat({
         <CarVoiceMode
           agentId={config.agent}
           agentName={config.name}
+          // Sterling streams (snappy, sentence-by-sentence); anyone else falls
+          // back to the buffered concise send.
+          streamReply={config.agent === "sterling" ? streamReply : undefined}
           sendMessage={sendVoice}
           onClose={() => setVoiceOpen(false)}
         />
