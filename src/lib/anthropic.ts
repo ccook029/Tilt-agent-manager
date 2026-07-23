@@ -184,6 +184,11 @@ export async function streamClaudeText(
   stream.on("text", (delta: string) => {
     if (delta) onText(delta);
   });
+  // A stream 'error' with no listener becomes an unhandled rejection that can
+  // crash the serverless function mid-response (dropping the client's stream).
+  // Swallow it here; the same error still rejects finalMessage() below, which
+  // the caller handles.
+  stream.on("error", () => {});
 
   const final = await stream.finalMessage();
   const text = final.content
