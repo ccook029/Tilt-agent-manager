@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ReportRenderer from "@/components/report-renderer";
 import CfoChat from "@/components/cfo-chat";
+import ActivityFeed from "@/components/activity-feed";
 import StrategyProjections from "@/components/strategy-projections";
 import StrategyContracts from "@/components/strategy-contracts";
 import StrategyKnowledge from "@/components/strategy-knowledge";
@@ -205,6 +206,15 @@ function AnalystTab() {
       )}
 
       <CfoChat />
+
+      {/* Live view of what Sterling has put Penny on — and everything she's done. */}
+      <div className="mt-6">
+        <ActivityFeed
+          endpoint="/api/agents/activity?agentId=accounting"
+          title="Penny's Activity"
+          emptyHint="Nothing yet. When Sterling puts Penny on something, it'll show up here — live."
+        />
+      </div>
     </div>
   );
 }
