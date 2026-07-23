@@ -145,10 +145,11 @@ export default function CarVoiceMode({
         chunker.flush();
         queue.end();
         await queue.drained();
-      } catch {
+      } catch (err) {
         queue.stop();
         if (activeRef.current) {
-          setErrorMsg(`Couldn't reach ${agentRef.current.agentName} — tap to try again.`);
+          const detail = err instanceof Error && err.message ? ` (${err.message})` : "";
+          setErrorMsg(`Couldn't reach ${agentRef.current.agentName}${detail} — tap to retry.`);
           setPhase("error");
         }
         return;
