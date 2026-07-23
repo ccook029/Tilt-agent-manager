@@ -11,6 +11,7 @@ import CompanyTree, {
 import TiltCard from "@/components/tilt-card";
 import Hero from "@/components/hero";
 import DailyBriefPanel from "@/components/daily-brief";
+import HqVoiceLauncher from "@/components/voice/hq-voice-launcher";
 import ScrollReveal from "@/components/scroll-reveal";
 import { Stagger, StaggerItem } from "@/components/motion-primitives";
 
@@ -169,6 +170,9 @@ export default function Home() {
           </Link>
         </div>
       </ScrollReveal>
+
+      {/* Default "walk in and talk" entry — lands on Reese, Sterling one tap away. */}
+      <HqVoiceLauncher />
     </div>
   );
 }

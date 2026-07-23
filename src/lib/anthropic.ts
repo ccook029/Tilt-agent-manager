@@ -161,6 +161,45 @@ export async function callClaude(
 }
 
 /**
+ * Streaming variant — emits text deltas as they arrive (for real-time voice).
+ * Plain text only (no media/MCP/web-search); those callers use callClaude.
+ * `onText` fires per token chunk; the resolved value is the full message +
+ * usage, same shape as callClaude.
+ */
+export async function streamClaudeText(
+  opts: Pick<CallClaudeOptions, "systemPrompt" | "userMessage" | "model" | "maxTokens" | "temperature">,
+  onText: (delta: string) => void
+): Promise<ClaudeResponse> {
+  const client = getClient();
+  const model = opts.model ?? CLAUDE_MODEL;
+
+  const stream = client.messages.stream({
+    model,
+    max_tokens: opts.maxTokens ?? 1024,
+    ...samplingParams(model, opts.temperature ?? 0.4),
+    system: opts.systemPrompt,
+    messages: [{ role: "user", content: opts.userMessage }],
+  });
+
+  stream.on("text", (delta: string) => {
+    if (delta) onText(delta);
+  });
+
+  const final = await stream.finalMessage();
+  const text = final.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n\n");
+
+  return {
+    text,
+    inputTokens: final.usage?.input_tokens ?? 0,
+    outputTokens: final.usage?.output_tokens ?? 0,
+    model,
+  };
+}
+
+/**
  * Run a completion with Anthropic's server-side web search tool. Server tools
  * can stop with `stop_reason: "pause_turn"` when they hit their per-turn
  * iteration limit; to continue we re-send the assistant turn and let the server

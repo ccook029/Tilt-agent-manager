@@ -274,7 +274,7 @@ const employees: Employee[] = [
     title: "CFO",
     departmentId: "finance",
     role: "manager",
-    reportsTo: null,
+    reportsTo: "chief-of-staff",
     personaId: "accounting-manager",
     skills: ["review", "cfo-digest", "financial-analysis", "projections"],
     charter:
@@ -318,7 +318,7 @@ const employees: Employee[] = [
     title: "Marketing Director",
     departmentId: "marketing",
     role: "manager",
-    reportsTo: null,
+    reportsTo: "chief-of-staff",
     personaId: "marketing-director",
     skills: ["review", "content-calendar", "campaign-planning", "brand-voice"],
     charter:
@@ -418,7 +418,7 @@ const employees: Employee[] = [
     title: "Director of Inventory Operations",
     departmentId: "operations",
     role: "manager",
-    reportsTo: null,
+    reportsTo: "chief-of-staff",
     personaId: "inventory",
     skills: ["stock-alert", "po-recommendation", "reconciliation", "order-builder"],
     charter:
@@ -448,7 +448,7 @@ const employees: Employee[] = [
     title: "Head of Product Design",
     departmentId: "product",
     role: "manager",
-    reportsTo: null,
+    reportsTo: "chief-of-staff",
     personaId: "product-design",
     skills: ["product-spec", "rfq-package", "catalog-update", "sell-sheet"],
     charter:
@@ -478,7 +478,7 @@ const employees: Employee[] = [
     title: "Website Manager",
     departmentId: "web",
     role: "manager",
-    reportsTo: null, // the founders talk to Nova directly
+    reportsTo: "chief-of-staff", // Nova rolls up to the Chief of Staff
     skills: ["site-content", "merchandising", "product-copy", "web-change-request"],
     charter:
       "Runs tilthockey.com: makes merchandising and content changes (prices, product copy, badges, in-stock, homepage/banners) and drafts larger design/feature work as reviewed pull requests. Chris and Jeremy ask for changes in plain language and Nova turns them into precise, shippable edits.",
@@ -523,7 +523,7 @@ const employees: Employee[] = [
     title: "Team & Apparel Manager",
     departmentId: "sales",
     role: "manager",
-    reportsTo: null,
+    reportsTo: "chief-of-staff",
     personaId: "team-apparel-manager",
     skills: ["review", "order-approval", "vendor-relations"],
     charter:
@@ -572,7 +572,7 @@ const employees: Employee[] = [
     title: "Director of Business Development",
     departmentId: "bizdev",
     role: "manager",
-    reportsTo: null,
+    reportsTo: "chief-of-staff",
     personaId: "sales-director",
     skills: ["review", "lead-qualification", "pipeline"],
     charter:
@@ -658,7 +658,7 @@ const employees: Employee[] = [
     title: "Customer Experience Manager",
     departmentId: "cx",
     role: "manager",
-    reportsTo: null,
+    reportsTo: "chief-of-staff",
     personaId: "cx-manager",
     skills: ["review", "warranty-policy", "escalation"],
     charter:

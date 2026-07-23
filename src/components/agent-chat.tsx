@@ -9,6 +9,8 @@
 // policy ledger, and uploaded reference documents.
 // ---------------------------------------------------------------------------
 import { useState, useRef, useEffect, useCallback } from "react";
+import CarVoiceMode from "@/components/voice/car-voice-mode";
+import { streamVoiceReply } from "@/lib/voice/voice-client";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -73,7 +75,14 @@ function pickVoice(): SpeechSynthesisVoice | null {
   return voices.find((v) => v.default) ?? voices[0];
 }
 
-export default function AgentChat({ config }: { config: AgentChatConfig }) {
+export default function AgentChat({
+  config,
+  enableVoice = false,
+}: {
+  config: AgentChatConfig;
+  /** Show the hands-free Voice Mode toggle (car use). */
+  enableVoice?: boolean;
+}) {
   const greetingMsg: ChatMessage = {
     role: "assistant",
     content: config.greeting,
@@ -309,52 +318,85 @@ export default function AgentChat({ config }: { config: AgentChatConfig }) {
     await loadDocs();
   };
 
+  // Core send — posts to the SAME CFO route the typed chat uses, appends both
+  // turns to the on-screen + KV transcript, and RETURNS the reply text so Voice
+  // Mode can read it aloud. `voice: true` asks the backend for a concise,
+  // spoken-friendly answer (same brain and context, shorter delivery).
+  const sendMessage = useCallback(
+    async (text: string, opts: { voice?: boolean } = {}): Promise<string> => {
+      const t = text.trim();
+      if (!t) return "";
+      setMessages((p) => [...p, { role: "user", content: t, timestamp: new Date().toISOString() }]);
+      setLoading(true);
+      try {
+        const res = await fetch("/api/accounting-manager/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "chat", agent: config.agent, message: t, voice: opts.voice }),
+        });
+        const data = await res.json();
+        const extras: string[] = [];
+        if (Array.isArray(data.recordedPolicies) && data.recordedPolicies.length > 0) {
+          extras.push(`📋 Recorded as standing policy: ${data.recordedPolicies.length} decision(s).`);
+        }
+        if (data.dispatched) {
+          extras.push(`⚙️ Penny is now running "${data.dispatched}" — results will appear in her Report History shortly.`);
+        }
+        const body = [data.reply ?? data.error ?? "", ...extras].filter(Boolean).join("\n\n");
+        const content =
+          body.trim() ||
+          "Hmm — I didn't get a response back that time. Try sending that again.";
+        setMessages((p) => [
+          ...p,
+          { role: "assistant", content, timestamp: new Date().toISOString() },
+        ]);
+        if (Array.isArray(data.open)) setOpen(data.open);
+        return content;
+      } catch {
+        const content = "Connection error — try again.";
+        setMessages((p) => [
+          ...p,
+          { role: "assistant", content, timestamp: new Date().toISOString() },
+        ]);
+        return content;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [config.agent]
+  );
+
   const send = async () => {
     const text = input.trim();
     if (!text || loading) return;
-    setMessages((p) => [...p, { role: "user", content: text, timestamp: new Date().toISOString() }]);
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-    setLoading(true);
-    try {
-      const res = await fetch("/api/accounting-manager/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "chat", agent: config.agent, message: text }),
-      });
-      const data = await res.json();
-      const extras: string[] = [];
-      if (Array.isArray(data.recordedPolicies) && data.recordedPolicies.length > 0) {
-        extras.push(`📋 Recorded as standing policy: ${data.recordedPolicies.length} decision(s).`);
-      }
-      if (data.dispatched) {
-        extras.push(`⚙️ Penny is now running "${data.dispatched}" — results will appear in her Report History shortly.`);
-      }
-      const body = [data.reply ?? data.error ?? "", ...extras]
-        .filter(Boolean)
-        .join("\n\n");
-      setMessages((p) => [
-        ...p,
-        {
-          role: "assistant",
-          // Never render an empty bubble — if the payload came back blank, say so
-          // instead of showing "nothing" (which reads as a broken chat).
-          content:
-            body.trim() ||
-            "Hmm — I didn't get a response back that time. Try sending that again.",
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-      if (Array.isArray(data.open)) setOpen(data.open);
-    } catch {
-      setMessages((p) => [
-        ...p,
-        { role: "assistant", content: "Connection error — try again.", timestamp: new Date().toISOString() },
-      ]);
-    } finally {
-      setLoading(false);
-    }
+    await sendMessage(text);
   };
+
+  // Voice Mode reads the reply aloud, so it wants the concise variant.
+  const sendVoice = useCallback((text: string) => sendMessage(text, { voice: true }), [sendMessage]);
+
+  // Real-time streaming path for Voice Mode: shows the turn in the transcript
+  // and streams deltas back so the overlay can speak sentence-by-sentence. The
+  // streaming route persists to the SAME KV transcript, so nothing is doubled.
+  const streamReply = useCallback(
+    async (message: string, handlers: { onDelta: (delta: string) => void }): Promise<string> => {
+      setMessages((p) => [...p, { role: "user", content: message, timestamp: new Date().toISOString() }]);
+      let full = "";
+      try {
+        full = await streamVoiceReply(message, { onDelta: handlers.onDelta, agentId: config.agent });
+      } catch {
+        full = "Sorry — I couldn't reach you just now. Try again.";
+      }
+      const content = full.trim() || "…";
+      setMessages((p) => [...p, { role: "assistant", content, timestamp: new Date().toISOString() }]);
+      return content;
+    },
+    [config.agent]
+  );
+
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   const answer = async (esc: OpenEscalation, decision: string) => {
     if (!decision.trim()) return;
@@ -397,14 +439,28 @@ export default function AgentChat({ config }: { config: AgentChatConfig }) {
             <span className="text-xs text-gray-500 ml-2">{config.title}</span>
           </div>
         </div>
-        <button
-          onClick={newChat}
-          disabled={loading}
-          title="Start a fresh conversation (the saved transcript is cleared; recorded policies are kept)"
-          className="text-[11px] px-2.5 py-1 rounded-md bg-gray-800/70 border border-gray-700/60 text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors"
-        >
-          ↺ New chat
-        </button>
+        <div className="flex items-center gap-2">
+          {enableVoice && (
+            <button
+              onClick={() => {
+                stopSpeaking(); // don't let a Listen playback overlap Voice Mode
+                setVoiceOpen(true);
+              }}
+              title="Hands-free voice conversation — built for driving"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md bg-[#00d6ff]/15 border border-[#00d6ff]/40 text-[#00d6ff] hover:bg-[#00d6ff]/25 transition-colors"
+            >
+              🎙 Voice
+            </button>
+          )}
+          <button
+            onClick={newChat}
+            disabled={loading}
+            title="Start a fresh conversation (the saved transcript is cleared; recorded policies are kept)"
+            className="text-[11px] px-2.5 py-1 rounded-md bg-gray-800/70 border border-gray-700/60 text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors"
+          >
+            ↺ New chat
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -547,6 +603,20 @@ export default function AgentChat({ config }: { config: AgentChatConfig }) {
             <EscalationRow key={e.id} esc={e} onAnswer={answer} busy={answering === e.id} />
           ))}
         </div>
+      )}
+
+      {/* Hands-free Voice Mode overlay — same backend, context, and KV history
+          as the typed chat above (sendVoice → sendMessage). */}
+      {enableVoice && voiceOpen && (
+        <CarVoiceMode
+          agentId={config.agent}
+          agentName={config.name}
+          // Sterling streams (snappy, sentence-by-sentence); anyone else falls
+          // back to the buffered concise send.
+          streamReply={config.agent === "sterling" ? streamReply : undefined}
+          sendMessage={sendVoice}
+          onClose={() => setVoiceOpen(false)}
+        />
       )}
     </div>
   );

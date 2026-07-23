@@ -310,7 +310,8 @@ function parseControlBlock(text: string): {
 async function runAgentChat(
   agent: ChatAgent,
   message: string,
-  clientHistory: CfoChatMessage[] = []
+  clientHistory: CfoChatMessage[] = [],
+  options: { concise?: boolean } = {}
 ): Promise<CfoChatResult> {
   const speaker = agent === "sterling" ? "Sterling" : "Penny";
   const stored = await loadCfoChat(agent);
@@ -387,7 +388,12 @@ async function runAgentChat(
     config.systemPrompt +
     (await renderOrgKnowledge().catch(() => "")) +
     (await renderCrossAgentSignals(agent === "sterling" ? "sterling" : "penny").catch(() => "")) +
-    (agent === "sterling" ? await buildStrategistContext().catch(() => "") : "");
+    (agent === "sterling" ? await buildStrategistContext().catch(() => "") : "") +
+    // Voice Mode: the reply is read ALOUD to someone driving — keep it short and
+    // ear-friendly. (Same brain and context; only the delivery changes.)
+    (options.concise
+      ? "\n\n=== HANDS-FREE / DRIVING MODE ===\nThe user is talking to you by voice while driving; your reply is spoken aloud, not shown on screen. Answer in 1–3 short, natural sentences: lead with the answer, then at most one key number or next step. NO markdown, headings, bullet lists, tables, or code blocks — it all gets read out literally. If the full detail is long, give the headline out loud and offer to drop the rest on their screen for later. Speak numbers naturally (say “about twelve thousand dollars,” not a table)."
+      : "");
 
   const res = await callClaude({
     systemPrompt,
@@ -413,14 +419,33 @@ async function runAgentChat(
         : "Sorry — I didn't get that one out cleanly. Give me a touch more to go on and I'll take another run at it.";
   }
 
-  // Persist the exchange, then compact if the transcript has grown too long.
+  // Persist the exchange (compacts into a running summary when long).
+  await persistCfoChatTurn(agent, message, result.reply);
+
+  return result;
+}
+
+/**
+ * Append one user→assistant turn to an accounting agent's persistent transcript
+ * (Vercel KV), compacting into a running summary when it grows too long. Shared
+ * by the typed chat (runAgentChat) and the streaming Voice Mode path so both
+ * write to the SAME store identically. Best-effort — persistence must never
+ * break the chat.
+ */
+export async function persistCfoChatTurn(
+  agent: ChatAgent,
+  userMessage: string,
+  reply: string
+): Promise<void> {
+  const speaker = agent === "sterling" ? "Sterling" : "Penny";
+  const stored = await loadCfoChat(agent);
   const now = new Date().toISOString();
   const nextState = {
     summary: stored.summary,
     messages: [
       ...stored.messages,
-      { role: "user" as const, content: message, timestamp: now },
-      { role: "assistant" as const, content: result.reply, timestamp: now },
+      { role: "user" as const, content: userMessage, timestamp: now },
+      { role: "assistant" as const, content: reply, timestamp: now },
     ],
   };
   try {
@@ -433,7 +458,7 @@ async function runAgentChat(
         systemPrompt:
           "You maintain a running summary of an accounting chat between Chris (CEO of Tilt Hockey) and his accounting agent. Fold the new messages into the existing summary. PRESERVE: every decision made, every dollar figure, account names, vendor/customer identities, open threads, and anything Chris said about how Tilt operates. DROP: pleasantries and process chatter. Output only the updated summary, under 400 words.",
         userMessage: `EXISTING SUMMARY:\n${nextState.summary || "(none)"}\n\nNEW MESSAGES TO FOLD IN:\n${olderText}`,
-        model: config.model,
+        model: CLAUDE_MODEL,
         maxTokens: 800,
         temperature: 0.2,
       });
@@ -445,22 +470,22 @@ async function runAgentChat(
     // Memory persistence must never break the chat itself.
     console.warn(`[accounting-loop] chat persistence failed (${agent}):`, err);
   }
-
-  return result;
 }
 
 export async function runCfoChat(
   message: string,
-  history: CfoChatMessage[] = []
+  history: CfoChatMessage[] = [],
+  options: { concise?: boolean } = {}
 ): Promise<CfoChatResult> {
-  return runAgentChat("sterling", message, history);
+  return runAgentChat("sterling", message, history, options);
 }
 
 export async function runPennyChat(
   message: string,
-  history: CfoChatMessage[] = []
+  history: CfoChatMessage[] = [],
+  options: { concise?: boolean } = {}
 ): Promise<CfoChatResult> {
-  return runAgentChat("penny", message, history);
+  return runAgentChat("penny", message, history, options);
 }
 
 /**

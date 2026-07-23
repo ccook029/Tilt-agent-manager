@@ -9,6 +9,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ReportRenderer from "@/components/report-renderer";
 import { getEmployeeById } from "@/lib/org/directory";
+import CarVoiceMode from "@/components/voice/car-voice-mode";
+import { streamVoiceReply } from "@/lib/voice/voice-client";
+
+// Agents that get the hands-free, streaming Voice Mode. The Chief of Staff is
+// the "walk in and ask where we're at" agent — he sees the whole company.
+const VOICE_ENABLED = new Set(["chief-of-staff"]);
 
 interface Msg {
   role: "user" | "assistant";
@@ -482,11 +488,43 @@ export default function GenericAgentChat({
     setMessages([intro]);
   };
 
+  // Voice Mode: streams the reply so it's spoken sentence-by-sentence. Shows the
+  // turn in the transcript; the streaming route persists to the same KV history.
+  const voiceOn = VOICE_ENABLED.has(agentId);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const streamReply = useCallback(
+    async (message: string, handlers: { onDelta: (delta: string) => void }): Promise<string> => {
+      setMessages((m) => [...m, { role: "user", content: message }]);
+      let full = "";
+      try {
+        full = await streamVoiceReply(message, { onDelta: handlers.onDelta, agentId });
+      } catch {
+        full = "Sorry — I couldn't reach you just now. Try again.";
+      }
+      const content = full.trim() || "…";
+      setMessages((m) => [...m, { role: "assistant", content }]);
+      return content;
+    },
+    [agentId]
+  );
+
   return (
     <div className="rounded-2xl border border-gray-800/80 bg-[#101010]/80">
       <div className="flex items-center justify-between border-b border-gray-800/70 px-4 py-2.5">
         <span className="text-sm font-medium text-gray-300">Talk to {name}</span>
         <div className="flex items-center gap-3">
+          {voiceOn && (
+            <button
+              onClick={() => {
+                stopSpeaking();
+                setVoiceOpen(true);
+              }}
+              title="Hands-free voice conversation — ask where things are at"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md bg-[#00d6ff]/15 border border-[#00d6ff]/40 text-[#00d6ff] hover:bg-[#00d6ff]/25 transition-colors"
+            >
+              🎙 Voice
+            </button>
+          )}
           {speaking && (
             <button
               onClick={stopSpeaking}
@@ -617,6 +655,15 @@ export default function GenericAgentChat({
           </button>
         </div>
       </div>
+
+      {voiceOn && voiceOpen && (
+        <CarVoiceMode
+          agentId={agentId}
+          agentName={name}
+          streamReply={streamReply}
+          onClose={() => setVoiceOpen(false)}
+        />
+      )}
     </div>
   );
 }

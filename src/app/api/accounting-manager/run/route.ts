@@ -114,15 +114,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (mode === "chat") {
-      const { message, history = [] } = body as {
+      const { message, history = [], voice } = body as {
         message?: string;
         history?: CfoChatMessage[];
+        /** Hands-free Voice Mode — reply is read aloud, so keep it concise. */
+        voice?: boolean;
       };
       if (!message || !message.trim()) {
         return NextResponse.json({ error: "message is required" }, { status: 400 });
       }
       const chatFn = agent === "penny" ? runPennyChat : runCfoChat;
-      const result = await chatFn(message, Array.isArray(history) ? history : []);
+      const result = await chatFn(message, Array.isArray(history) ? history : [], {
+        concise: Boolean(voice),
+      });
 
       // Record any decisions Sterling extracted from Chris's message as policy.
       const recorded: string[] = [];
