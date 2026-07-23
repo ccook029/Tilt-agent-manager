@@ -3,18 +3,21 @@
 // ---------------------------------------------------------------------------
 // CarVoiceMode — hands-free, real-time voice conversation overlay.
 //
-// Full-screen, high-contrast, one giant button. It runs a continuous loop —
+// Full-screen, high-contrast, one giant button. Continuous loop:
+//   listen → transcribe → STREAM the reply → speak it sentence-by-sentence
+//          → auto-reopen the mic → (repeat)
 //
-//     listen → transcribe → STREAM the reply → speak it sentence-by-sentence
-//            (starts talking while the rest is still being written)
-//            → auto-reopen the mic → (repeat)
+// Two ways to drive it:
+//   • Single agent — pass `agentId` + `agentName` + `streamReply` (used by a
+//     specific chat page, so the turn also shows in that chat's transcript).
+//   • Multi-agent  — pass `voices` (e.g. Reese + Sterling). Defaults to the
+//     first, with a one-tap switcher; streams straight to /api/agents/voice-chat
+//     for whichever agent is active (used by the global HQ launcher).
 //
-// It never calls Claude directly: it calls the host's `streamReply(text,…)`,
-// which hits the same CFO backend and KV transcript as typing — only faster
-// and streamed. STT is pluggable (src/lib/voice/stt.ts — Deepgram swap point);
-// TTS reuses /api/agents/tts (ElevenLabs swap point) via the SpeechQueue.
+// STT is pluggable (src/lib/voice/stt.ts — Deepgram swap point); TTS reuses
+// /api/agents/tts (ElevenLabs swap point) via the SpeechQueue.
 // ---------------------------------------------------------------------------
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createSpeechToText,
   speechRecognitionSupported,
@@ -22,8 +25,14 @@ import {
 } from "@/lib/voice/stt";
 import { SpeechQueue, createSentenceChunker } from "@/lib/voice/speech-queue";
 import { playAgentSpeech, type SpeechHandle } from "@/lib/voice/tts-playback";
+import { streamVoiceReply } from "@/lib/voice/voice-client";
 
 type Phase = "listening" | "thinking" | "speaking" | "paused" | "error";
+
+export interface VoiceAgent {
+  agentId: string;
+  agentName: string;
+}
 
 const LABEL: Record<Phase, string> = {
   listening: "Listening…",
@@ -44,23 +53,34 @@ const RING: Record<Phase, string> = {
 export default function CarVoiceMode({
   agentId,
   agentName,
+  voices,
   streamReply,
   sendMessage,
   onClose,
 }: {
-  agentId: string;
-  agentName: string;
-  /** Preferred: streams the reply so speech starts before it's fully written. */
+  agentId?: string;
+  agentName?: string;
+  /** Multi-agent mode: land on the first, switch with one tap. */
+  voices?: VoiceAgent[];
+  /** Single-agent streaming (host chat mirrors the turn into its transcript). */
   streamReply?: (
     text: string,
     handlers: { onDelta: (delta: string) => void }
   ) => Promise<string>;
-  /** Fallback: non-streaming send that returns the whole reply. */
+  /** Single-agent non-streaming fallback. */
   sendMessage?: (text: string) => Promise<string>;
   onClose: () => void;
 }) {
+  // Roster: explicit `voices`, or a single agent from the props.
+  const roster = useMemo<VoiceAgent[]>(
+    () => voices ?? (agentId && agentName ? [{ agentId, agentName }] : []),
+    [voices, agentId, agentName]
+  );
+  const [activeIdx, setActiveIdx] = useState(0);
+  const active = roster[activeIdx] ?? { agentId: "sterling", agentName: "Sterling" };
+
   const [phase, setPhaseState] = useState<Phase>("listening");
-  const [heard, setHeard] = useState(""); // live interim transcript
+  const [heard, setHeard] = useState("");
   const [lastTranscript, setLastTranscript] = useState("");
   const [lastReply, setLastReply] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -68,11 +88,26 @@ export default function CarVoiceMode({
   const activeRef = useRef(true);
   const phaseRef = useRef<Phase>("listening");
   const sttRef = useRef<SpeechToText | null>(null);
-  const queueRef = useRef<SpeechQueue | null>(null); // streaming TTS
-  const speechRef = useRef<SpeechHandle | null>(null); // non-streaming fallback
-  const streamRef = useRef(streamReply);
+  const queueRef = useRef<SpeechQueue | null>(null);
+  const speechRef = useRef<SpeechHandle | null>(null);
+
+  // The active agent + its send fn, kept in refs so the loop always uses the
+  // current one (even after a mid-session switch) without rebinding STT.
+  const agentRef = useRef<VoiceAgent>(active);
+  agentRef.current = active;
+  // In multi-agent mode we stream straight to the route for the active agent;
+  // in single-agent mode we use the host-provided streamReply (transcript-aware).
+  const effStreamReply = useMemo(
+    () =>
+      voices
+        ? (text: string, handlers: { onDelta: (delta: string) => void }) =>
+            streamVoiceReply(text, { onDelta: handlers.onDelta, agentId: agentRef.current.agentId })
+        : streamReply,
+    [voices, streamReply]
+  );
+  const streamRef = useRef(effStreamReply);
   const sendRef = useRef(sendMessage);
-  streamRef.current = streamReply;
+  streamRef.current = effStreamReply;
   sendRef.current = sendMessage;
 
   const setPhase = useCallback((p: Phase) => {
@@ -89,13 +124,11 @@ export default function CarVoiceMode({
     }, 150);
   }, [setPhase]);
 
-  // Streamed turn: pipe deltas → sentence chunker → speech queue, so Sterling
-  // starts talking on the first sentence and the mic reopens when he's done.
   const runStreamingTurn = useCallback(
     async (text: string) => {
       setLastReply("");
       setPhase("thinking");
-      const queue = new SpeechQueue(agentId, {
+      const queue = new SpeechQueue(agentRef.current.agentId, {
         onFirstAudio: () => {
           if (activeRef.current && phaseRef.current !== "paused") setPhase("speaking");
         },
@@ -115,7 +148,7 @@ export default function CarVoiceMode({
       } catch {
         queue.stop();
         if (activeRef.current) {
-          setErrorMsg(`Couldn't reach ${agentName} — tap to try again.`);
+          setErrorMsg(`Couldn't reach ${agentRef.current.agentName} — tap to try again.`);
           setPhase("error");
         }
         return;
@@ -123,10 +156,9 @@ export default function CarVoiceMode({
       if (!activeRef.current) return;
       beginListening();
     },
-    [agentId, agentName, beginListening, setPhase]
+    [beginListening, setPhase]
   );
 
-  // Fallback turn: wait for the whole reply, then speak it.
   const runBufferedTurn = useCallback(
     async (text: string) => {
       setPhase("thinking");
@@ -135,7 +167,7 @@ export default function CarVoiceMode({
         if (!activeRef.current) return;
         setLastReply(reply);
         setPhase("speaking");
-        const handle = playAgentSpeech(agentId, reply, {
+        const handle = playAgentSpeech(agentRef.current.agentId, reply, {
           onStart: () => {
             if (activeRef.current && phaseRef.current !== "paused") setPhase("speaking");
           },
@@ -146,19 +178,19 @@ export default function CarVoiceMode({
         if (activeRef.current) beginListening();
       } catch {
         if (activeRef.current) {
-          setErrorMsg(`Couldn't reach ${agentName} — tap to try again.`);
+          setErrorMsg(`Couldn't reach ${agentRef.current.agentName} — tap to try again.`);
           setPhase("error");
         }
       }
     },
-    [agentId, agentName, beginListening, setPhase]
+    [beginListening, setPhase]
   );
 
   const handleFinal = useCallback(
     async (text: string) => {
       if (!activeRef.current) return;
       const t = text.trim();
-      if (!t) return; // silence → onEnd keeps the mic open
+      if (!t) return;
       setLastTranscript(t);
       setHeard("");
       if (streamRef.current) await runStreamingTurn(t);
@@ -222,7 +254,7 @@ export default function CarVoiceMode({
     if (!activeRef.current) return;
     switch (phaseRef.current) {
       case "speaking":
-        stopSpeech(); // barge-in
+        stopSpeech();
         beginListening();
         break;
       case "listening":
@@ -234,9 +266,23 @@ export default function CarVoiceMode({
         beginListening();
         break;
       case "thinking":
-        break; // busy
+        break;
     }
   }, [beginListening, setPhase, stopSpeech]);
+
+  // Switch agents mid-session: cut any speech, stop the mic, rebind, listen.
+  const switchTo = useCallback(
+    (idx: number) => {
+      if (idx === activeIdx) return;
+      sttRef.current?.abort();
+      stopSpeech();
+      setActiveIdx(idx);
+      setLastTranscript("");
+      setLastReply("");
+      beginListening();
+    },
+    [activeIdx, beginListening, stopSpeech]
+  );
 
   const endSession = useCallback(() => {
     activeRef.current = false;
@@ -249,10 +295,10 @@ export default function CarVoiceMode({
   const pulsing = phase === "listening" || phase === "speaking";
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-[#050608] px-6 py-10 text-center">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-[#050608] px-6 py-8 text-center">
       <div className="flex w-full items-center justify-between">
         <span className="text-sm font-medium uppercase tracking-widest text-gray-500">
-          Voice · {agentName}
+          Voice · {active.agentName}
         </span>
         <button
           onClick={endSession}
@@ -262,14 +308,33 @@ export default function CarVoiceMode({
         </button>
       </div>
 
+      {/* Agent switcher (multi-agent mode) — Reese default, Sterling a tap away. */}
+      {roster.length > 1 && (
+        <div className="mt-2 flex items-center gap-2">
+          {roster.map((v, i) => (
+            <button
+              key={v.agentId}
+              onClick={() => switchTo(i)}
+              className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
+                i === activeIdx
+                  ? "border-[#00d6ff] bg-[#00d6ff]/15 text-[#00d6ff]"
+                  : "border-gray-700 text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              {v.agentName}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-1 flex-col items-center justify-center gap-8">
         <button
           onClick={onMainTap}
           aria-label={LABEL[phase]}
           className="relative flex items-center justify-center rounded-full transition-transform active:scale-95"
           style={{
-            width: "min(64vw, 320px)",
-            height: "min(64vw, 320px)",
+            width: "min(62vw, 300px)",
+            height: "min(62vw, 300px)",
             background: `radial-gradient(circle at 50% 40%, ${ring}22, #0a0c0f 70%)`,
             border: `4px solid ${ring}`,
             boxShadow: pulsing ? `0 0 60px ${ring}55` : "none",
@@ -309,7 +374,7 @@ export default function CarVoiceMode({
         <p className="text-xs text-gray-600">
           Tap the circle to{" "}
           {phase === "speaking" ? "interrupt" : phase === "listening" ? "pause" : "listen"} · saved
-          to your {agentName} chat
+          to your {active.agentName} chat
         </p>
       </div>
     </div>
