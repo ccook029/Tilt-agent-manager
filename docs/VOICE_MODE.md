@@ -1,10 +1,29 @@
 # Voice Mode (hands-free, real-time)
 
-A hands-free, **real-time** voice conversation on top of the **existing**
-Sterling (CFO) chat. It does **not** add a parallel agent or a new datastore —
-it drives the same agent, persona, and KV transcript as typing. Tuned to feel
-like ChatGPT/Claude voice: Sterling starts talking about a second after you
-finish, and keeps talking as the rest of his answer streams in.
+A hands-free, **real-time** voice conversation on top of the **existing** agent
+chats. It does **not** add a parallel agent or a new datastore — it drives the
+same agents, personas, and KV transcripts as typing. Tuned to feel like
+ChatGPT/Claude voice: the agent starts talking about a second after you finish
+and keeps talking as the rest streams in.
+
+## Two voices
+
+| Agent | Where | Knows | Ask it… |
+|---|---|---|---|
+| **Reese Calder** — Chief of Staff | `/org/chief-of-staff` | the **whole company** (freshest output from every function + the founders' decision queue) | "Where are we at? What shipped? What's in R&D? What needs me?" |
+| **Sterling Vance** — CFO | `/strategy` | deep **finance** (books, metrics, projections) | "Walk me through the margins / cash / this month's numbers." |
+
+Reese is the "walk in and ask where we're at" agent; Sterling is the finance
+deep-dive. Both stream, both save to their own transcript.
+
+### Org wiring behind Reese
+The eight department heads (CFO, Marketing, Inventory, Product/R&D, Web, Team &
+Apparel, Business Development, CX) now **report to the Chief of Staff** in the
+directory (`reportsTo: "chief-of-staff"`), so Reese natively sees across all of
+them. The human owner gate is unchanged — approvals still land in the founders'
+Review queue, which sits above every `reportsTo: null` position (now just
+Reese). Reese's voice context is a fast, company-wide snapshot (all agents'
+latest run logs + open decisions), not the slow per-department assembly.
 
 ## The loop
 

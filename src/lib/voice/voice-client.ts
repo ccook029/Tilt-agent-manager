@@ -7,12 +7,12 @@
 
 export async function streamVoiceReply(
   message: string,
-  handlers: { onDelta: (delta: string) => void; signal?: AbortSignal }
+  handlers: { onDelta: (delta: string) => void; signal?: AbortSignal; agentId?: string }
 ): Promise<string> {
   const res = await fetch("/api/agents/voice-chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, agentId: handlers.agentId ?? "sterling" }),
     signal: handlers.signal,
   });
 

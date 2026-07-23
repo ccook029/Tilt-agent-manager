@@ -385,7 +385,7 @@ export default function AgentChat({
       setMessages((p) => [...p, { role: "user", content: message, timestamp: new Date().toISOString() }]);
       let full = "";
       try {
-        full = await streamVoiceReply(message, { onDelta: handlers.onDelta });
+        full = await streamVoiceReply(message, { onDelta: handlers.onDelta, agentId: config.agent });
       } catch {
         full = "Sorry — I couldn't reach you just now. Try again.";
       }
@@ -393,7 +393,7 @@ export default function AgentChat({
       setMessages((p) => [...p, { role: "assistant", content, timestamp: new Date().toISOString() }]);
       return content;
     },
-    []
+    [config.agent]
   );
 
   const [voiceOpen, setVoiceOpen] = useState(false);

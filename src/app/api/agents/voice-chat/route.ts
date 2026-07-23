@@ -8,23 +8,31 @@
 // the rest of the CFO console.
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
-import { streamSterlingVoiceReply } from "@/lib/voice/voice-chat";
+import { streamVoiceReplyForAgent } from "@/lib/voice/voice-chat";
 import { getCurrentStaff, isAccountingOwner } from "@/lib/os-identity";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => ({}));
+  const message = (body as { message?: string }).message?.trim();
+  const agentId = (body as { agentId?: string }).agentId?.trim() || "sterling";
+
   const staff = await getCurrentStaff();
-  if (!isAccountingOwner(staff)) {
+  // The Chief of Staff is the founders' agent — any signed-in staff (they're
+  // already past the login wall). The CFO console stays owner-only.
+  if (agentId === "chief-of-staff") {
+    if (!staff) {
+      return NextResponse.json({ error: "Sign in to talk to the Chief of Staff." }, { status: 403 });
+    }
+  } else if (!isAccountingOwner(staff)) {
     return NextResponse.json(
       { error: "Voice chat with the CFO is restricted to the accounting owner." },
       { status: 403 }
     );
   }
 
-  const body = await request.json().catch(() => ({}));
-  const message = (body as { message?: string }).message?.trim();
   if (!message) {
     return NextResponse.json({ error: "message is required" }, { status: 400 });
   }
@@ -33,7 +41,7 @@ export async function POST(request: NextRequest) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        await streamSterlingVoiceReply(message, (delta) => {
+        await streamVoiceReplyForAgent(agentId, message, (delta) => {
           controller.enqueue(encoder.encode(delta));
         });
       } catch (err) {

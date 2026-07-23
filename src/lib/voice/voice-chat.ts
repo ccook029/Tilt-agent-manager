@@ -19,9 +19,12 @@ import cfoConfig from "@/agents/accounting-manager.config";
 import { streamClaudeText } from "@/lib/anthropic";
 import { persistCfoChatTurn } from "@/lib/accounting-loop";
 import { loadCfoChat } from "@/lib/cfo-chat-store";
+import { loadAgentChat, appendAgentChat } from "@/lib/agent-chat-store";
 import { renderOrgKnowledge } from "@/lib/org-knowledge";
 import { getOpenEscalations } from "@/lib/policy-ledger";
-import { getRunLogsByAgent } from "@/lib/store";
+import { getRunLogsByAgent, getRunLogs } from "@/lib/store";
+import { getEmployeeProfile } from "@/lib/org/employee-configs";
+import { CLAUDE_MODEL } from "@/lib/models";
 
 const VOICE_DIRECTIVE = `
 
@@ -117,4 +120,119 @@ ${message}`;
   // Same transcript as the typed chat.
   await persistCfoChatTurn("sterling", message, res.text || "(no reply)");
   return res.text;
+}
+
+// ===========================================================================
+// Chief of Staff (Reese Calder) — the WHOLE-COMPANY voice.
+//
+// Sterling knows finance; Reese knows everything. This path grounds him in a
+// compact, fast, company-wide snapshot — the freshest output from every
+// function plus the founders' decision queue — so "where are we at with R&D /
+// what shipped / what needs me" gets a real cross-department answer. Persists
+// to the same generic KV transcript as his typed chat (agent-chat:chief-of-staff).
+// ===========================================================================
+
+const CHIEF_VOICE_DIRECTIVE = `
+
+=== LIVE VOICE CONVERSATION (you are being spoken to and heard aloud) ===
+Chris has walked into HQ and is talking to you, his Chief of Staff, out loud —
+your reply is READ ALOUD in real time. You see the whole company (the snapshot
+below is the freshest read from every function). So:
+- Talk like a sharp chief of staff across the desk. Warm, direct, synthesizing.
+- Keep it to 1–3 short spoken sentences. Lead with the answer / the one thing
+  that matters, then a next step. Connect dots across departments when it helps.
+- NO markdown, headings, bullet lists, tables, or code — it's read out literally.
+  Speak numbers naturally.
+- Ground every claim in the snapshot. If you don't actually know something, say
+  so in a sentence and offer to have the right person dig in — don't invent it.
+- If it's a finance-deep question, note that Sterling can go deeper on the numbers.`;
+
+/** Fast, company-wide grounding: freshest output per function + open decisions.
+ *  One KV read for all run logs — no slow live-Zoho assembly. */
+async function buildCompanySnapshot(): Promise<string> {
+  const [logs, open] = await Promise.all([
+    getRunLogs().catch(() => [] as { agentName: string; startedAt: string; output: string }[]),
+    getOpenEscalations().catch(() => [] as { question: string }[]),
+  ]);
+
+  const seen = new Set<string>();
+  const latest = [...logs]
+    .sort((a, b) => (b.startedAt || "").localeCompare(a.startedAt || ""))
+    .filter((l) => (seen.has(l.agentName) ? false : (seen.add(l.agentName), true)))
+    .slice(0, 12)
+    .map((l) => {
+      const firstLine = (l.output.split("\n").find((s) => s.trim()) ?? "").slice(0, 180);
+      return `- ${l.agentName} (${l.startedAt.slice(0, 10)}): ${firstLine}`;
+    })
+    .join("\n");
+
+  const decisions =
+    open.length === 0
+      ? "No open decisions waiting on the founders right now."
+      : `${open.length} decision(s) waiting on the founders: ` +
+        open.slice(0, 5).map((e) => e.question).join("; ");
+
+  return `## Company snapshot — freshest read from each function
+${latest || "(no recent agent activity on file)"}
+
+## Founders' decision queue
+${decisions}`;
+}
+
+/**
+ * Stream Reese's spoken, company-wide reply. Same streaming + persistence
+ * pattern as Sterling, but with the whole-company snapshot and the generic
+ * (agent-chat) transcript.
+ */
+export async function streamChiefOfStaffVoiceReply(
+  message: string,
+  onDelta: (delta: string) => void
+): Promise<string> {
+  const [stored, orgKnowledge, snapshot] = await Promise.all([
+    loadAgentChat("chief-of-staff").catch(() => ({ messages: [] as { role: "user" | "assistant"; content: string }[] })),
+    renderOrgKnowledge().catch(() => ""),
+    buildCompanySnapshot(),
+  ]);
+
+  const profile = getEmployeeProfile("chief-of-staff");
+  const base =
+    profile?.systemPrompt ??
+    profile?.managerSystemPrompt ??
+    "You are Reese Calder, Chief of Staff at Tilt Hockey Inc., working for the founders Chris and Jeremy.";
+
+  const systemPrompt = base + orgKnowledge + CHIEF_VOICE_DIRECTIVE;
+
+  const historyBlock =
+    stored.messages.length === 0
+      ? "(this is the start of today's conversation)"
+      : stored.messages
+          .slice(-8)
+          .map((m) => `${m.role === "user" ? "Chris" : "Reese"}: ${m.content.slice(0, 800)}`)
+          .join("\n");
+
+  const userMessage = `${snapshot}
+
+## Conversation so far
+${historyBlock}
+
+## Chris just said (out loud)
+${message}`;
+
+  const res = await streamClaudeText(
+    { systemPrompt, userMessage, model: CLAUDE_MODEL, maxTokens: 700, temperature: 0.4 },
+    onDelta
+  );
+
+  await appendAgentChat("chief-of-staff", message, res.text || "(no reply)").catch(() => {});
+  return res.text;
+}
+
+/** Route a voice turn to the right agent brain. */
+export function streamVoiceReplyForAgent(
+  agentId: string,
+  message: string,
+  onDelta: (delta: string) => void
+): Promise<string> {
+  if (agentId === "chief-of-staff") return streamChiefOfStaffVoiceReply(message, onDelta);
+  return streamSterlingVoiceReply(message, onDelta); // default: the CFO
 }
