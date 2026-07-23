@@ -15,6 +15,7 @@ import Link from "next/link";
 import { dispatchInBackground } from "@/lib/client/dispatch";
 import { getPersonaByAgentId } from "@/lib/personas";
 import GenericAgentChat from "@/components/generic-agent-chat";
+import ActivityFeed from "@/components/activity-feed";
 
 // These three have richer dedicated chats on their legacy console
 // (/dashboard/[id]) — the generic org chat stays out of their way.
@@ -55,15 +56,6 @@ interface WorkOrder {
   rounds: WorkRound[];
   error?: string;
 }
-interface RunLog {
-  id: string;
-  agentName: string;
-  startedAt: string;
-  status: string;
-  output: string;
-  tokensUsed?: number;
-}
-
 /** "Dr. Rex Polymer" → "Rex", "Harper Slate" → "Harper". */
 function firstNameOf(name: string): string {
   return name.replace(/^(dr|mr|ms|mrs)\.?\s+/i, "").split(" ")[0] || name;
@@ -103,19 +95,16 @@ export default function EmployeePage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [orders, setOrders] = useState<WorkOrder[]>([]);
-  const [logs, setLogs] = useState<RunLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const [dir, wo, lg] = await Promise.all([
+    const [dir, wo] = await Promise.all([
       fetch("/api/org/directory").then((r) => r.json()).catch(() => ({})),
       fetch(`/api/org/work-orders?assignee=${encodeURIComponent(id)}`).then((r) => r.json()).catch(() => ({})),
-      fetch(`/api/agents/logs?agentId=${encodeURIComponent(id)}`).then((r) => r.json()).catch(() => ({})),
     ]);
     setEmployees(dir.employees ?? []);
     setDepartments(dir.departments ?? []);
     setOrders(wo.orders ?? []);
-    setLogs(lg.logs ?? []);
     setLoading(false);
   }, [id]);
 
@@ -244,19 +233,14 @@ export default function EmployeePage() {
         )}
       </section>
 
-      {/* Activity log */}
-      {logs.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Recent activity</h2>
-          {logs.slice(0, 8).map((l) => (
-            <div key={l.id} className="flex items-center gap-2 rounded-lg border border-gray-800/50 bg-[#0d0d0d] px-3 py-2 text-xs">
-              <span className={l.status === "success" ? "text-emerald-400" : "text-red-400"}>{l.status === "success" ? "✓" : "✗"}</span>
-              <span className="truncate text-gray-400">{l.agentName}</span>
-              <span className="ml-auto shrink-0 text-gray-600">{l.startedAt.slice(0, 10)}</span>
-            </div>
-          ))}
-        </section>
-      )}
+      {/* Live activity — what they're working on and everything they've done. */}
+      <section>
+        <ActivityFeed
+          endpoint={`/api/agents/activity?agentId=${encodeURIComponent(id)}`}
+          title="Activity"
+          emptyHint="Nothing yet — assigned work and completed runs will show here, live."
+        />
+      </section>
     </div>
   );
 }

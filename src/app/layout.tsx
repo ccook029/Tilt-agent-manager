@@ -110,6 +110,12 @@ export default function RootLayout({
               <OwnerNav />
               <span className="hidden sm:inline text-xs text-gray-700">|</span>
               <Link
+                href="/activity"
+                className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Activity
+              </Link>
+              <Link
                 href="/dashboard"
                 className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
               >
