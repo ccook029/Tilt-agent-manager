@@ -39,6 +39,14 @@ const ELEVEN_VOICES = [
 // ELEVENLABS_MODEL=eleven_multilingual_v2 to trade latency for polish.
 const ELEVEN_MODEL = process.env.ELEVENLABS_MODEL ?? "eleven_turbo_v2_5";
 
+// Fixed per-agent voices that OVERRIDE the company-wide default (map["default"],
+// which may be a cloned founder voice) but still yield to an explicit pick made
+// in the /org/[id] picker (map[agentId]). Reese = a generic, energetic male
+// premade, so the Chief of Staff never inherits a founder's cloned voice.
+const AGENT_VOICE_DEFAULTS: Record<string, string> = {
+  "chief-of-staff": "TxGEqnHWrfWFTfGW9XjX", // Josh — young, upbeat, energetic
+};
+
 function hashPick(agentId: string, pool: string[]): string {
   let hash = 0;
   for (let i = 0; i < agentId.length; i++) {
@@ -49,7 +57,13 @@ function hashPick(agentId: string, pool: string[]): string {
 
 async function resolveElevenVoice(agentId: string, override?: string): Promise<string> {
   const map = await getVoiceMap().catch(() => ({}) as Record<string, string>);
-  return override ?? map[agentId] ?? map["default"] ?? hashPick(agentId, ELEVEN_VOICES);
+  return (
+    override ??
+    map[agentId] ??
+    AGENT_VOICE_DEFAULTS[agentId] ??
+    map["default"] ??
+    hashPick(agentId, ELEVEN_VOICES)
+  );
 }
 
 /** Buffered ElevenLabs call (Test button — full body so errors surface). */
