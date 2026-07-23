@@ -311,7 +311,7 @@ async function runAgentChat(
   agent: ChatAgent,
   message: string,
   clientHistory: CfoChatMessage[] = [],
-  options: { concise?: boolean } = {}
+  options: { concise?: boolean; images?: { mediaType: string; data: string }[] } = {}
 ): Promise<CfoChatResult> {
   const speaker = agent === "sterling" ? "Sterling" : "Penny";
   const stored = await loadCfoChat(agent);
@@ -395,12 +395,16 @@ async function runAgentChat(
       ? "\n\n=== HANDS-FREE / DRIVING MODE ===\nThe user is talking to you by voice while driving; your reply is spoken aloud, not shown on screen. Answer in 1–3 short, natural sentences: lead with the answer, then at most one key number or next step. NO markdown, headings, bullet lists, tables, or code blocks — it all gets read out literally. If the full detail is long, give the headline out loud and offer to drop the rest on their screen for later. Speak numbers naturally (say “about twelve thousand dollars,” not a table)."
       : "");
 
+  const images = options.images ?? [];
   const res = await callClaude({
     systemPrompt,
-    userMessage,
+    userMessage: images.length
+      ? `${userMessage}\n\n(${images.length} screenshot${images.length > 1 ? "s" : ""} attached above — look at ${images.length > 1 ? "them" : "it"} carefully; ${images.length > 1 ? "they are" : "it is"} what Chris is talking about.)`
+      : userMessage,
     model: config.model,
     maxTokens: 4096,
     temperature: 0.3,
+    images,
   });
   const result = parseControlBlock(res.text);
 
@@ -419,8 +423,12 @@ async function runAgentChat(
         : "Sorry — I didn't get that one out cleanly. Give me a touch more to go on and I'll take another run at it.";
   }
 
-  // Persist the exchange (compacts into a running summary when long).
-  await persistCfoChatTurn(agent, message, result.reply);
+  // Persist the exchange (compacts into a running summary when long). The
+  // transcript is text-only, so note the attachment rather than storing base64.
+  const storedMessage = images.length
+    ? `[${images.length} screenshot${images.length > 1 ? "s" : ""} attached] ${message}`
+    : message;
+  await persistCfoChatTurn(agent, storedMessage, result.reply);
 
   return result;
 }
@@ -475,7 +483,7 @@ export async function persistCfoChatTurn(
 export async function runCfoChat(
   message: string,
   history: CfoChatMessage[] = [],
-  options: { concise?: boolean } = {}
+  options: { concise?: boolean; images?: { mediaType: string; data: string }[] } = {}
 ): Promise<CfoChatResult> {
   return runAgentChat("sterling", message, history, options);
 }
@@ -483,7 +491,7 @@ export async function runCfoChat(
 export async function runPennyChat(
   message: string,
   history: CfoChatMessage[] = [],
-  options: { concise?: boolean } = {}
+  options: { concise?: boolean; images?: { mediaType: string; data: string }[] } = {}
 ): Promise<CfoChatResult> {
   return runAgentChat("penny", message, history, options);
 }

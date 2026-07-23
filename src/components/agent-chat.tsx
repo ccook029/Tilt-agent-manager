@@ -11,11 +11,20 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import CarVoiceMode from "@/components/voice/car-voice-mode";
 import { streamVoiceReply } from "@/lib/voice/voice-client";
+import {
+  fileToAttachment,
+  imageFilesFrom,
+  MAX_ATTACHMENTS,
+  type Attachment,
+} from "@/lib/chat/attachments";
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+  /** Preview data-URLs for screenshots sent with this message (this session
+   * only — the persisted transcript stores a text note instead). */
+  images?: string[];
 }
 
 interface OpenEscalation {
@@ -95,9 +104,32 @@ export default function AgentChat({
   const [answering, setAnswering] = useState<string | null>(null);
   const [docs, setDocs] = useState<AttachedDoc[]>([]);
   const [uploading, setUploading] = useState(false);
+  // Pasted / dropped screenshots to send with the next message.
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const addImageFiles = useCallback(async (files: Iterable<File>) => {
+    const converted = await Promise.all(
+      Array.from(files).map((f) => fileToAttachment(f).catch(() => null))
+    );
+    setAttachments((a) =>
+      [...a, ...converted.filter((c): c is Attachment => c !== null)].slice(0, MAX_ATTACHMENTS)
+    );
+  }, []);
+
+  const onPasteImages = useCallback(
+    (e: React.ClipboardEvent) => {
+      const files = imageFilesFrom(e.clipboardData?.items, null);
+      if (files.length) {
+        e.preventDefault();
+        void addImageFiles(files);
+      }
+    },
+    [addImageFiles]
+  );
 
   // Voice (Listen) — which message is speaking, plus playback plumbing.
   const [speaking, setSpeaking] = useState(false);
@@ -323,16 +355,38 @@ export default function AgentChat({
   // Mode can read it aloud. `voice: true` asks the backend for a concise,
   // spoken-friendly answer (same brain and context, shorter delivery).
   const sendMessage = useCallback(
-    async (text: string, opts: { voice?: boolean } = {}): Promise<string> => {
+    async (
+      text: string,
+      opts: {
+        voice?: boolean;
+        images?: { mediaType: string; data: string }[];
+        previews?: string[];
+      } = {}
+    ): Promise<string> => {
       const t = text.trim();
-      if (!t) return "";
-      setMessages((p) => [...p, { role: "user", content: t, timestamp: new Date().toISOString() }]);
+      const imgs = opts.images ?? [];
+      if (!t && imgs.length === 0) return "";
+      setMessages((p) => [
+        ...p,
+        {
+          role: "user",
+          content: t || "(screenshot)",
+          timestamp: new Date().toISOString(),
+          images: opts.previews,
+        },
+      ]);
       setLoading(true);
       try {
         const res = await fetch("/api/accounting-manager/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "chat", agent: config.agent, message: t, voice: opts.voice }),
+          body: JSON.stringify({
+            mode: "chat",
+            agent: config.agent,
+            message: t || "(see the attached screenshot)",
+            voice: opts.voice,
+            images: imgs,
+          }),
         });
         const data = await res.json();
         const extras: string[] = [];
@@ -368,10 +422,15 @@ export default function AgentChat({
 
   const send = async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if ((!text && attachments.length === 0) || loading) return;
+    const sending = attachments;
     setInput("");
+    setAttachments([]);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-    await sendMessage(text);
+    await sendMessage(text, {
+      images: sending.map((a) => ({ mediaType: a.mediaType, data: a.data })),
+      previews: sending.map((a) => a.preview),
+    });
   };
 
   // Voice Mode reads the reply aloud, so it wants the concise variant.
@@ -474,6 +533,14 @@ export default function AgentChat({
                   : "bg-gray-800/60 text-gray-300 border border-gray-700/50"
               }`}
             >
+              {msg.images && msg.images.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {msg.images.map((src, j) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={j} src={src} alt="screenshot" className="max-h-40 rounded-lg border border-cyan-900/50" />
+                  ))}
+                </div>
+              )}
               <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
               <div className="mt-2 flex items-center gap-2">
                 <span className="text-[10px] text-gray-600">
@@ -509,7 +576,34 @@ export default function AgentChat({
       </div>
 
       {/* Input */}
-      <div className="border-t border-gray-800 p-3 bg-[#111]">
+      <div
+        className="border-t border-gray-800 p-3 bg-[#111]"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          const files = imageFilesFrom(e.dataTransfer?.items, e.dataTransfer?.files);
+          if (files.length) {
+            e.preventDefault();
+            void addImageFiles(files);
+          }
+        }}
+      >
+        {attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachments.map((a, i) => (
+              <div key={i} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={a.preview} alt="attachment" className="h-14 rounded-md border border-gray-700" />
+                <button
+                  onClick={() => setAttachments((arr) => arr.filter((_, j) => j !== i))}
+                  aria-label="Remove screenshot"
+                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gray-800 text-[10px] text-gray-300 ring-1 ring-gray-600 hover:bg-red-900 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {docs.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {docs.map((d) => (
@@ -553,6 +647,26 @@ export default function AgentChat({
               "📎"
             )}
           </button>
+          <input
+            ref={imageRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              void addImageFiles(e.target.files ?? []);
+              e.target.value = "";
+            }}
+          />
+          <button
+            onClick={() => imageRef.current?.click()}
+            disabled={loading || attachments.length >= MAX_ATTACHMENTS}
+            title="Attach a screenshot (or just paste one into the box)"
+            aria-label="Attach a screenshot"
+            className="px-3 py-2.5 bg-gray-800/50 hover:bg-gray-700 border border-gray-700 hover:border-[#00d6ff]/40 disabled:opacity-40 rounded-lg text-sm text-gray-300 transition-colors"
+          >
+            🖼
+          </button>
           <textarea
             ref={textareaRef}
             value={input}
@@ -562,6 +676,7 @@ export default function AgentChat({
               e.target.style.height = "auto";
               e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`;
             }}
+            onPaste={onPasteImages}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -574,7 +689,7 @@ export default function AgentChat({
           />
           <button
             onClick={send}
-            disabled={loading || !input.trim()}
+            disabled={loading || (!input.trim() && attachments.length === 0)}
             className="px-5 py-2.5 bg-[#00d6ff] hover:bg-[#00a6c9] disabled:opacity-40 rounded-lg text-sm font-semibold transition-colors text-[#06232b]"
           >
             Send
