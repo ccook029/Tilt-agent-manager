@@ -26,6 +26,7 @@ import {
   type Escalation,
 } from "./policy-ledger";
 import { runCategorizationBatch } from "./accounting-execute";
+import { addPendingTask, removePendingTask } from "./accounting-activity";
 import { buildQuestionsWorkbook } from "./questions-export";
 import { getDocuments, renderDocumentsBlock } from "./documents";
 import { renderApInboxSnapshot } from "./zoho-documents";
@@ -503,6 +504,7 @@ export async function runPennyChat(
  */
 export async function runDispatchedTask(task: string): Promise<void> {
   const startedAt = new Date();
+  const pendingId = await addPendingTask(task); // so the activity panel shows it live
   try {
     if (task === "auto-categorize") {
       const result = await runCategorizationBatch({ limit: 15 });
@@ -560,6 +562,8 @@ export async function runDispatchedTask(task: string): Promise<void> {
         model: workerConfig.model,
       },
     ]);
+  } finally {
+    await removePendingTask(pendingId);
   }
 }
 
