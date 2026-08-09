@@ -12,7 +12,7 @@
 // trip. Only a cold cache builds synchronously (once).
 // ---------------------------------------------------------------------------
 import { kv } from "@vercel/kv";
-import { fetchBooksSnapshot } from "./zoho-books";
+import { getCachedBooksSnapshot } from "./books-snapshot";
 import { fetchInventorySnapshot } from "./zoho";
 import { getRecentSignals } from "./signals";
 import { getOpenEscalations } from "./policy-ledger";
@@ -30,7 +30,7 @@ interface Cached {
 /** Assemble the live snapshot from every source (slow — hits Zoho). */
 export async function buildCompanySnapshotText(): Promise<string> {
   const [books, inventory, signals, escalations, activity] = await Promise.all([
-    fetchBooksSnapshot().catch(() => "(finance snapshot unavailable)"),
+    getCachedBooksSnapshot().catch(() => "(finance snapshot unavailable)"),
     fetchInventorySnapshot().catch(() => "(inventory snapshot unavailable)"),
     getRecentSignals().catch(() => [] as { source: string; headline: string; detail?: string }[]),
     getOpenEscalations().catch(() => [] as { question: string }[]),
