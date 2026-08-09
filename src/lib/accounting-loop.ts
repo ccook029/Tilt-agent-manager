@@ -28,6 +28,7 @@ import {
 import { runCategorizationBatch } from "./accounting-execute";
 import { addPendingTask, removePendingTask } from "./accounting-activity";
 import { getCachedBooksSnapshot } from "./books-snapshot";
+import { getCachedSalesSnapshot } from "./sales-snapshot";
 import { buildQuestionsWorkbook } from "./questions-export";
 import { getDocuments, renderDocumentsBlock } from "./documents";
 import { renderApInboxSnapshot } from "./zoho-documents";
@@ -398,6 +399,7 @@ async function runAgentChat(
     (await renderOrgKnowledge().catch(() => "")) +
     (await renderCrossAgentSignals(agent === "sterling" ? "sterling" : "penny").catch(() => "")) +
     `\n\n${await getCachedBooksSnapshot().catch(() => "")}` +
+    `\n\n${await getCachedSalesSnapshot().catch(() => "")}` +
     (agent === "sterling" ? await buildStrategistContext().catch(() => "") : "") +
     // Voice Mode: the reply is read ALOUD to someone driving — keep it short and
     // ear-friendly. (Same brain and context; only the delivery changes.)
