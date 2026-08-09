@@ -14,11 +14,14 @@
 import { kv } from "@vercel/kv";
 import { getCachedBooksSnapshot } from "./books-snapshot";
 import { fetchInventorySnapshot } from "./zoho";
+import { getCachedSalesSnapshot } from "./sales-snapshot";
 import { getRecentSignals } from "./signals";
 import { getOpenEscalations } from "./policy-ledger";
 import { companyActivityItems } from "./activity";
 
-const KEY = "company-snapshot";
+// v2: added the invoice-based Sales section — bump the key so the old cache
+// (which said "nothing sold") is discarded on deploy.
+const KEY = "company-snapshot-v2";
 const TTL_MS = 25 * 60 * 1000; // refresh in the background after 25 min
 const HARD_TTL_MS = 90 * 60 * 1000; // too stale to trust → rebuild synchronously
 
@@ -29,8 +32,9 @@ interface Cached {
 
 /** Assemble the live snapshot from every source (slow — hits Zoho). */
 export async function buildCompanySnapshotText(): Promise<string> {
-  const [books, inventory, signals, escalations, activity] = await Promise.all([
+  const [books, sales, inventory, signals, escalations, activity] = await Promise.all([
     getCachedBooksSnapshot().catch(() => "(finance snapshot unavailable)"),
+    getCachedSalesSnapshot().catch(() => "(sales snapshot unavailable)"),
     fetchInventorySnapshot().catch(() => "(inventory snapshot unavailable)"),
     getRecentSignals().catch(() => [] as { source: string; headline: string; detail?: string }[]),
     getOpenEscalations().catch(() => [] as { question: string }[]),
@@ -59,8 +63,10 @@ export async function buildCompanySnapshotText(): Promise<string> {
     "## Finance (Zoho Books — cash flow, A/R, A/P, uncategorized)",
     books.slice(0, 3500),
     "",
-    "## Inventory & Sales (Zoho Inventory — stock, recent sales orders, purchase orders)",
-    inventory.slice(0, 3500),
+    sales,
+    "",
+    "## Inventory (Zoho Inventory — stock on hand, purchase orders)",
+    inventory.slice(0, 3000),
     "",
     "## Recent activity across HQ (signals, last ~day)",
     sig,
