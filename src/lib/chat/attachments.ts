@@ -13,7 +13,17 @@ export interface Attachment {
   preview: string; // data URL for the thumbnail
 }
 
+/** A PDF attached to a chat message — read whole (no downscale) and sent to the
+ *  agent as a document block. */
+export interface PdfAttachment {
+  name: string;
+  base64: string; // base64, no data: prefix
+}
+
 export const MAX_ATTACHMENTS = 4;
+/** Biggest PDF we'll read into a chat (base64 inflates ~33%; keeps the request
+ *  under the platform body cap). */
+export const MAX_PDF_BYTES = 4_000_000;
 
 export async function fileToAttachment(file: File): Promise<Attachment | null> {
   if (!file.type.startsWith("image/")) return null;
@@ -52,22 +62,50 @@ export async function fileToAttachment(file: File): Promise<Attachment | null> {
   return { mediaType: "image/jpeg", data: out.slice(out.indexOf(",") + 1), preview: out };
 }
 
-/** Pull image files out of a paste/drop event. */
-export function imageFilesFrom(
+/** Read a PDF file into a base64 attachment, or null if it's not a usable PDF. */
+export async function fileToPdf(file: File): Promise<PdfAttachment | null> {
+  if (file.type !== "application/pdf") return null;
+  if (file.size > MAX_PDF_BYTES) return null; // caller warns; keeps us under the body cap
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+  const comma = dataUrl.indexOf(",");
+  if (comma === -1) return null;
+  return { name: file.name || "document.pdf", base64: dataUrl.slice(comma + 1) };
+}
+
+/** Whether a file is an attachable image or PDF. */
+export function isAttachable(type: string): boolean {
+  return type.startsWith("image/") || type === "application/pdf";
+}
+
+/** Pull attachable files (images + PDFs) out of a paste/drop event. */
+export function attachableFilesFrom(
   items: DataTransferItemList | null | undefined,
   files: FileList | null | undefined
 ): File[] {
   const out: File[] = [];
   for (const item of Array.from(items ?? [])) {
-    if (item.kind === "file" && item.type.startsWith("image/")) {
+    if (item.kind === "file" && isAttachable(item.type)) {
       const f = item.getAsFile();
       if (f) out.push(f);
     }
   }
   if (out.length === 0) {
     for (const f of Array.from(files ?? [])) {
-      if (f.type.startsWith("image/")) out.push(f);
+      if (isAttachable(f.type)) out.push(f);
     }
   }
   return out;
+}
+
+/** Pull image files out of a paste/drop event (images only). */
+export function imageFilesFrom(
+  items: DataTransferItemList | null | undefined,
+  files: FileList | null | undefined
+): File[] {
+  return attachableFilesFrom(items, files).filter((f) => f.type.startsWith("image/"));
 }

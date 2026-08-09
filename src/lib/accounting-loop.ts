@@ -312,7 +312,11 @@ async function runAgentChat(
   agent: ChatAgent,
   message: string,
   clientHistory: CfoChatMessage[] = [],
-  options: { concise?: boolean; images?: { mediaType: string; data: string }[] } = {}
+  options: {
+    concise?: boolean;
+    images?: { mediaType: string; data: string }[];
+    documents?: { base64: string }[];
+  } = {}
 ): Promise<CfoChatResult> {
   const speaker = agent === "sterling" ? "Sterling" : "Penny";
   const stored = await loadCfoChat(agent);
@@ -397,15 +401,24 @@ async function runAgentChat(
       : "");
 
   const images = options.images ?? [];
+  const documents = options.documents ?? [];
+  const attachNotes: string[] = [];
+  if (images.length)
+    attachNotes.push(
+      `${images.length} screenshot${images.length > 1 ? "s" : ""} attached above — look at ${images.length > 1 ? "them" : "it"} carefully.`
+    );
+  if (documents.length)
+    attachNotes.push(
+      `${documents.length} PDF${documents.length > 1 ? "s" : ""} attached above — read ${documents.length > 1 ? "them" : "it"} carefully; ${documents.length > 1 ? "they are" : "it is"} what Chris is asking about.`
+    );
   const res = await callClaude({
     systemPrompt,
-    userMessage: images.length
-      ? `${userMessage}\n\n(${images.length} screenshot${images.length > 1 ? "s" : ""} attached above — look at ${images.length > 1 ? "them" : "it"} carefully; ${images.length > 1 ? "they are" : "it is"} what Chris is talking about.)`
-      : userMessage,
+    userMessage: attachNotes.length ? `${userMessage}\n\n(${attachNotes.join(" ")})` : userMessage,
     model: config.model,
     maxTokens: 4096,
     temperature: 0.3,
     images,
+    documents,
   });
   const result = parseControlBlock(res.text);
 
@@ -426,9 +439,10 @@ async function runAgentChat(
 
   // Persist the exchange (compacts into a running summary when long). The
   // transcript is text-only, so note the attachment rather than storing base64.
-  const storedMessage = images.length
-    ? `[${images.length} screenshot${images.length > 1 ? "s" : ""} attached] ${message}`
-    : message;
+  const notes: string[] = [];
+  if (images.length) notes.push(`${images.length} screenshot${images.length > 1 ? "s" : ""}`);
+  if (documents.length) notes.push(`${documents.length} PDF${documents.length > 1 ? "s" : ""}`);
+  const storedMessage = notes.length ? `[${notes.join(" + ")} attached] ${message}` : message;
   await persistCfoChatTurn(agent, storedMessage, result.reply);
 
   return result;
@@ -481,10 +495,16 @@ export async function persistCfoChatTurn(
   }
 }
 
+type ChatOptions = {
+  concise?: boolean;
+  images?: { mediaType: string; data: string }[];
+  documents?: { base64: string }[];
+};
+
 export async function runCfoChat(
   message: string,
   history: CfoChatMessage[] = [],
-  options: { concise?: boolean; images?: { mediaType: string; data: string }[] } = {}
+  options: ChatOptions = {}
 ): Promise<CfoChatResult> {
   return runAgentChat("sterling", message, history, options);
 }
@@ -492,7 +512,7 @@ export async function runCfoChat(
 export async function runPennyChat(
   message: string,
   history: CfoChatMessage[] = [],
-  options: { concise?: boolean; images?: { mediaType: string; data: string }[] } = {}
+  options: ChatOptions = {}
 ): Promise<CfoChatResult> {
   return runAgentChat("penny", message, history, options);
 }

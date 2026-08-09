@@ -13,9 +13,11 @@ import CarVoiceMode from "@/components/voice/car-voice-mode";
 import { streamVoiceReply } from "@/lib/voice/voice-client";
 import {
   fileToAttachment,
-  imageFilesFrom,
+  fileToPdf,
+  attachableFilesFrom,
   MAX_ATTACHMENTS,
   type Attachment,
+  type PdfAttachment,
 } from "@/lib/chat/attachments";
 
 interface ChatMessage {
@@ -25,6 +27,8 @@ interface ChatMessage {
   /** Preview data-URLs for screenshots sent with this message (this session
    * only — the persisted transcript stores a text note instead). */
   images?: string[];
+  /** Names of PDFs sent with this message (this session only). */
+  docNames?: string[];
 }
 
 interface OpenEscalation {
@@ -104,31 +108,40 @@ export default function AgentChat({
   const [answering, setAnswering] = useState<string | null>(null);
   const [docs, setDocs] = useState<AttachedDoc[]>([]);
   const [uploading, setUploading] = useState(false);
-  // Pasted / dropped screenshots to send with the next message.
+  // Pasted / dropped screenshots + PDFs to send with the next message.
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [pdfs, setPdfs] = useState<PdfAttachment[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const imageRef = useRef<HTMLInputElement>(null);
+  const attachRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const addImageFiles = useCallback(async (files: Iterable<File>) => {
-    const converted = await Promise.all(
-      Array.from(files).map((f) => fileToAttachment(f).catch(() => null))
-    );
-    setAttachments((a) =>
-      [...a, ...converted.filter((c): c is Attachment => c !== null)].slice(0, MAX_ATTACHMENTS)
-    );
+  // Route each attached file to the right bucket: images downscale into
+  // `attachments`, PDFs read whole into `pdfs`.
+  const addFiles = useCallback(async (files: Iterable<File>) => {
+    setAttachError(null);
+    for (const f of Array.from(files)) {
+      if (f.type.startsWith("image/")) {
+        const img = await fileToAttachment(f).catch(() => null);
+        if (img) setAttachments((a) => [...a, img].slice(0, MAX_ATTACHMENTS));
+      } else if (f.type === "application/pdf") {
+        const pdf = await fileToPdf(f).catch(() => null);
+        if (pdf) setPdfs((p) => [...p, pdf].slice(0, MAX_ATTACHMENTS));
+        else setAttachError(`"${f.name}" is too large to attach (max ~4 MB per PDF).`);
+      }
+    }
   }, []);
 
-  const onPasteImages = useCallback(
+  const onPasteFiles = useCallback(
     (e: React.ClipboardEvent) => {
-      const files = imageFilesFrom(e.clipboardData?.items, null);
+      const files = attachableFilesFrom(e.clipboardData?.items, null);
       if (files.length) {
         e.preventDefault();
-        void addImageFiles(files);
+        void addFiles(files);
       }
     },
-    [addImageFiles]
+    [addFiles]
   );
 
   // Voice (Listen) — which message is speaking, plus playback plumbing.
@@ -360,19 +373,24 @@ export default function AgentChat({
       opts: {
         voice?: boolean;
         images?: { mediaType: string; data: string }[];
+        documents?: { base64: string }[];
         previews?: string[];
+        docNames?: string[];
       } = {}
     ): Promise<string> => {
       const t = text.trim();
       const imgs = opts.images ?? [];
-      if (!t && imgs.length === 0) return "";
+      const docs = opts.documents ?? [];
+      if (!t && imgs.length === 0 && docs.length === 0) return "";
+      const placeholder = imgs.length ? "(screenshot)" : docs.length ? "(PDF)" : "";
       setMessages((p) => [
         ...p,
         {
           role: "user",
-          content: t || "(screenshot)",
+          content: t || placeholder,
           timestamp: new Date().toISOString(),
           images: opts.previews,
+          docNames: opts.docNames,
         },
       ]);
       setLoading(true);
@@ -383,9 +401,10 @@ export default function AgentChat({
           body: JSON.stringify({
             mode: "chat",
             agent: config.agent,
-            message: t || "(see the attached screenshot)",
+            message: t || "(see the attached file)",
             voice: opts.voice,
             images: imgs,
+            documents: docs,
           }),
         });
         const data = await res.json();
@@ -422,14 +441,19 @@ export default function AgentChat({
 
   const send = async () => {
     const text = input.trim();
-    if ((!text && attachments.length === 0) || loading) return;
-    const sending = attachments;
+    if ((!text && attachments.length === 0 && pdfs.length === 0) || loading) return;
+    const sendingImages = attachments;
+    const sendingPdfs = pdfs;
     setInput("");
     setAttachments([]);
+    setPdfs([]);
+    setAttachError(null);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
     await sendMessage(text, {
-      images: sending.map((a) => ({ mediaType: a.mediaType, data: a.data })),
-      previews: sending.map((a) => a.preview),
+      images: sendingImages.map((a) => ({ mediaType: a.mediaType, data: a.data })),
+      previews: sendingImages.map((a) => a.preview),
+      documents: sendingPdfs.map((p) => ({ base64: p.base64 })),
+      docNames: sendingPdfs.map((p) => p.name),
     });
   };
 
@@ -541,6 +565,18 @@ export default function AgentChat({
                   ))}
                 </div>
               )}
+              {msg.docNames && msg.docNames.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {msg.docNames.map((n, j) => (
+                    <span
+                      key={j}
+                      className="inline-flex items-center gap-1 rounded-md border border-cyan-900/50 bg-[#00d6ff]/10 px-2 py-1 text-[11px] text-gray-200"
+                    >
+                      📄 {n}
+                    </span>
+                  ))}
+                </div>
+              )}
               <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
               <div className="mt-2 flex items-center gap-2">
                 <span className="text-[10px] text-gray-600">
@@ -580,10 +616,10 @@ export default function AgentChat({
         className="border-t border-gray-800 p-3 bg-[#111]"
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
-          const files = imageFilesFrom(e.dataTransfer?.items, e.dataTransfer?.files);
+          const files = attachableFilesFrom(e.dataTransfer?.items, e.dataTransfer?.files);
           if (files.length) {
             e.preventDefault();
-            void addImageFiles(files);
+            void addFiles(files);
           }
         }}
       >
@@ -604,6 +640,27 @@ export default function AgentChat({
             ))}
           </div>
         )}
+        {pdfs.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {pdfs.map((p, i) => (
+              <span
+                key={i}
+                title={p.name}
+                className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-gray-700/60 bg-gray-800/70 px-2.5 py-1 text-[11px] text-gray-300"
+              >
+                📄 <span className="truncate">{p.name}</span>
+                <button
+                  onClick={() => setPdfs((arr) => arr.filter((_, j) => j !== i))}
+                  aria-label={`Remove ${p.name}`}
+                  className="text-gray-500 hover:text-red-400 transition-colors leading-none"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        {attachError && <p className="mb-2 text-[11px] text-red-400">{attachError}</p>}
         {docs.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {docs.map((d) => (
@@ -648,21 +705,21 @@ export default function AgentChat({
             )}
           </button>
           <input
-            ref={imageRef}
+            ref={attachRef}
             type="file"
-            accept="image/*"
+            accept="image/*,application/pdf"
             multiple
             className="hidden"
             onChange={(e) => {
-              void addImageFiles(e.target.files ?? []);
+              void addFiles(e.target.files ?? []);
               e.target.value = "";
             }}
           />
           <button
-            onClick={() => imageRef.current?.click()}
-            disabled={loading || attachments.length >= MAX_ATTACHMENTS}
-            title="Attach a screenshot (or just paste one into the box)"
-            aria-label="Attach a screenshot"
+            onClick={() => attachRef.current?.click()}
+            disabled={loading}
+            title="Attach a screenshot or PDF (or just paste one into the box)"
+            aria-label="Attach a screenshot or PDF"
             className="px-3 py-2.5 bg-gray-800/50 hover:bg-gray-700 border border-gray-700 hover:border-[#00d6ff]/40 disabled:opacity-40 rounded-lg text-sm text-gray-300 transition-colors"
           >
             🖼
@@ -676,7 +733,7 @@ export default function AgentChat({
               e.target.style.height = "auto";
               e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`;
             }}
-            onPaste={onPasteImages}
+            onPaste={onPasteFiles}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -689,7 +746,7 @@ export default function AgentChat({
           />
           <button
             onClick={send}
-            disabled={loading || (!input.trim() && attachments.length === 0)}
+            disabled={loading || (!input.trim() && attachments.length === 0 && pdfs.length === 0)}
             className="px-5 py-2.5 bg-[#00d6ff] hover:bg-[#00a6c9] disabled:opacity-40 rounded-lg text-sm font-semibold transition-colors text-[#06232b]"
           >
             Send

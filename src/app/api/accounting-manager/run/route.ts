@@ -114,19 +114,21 @@ export async function POST(request: NextRequest) {
     }
 
     if (mode === "chat") {
-      const { message, history = [], voice, images = [] } = body as {
+      const { message, history = [], voice, images = [], documents = [] } = body as {
         message?: string;
         history?: CfoChatMessage[];
         /** Hands-free Voice Mode — reply is read aloud, so keep it concise. */
         voice?: boolean;
         /** Pasted screenshots — base64 image blocks shown to the agent. */
         images?: { mediaType?: string; data?: string }[];
+        /** Attached PDFs — base64 document blocks the agent reads. */
+        documents?: { base64?: string }[];
       };
       if (!message || !message.trim()) {
         return NextResponse.json({ error: "message is required" }, { status: 400 });
       }
-      // Screenshots: images only, at most 4, ~5.5MB of base64 total (the client
-      // downscales first; this is the backstop).
+      // Screenshots: images only, at most 4. PDFs: at most 4. Combined base64
+      // kept under the platform body cap (the client downscales/limits first).
       const cleanImages = (Array.isArray(images) ? images : [])
         .filter(
           (i): i is { mediaType: string; data: string } =>
@@ -136,9 +138,17 @@ export async function POST(request: NextRequest) {
             i.data.length > 0
         )
         .slice(0, 4);
-      if (cleanImages.reduce((n, i) => n + i.data.length, 0) > 5_500_000) {
+      const cleanDocs = (Array.isArray(documents) ? documents : [])
+        .filter(
+          (d): d is { base64: string } => typeof d?.base64 === "string" && d.base64.length > 0
+        )
+        .slice(0, 4);
+      const totalBytes =
+        cleanImages.reduce((n, i) => n + i.data.length, 0) +
+        cleanDocs.reduce((n, d) => n + d.base64.length, 0);
+      if (totalBytes > 6_000_000) {
         return NextResponse.json(
-          { error: "Attachments too large — try fewer or smaller screenshots." },
+          { error: "Attachments too large — try fewer or smaller files." },
           { status: 413 }
         );
       }
@@ -146,6 +156,7 @@ export async function POST(request: NextRequest) {
       const result = await chatFn(message, Array.isArray(history) ? history : [], {
         concise: Boolean(voice),
         images: cleanImages,
+        documents: cleanDocs,
       });
 
       // Record any decisions Sterling extracted from Chris's message as policy.

@@ -22,8 +22,9 @@ import { loadCfoChat } from "@/lib/cfo-chat-store";
 import { loadAgentChat, appendAgentChat } from "@/lib/agent-chat-store";
 import { renderOrgKnowledge } from "@/lib/org-knowledge";
 import { getOpenEscalations } from "@/lib/policy-ledger";
-import { getRunLogsByAgent, getRunLogs } from "@/lib/store";
+import { getRunLogsByAgent } from "@/lib/store";
 import { getEmployeeProfile } from "@/lib/org/employee-configs";
+import { getCompanySnapshot } from "@/lib/company-snapshot";
 import { CLAUDE_MODEL } from "@/lib/models";
 
 const VOICE_DIRECTIVE = `
@@ -153,38 +154,6 @@ genuinely fun to talk to.
 - Ground everything in the snapshot. If you don't actually know, say so fast and
   offer to get it — don't invent. For deep finance, hand it to Sterling.`;
 
-/** Fast, company-wide grounding: freshest output per function + open decisions.
- *  One KV read for all run logs — no slow live-Zoho assembly. */
-async function buildCompanySnapshot(): Promise<string> {
-  const [logs, open] = await Promise.all([
-    getRunLogs().catch(() => [] as { agentName: string; startedAt: string; output: string }[]),
-    getOpenEscalations().catch(() => [] as { question: string }[]),
-  ]);
-
-  const seen = new Set<string>();
-  const latest = [...logs]
-    .sort((a, b) => (b.startedAt || "").localeCompare(a.startedAt || ""))
-    .filter((l) => (seen.has(l.agentName) ? false : (seen.add(l.agentName), true)))
-    .slice(0, 12)
-    .map((l) => {
-      const firstLine = (l.output.split("\n").find((s) => s.trim()) ?? "").slice(0, 180);
-      return `- ${l.agentName} (${l.startedAt.slice(0, 10)}): ${firstLine}`;
-    })
-    .join("\n");
-
-  const decisions =
-    open.length === 0
-      ? "No open decisions waiting on the founders right now."
-      : `${open.length} decision(s) waiting on the founders: ` +
-        open.slice(0, 5).map((e) => e.question).join("; ");
-
-  return `## Company snapshot — freshest read from each function
-${latest || "(no recent agent activity on file)"}
-
-## Founders' decision queue
-${decisions}`;
-}
-
 /**
  * Stream Reese's spoken, company-wide reply. Same streaming + persistence
  * pattern as Sterling, but with the whole-company snapshot and the generic
@@ -197,7 +166,9 @@ export async function streamChiefOfStaffVoiceReply(
   const [stored, orgKnowledge, snapshot] = await Promise.all([
     loadAgentChat("chief-of-staff").catch(() => ({ messages: [] as { role: "user" | "assistant"; content: string }[] })),
     renderOrgKnowledge().catch(() => ""),
-    buildCompanySnapshot(),
+    // The full LIVE company snapshot (finance, inventory + sales, signals, team
+    // activity, decisions) — cached, so it's fast; see company-snapshot.ts.
+    getCompanySnapshot().catch(() => ""),
   ]);
 
   const profile = getEmployeeProfile("chief-of-staff");

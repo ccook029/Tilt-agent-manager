@@ -18,6 +18,7 @@ import { getRunLogsByAgent } from "./store";
 import { renderOrgKnowledge } from "./org-knowledge";
 import { renderCrossAgentSignals } from "./cross-agent";
 import { renderOrderBuilderContext } from "./order-builder/logic";
+import { getCompanySnapshot } from "./company-snapshot";
 import { loadAgentChat, appendAgentChat } from "./agent-chat-store";
 import {
   getEmployeeById,
@@ -162,6 +163,12 @@ export async function runAgentConversation(
     // demand/stock numbers so he can explain how a recommendation was derived.
     (agentId === "inventory"
       ? await renderOrderBuilderContext().catch(() => "")
+      : "") +
+    // The Chief of Staff gets the LIVE company snapshot (finance, inventory +
+    // sales, signals, team activity, decisions) so he can answer with real
+    // numbers instead of only what's been reported to him.
+    (agentId === "chief-of-staff"
+      ? `\n\n${await getCompanySnapshot().catch(() => "")}`
       : "");
 
   // Org grounding: live department data, own work orders, and — for bosses —
