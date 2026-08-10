@@ -26,6 +26,7 @@ import {
   fetchChartOfAccounts,
   fetchTaxes,
   fetchInvoiceByNumber,
+  fetchOpenInvoices,
   fetchMatchCandidates,
   matchTxn,
   categorizeTxnAsExpense,
@@ -134,7 +135,7 @@ ACCOUNT TYPES (hard rule): a MONEY OUT line must go to an expense-type account (
 
 MONEY DIRECTION: each line's MONEY IN / MONEY OUT label is the system's best read; a line with EMAIL MATCH has its direction CONFIRMED by the Interac notification (received = in, sent = out) — trust that over the raw label. Always include "direction" ("in" or "out") in each decision — your independent read from the payee/memo/policy. If your direction disagrees with the system's, the line is skipped for a human look rather than posted wrong; that's intended.
 
-PAYMENTS ON EXISTING INVOICES: when a deposit pays an invoice Tilt already raised (a policy says "applied against INV-00xxx", or the memo/name clearly matches an open invoice), do NOT categorize it to an income account — that double-counts revenue. Put it in "apply_to_invoice" with the exact invoice number instead; the system applies it as a customer payment and clears A/R.
+PAYMENTS ON EXISTING INVOICES: when a deposit pays an invoice Tilt already raised (a policy says "applied against INV-00xxx", or the memo/name clearly matches an open invoice), do NOT categorize it to an income account — that double-counts revenue. Put it in "apply_to_invoice" with the exact invoice number instead; the system applies it as a customer payment and clears A/R. Watch for payer≠customer: relatives often pay a player's invoice (a deposit from one surname may pay an invoice under another). The system also cross-checks every income posting against open invoices and holds suspicious matches for Chris.
 
 Return ONLY your work as a fenced json object (nothing after it):
 \`\`\`json
@@ -165,11 +166,12 @@ export async function runCategorizationBatch(opts?: {
   let limit = opts?.limit ?? 15;
   const batchId = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
 
-  // First-live-batch safety cap: until at least one executed write exists in
-  // the audit log, keep the batch tiny so Chris can verify in Zoho first.
+  // Prior writes: drive the first-live-batch cap AND the duplicate guard
+  // (a same-amount/same-account line posted in the last two weeks is held for
+  // confirmation instead of silently posted again).
+  const prior = await getActions();
   let firstLiveRun = false;
   if (live) {
-    const prior = await getActions();
     firstLiveRun = !prior.some((a) => a.mode === "executed");
     if (firstLiveRun) limit = Math.min(limit, FIRST_LIVE_BATCH_CAP);
   }
@@ -177,10 +179,11 @@ export async function runCategorizationBatch(opts?: {
   // Pull a chunk of the real uncategorized backlog + the valid categories +
   // (when the inbox is connected) Interac notification emails, which carry the
   // sender names the bank feed strips off e-Transfers.
-  const [uncategorized, accounts, taxes, interac] = await Promise.all([
+  const [uncategorized, accounts, taxes, openInvoices, interac] = await Promise.all([
     fetchUncategorizedBankTxns(limit),
     fetchChartOfAccounts().catch(() => [] as BooksAccount[]),
     fetchTaxes().catch(() => [] as ZohoTax[]),
+    fetchOpenInvoices().catch(() => []),
     isInboxConfigured()
       ? fetchInteracNotifications().catch((e) => {
           console.warn("[accounting-execute] Inbox pull failed:", e);
@@ -351,6 +354,25 @@ export async function runCategorizationBatch(opts?: {
   // ---- Validate + execute each decision (code-enforced guardrails) --------
   const executed: CategorizationResult["executed"] = [];
   const skipped: CategorizationResult["skipped"] = [];
+  // Double-count guards: questions raised by the CODE (not the model) when a
+  // write looks like it could count the same money twice. They flow into the
+  // same escalation queue Chris already answers.
+  const guardQuestions: Array<{
+    question: string;
+    reason: string;
+    recommendation?: string;
+    dollarAmount?: number;
+  }> = [];
+  // Amount+direction pairs written earlier in THIS batch (feed-duplicate guard).
+  const writtenThisBatch = new Set<string>();
+  const twoWeeksAgo = Date.now() - 14 * 86_400_000;
+  const recentExecuted = prior.filter(
+    (a) =>
+      a.mode === "executed" &&
+      !a.reversed &&
+      a.type === "categorize-transaction" &&
+      new Date(a.timestamp).getTime() >= twoWeeksAgo
+  );
 
   for (const d of decisions) {
     const txnId = String(d.transaction_id ?? "");
@@ -435,9 +457,74 @@ export async function runCategorizationBatch(opts?: {
       tax = resolved;
     }
 
+    const amt = txn.amount ?? 0;
+    const who = txn.payee ?? match?.name ?? txn.description?.slice(0, 40) ?? "unknown payer";
+
+    // GUARD 1 — deposit matches an open invoice: posting it as fresh income
+    // would double-count revenue already recognized when the invoice was
+    // raised (e.g. a family member paying someone else's invoice, so the
+    // payer name doesn't match the customer). Hold it and ask.
+    if (direction === "in") {
+      const invHit = openInvoices.find(
+        (i) => Math.abs(i.balance - amt) < 0.01 || Math.abs(i.total - amt) < 0.01
+      );
+      if (invHit) {
+        skipped.push({
+          transaction_id: txnId,
+          reason: `$${amt.toFixed(2)} matches open invoice ${invHit.invoice_number} (${invHit.customer_name}) — held so revenue isn't double-counted; question raised`,
+        });
+        guardQuestions.push({
+          question: `The $${amt.toFixed(2)} deposit on ${txn.date} (${who}) matches open invoice ${invHit.invoice_number} for ${invHit.customer_name} — is it the payment on that invoice (payer may differ from the customer), or a separate new sale?`,
+          reason: `Posting it as new income would double-count revenue if ${invHit.invoice_number} covers it`,
+          recommendation: `Apply it to ${invHit.invoice_number} — if you confirm, Penny will apply it next batch`,
+          dollarAmount: amt,
+        });
+        continue;
+      }
+    }
+
+    // GUARD 2 — same amount+direction already written earlier in THIS batch:
+    // either a genuinely repeated charge or the bank feed imported the same
+    // line twice. Post the first, hold the rest and ask.
+    const dupKey = `${direction}|${amt.toFixed(2)}`;
+    if (writtenThisBatch.has(dupKey)) {
+      skipped.push({
+        transaction_id: txnId,
+        reason: `another $${amt.toFixed(2)} ${direction === "in" ? "money-in" : "money-out"} line was already posted in this batch — held as a possible duplicate feed line; question raised`,
+      });
+      guardQuestions.push({
+        question: `Two bank lines in the same batch are each $${amt.toFixed(2)} ${direction === "in" ? "in" : "out"} (latest: ${txn.date}, ${who}) — are they separate real charges, or did the bank feed import the same one twice?`,
+        reason: "Identical amounts in one batch can be a duplicated feed line — posting both would double-count",
+        recommendation: "If it's a duplicate, exclude the extra line in Zoho Banking; if both are real, say so and Penny will post it next batch",
+        dollarAmount: amt,
+      });
+      continue;
+    }
+
+    // GUARD 3 — same amount+account executed in the last 14 days: hold repeat
+    // postings (recurring charges are fine — one confirmation clears them).
+    const histHit = recentExecuted.find((a) => {
+      const prevAmt = Number((a.after as { amount?: unknown } | undefined)?.amount ?? NaN);
+      const prevAcct = String((a.after as { account?: unknown } | undefined)?.account ?? "");
+      return Math.abs(prevAmt - amt) < 0.005 && prevAcct === account.account_name;
+    });
+    if (histHit) {
+      skipped.push({
+        transaction_id: txnId,
+        reason: `$${amt.toFixed(2)} → ${account.account_name} was already posted on ${histHit.timestamp.slice(0, 10)} — held as a possible duplicate; question raised`,
+      });
+      guardQuestions.push({
+        question: `A $${amt.toFixed(2)} line (${txn.date}, ${who}) is headed to ${account.account_name}, but an identical amount was posted there on ${histHit.timestamp.slice(0, 10)} ("${histHit.summary.slice(0, 80)}") — is this a separate real charge?`,
+        reason: "Same amount to the same account within two weeks can be a duplicate bank line",
+        recommendation: "If both are real (e.g. repeat fuel e-Transfers), confirm and Penny will post it next batch; if it's a duplicate, exclude it in Zoho Banking",
+        dollarAmount: amt,
+      });
+      continue;
+    }
+
     const summary =
       String(d.summary ?? "") ||
-      `Categorize $${(txn.amount ?? 0).toFixed(2)} ${direction === "in" ? "in" : "out"} ${txn.payee ?? txn.description ?? ""} → ${account.account_name}${tax ? ` (${tax.tax_name} inclusive)` : ""}`;
+      `Categorize $${amt.toFixed(2)} ${direction === "in" ? "in" : "out"} ${txn.payee ?? txn.description ?? ""} → ${account.account_name}${tax ? ` (${tax.tax_name} inclusive)` : ""}`;
 
     if (live) {
       try {
@@ -477,6 +564,7 @@ export async function runCategorizationBatch(opts?: {
       }
     }
 
+    writtenThisBatch.add(dupKey);
     executed.push({
       transaction_id: txnId,
       summary,
@@ -615,17 +703,18 @@ export async function runCategorizationBatch(opts?: {
     ),
   ]);
 
-  // ---- Route the unknowns to the CFO chat / digest --------------------------
-  const newEscalations = await addEscalations(
-    escalatedRaw
+  // ---- Route the unknowns + guard holds to the CFO chat / digest -----------
+  const newEscalations = await addEscalations([
+    ...escalatedRaw
       .map((e) => ({
         question: String(e.question ?? "").trim(),
         reason: `Uncategorized transaction ${e.transaction_id ?? ""} ($${e.amount ?? "?"}) — Penny needs to know how to treat it`,
         recommendation: e.recommendation ? String(e.recommendation) : undefined,
         dollarAmount: typeof e.amount === "number" ? e.amount : undefined,
       }))
-      .filter((e) => e.question.length > 0)
-  );
+      .filter((e) => e.question.length > 0),
+    ...guardQuestions,
+  ]);
 
   const remaining = Math.max(0, uncategorized.total - (live ? executed.length : 0));
 
