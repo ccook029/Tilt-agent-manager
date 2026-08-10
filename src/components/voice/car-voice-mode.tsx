@@ -235,11 +235,34 @@ export default function CarVoiceMode({
     sttRef.current = stt;
     beginListening();
 
+    // Keep the phone screen awake for the whole conversation (Android/Chrome)
+    // so it doesn't sleep mid-sentence. The lock is auto-released when the tab
+    // is hidden, so re-acquire when it becomes visible again.
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> };
+    };
+    let wakeLock: { release: () => Promise<void> } | null = null;
+    const acquireWakeLock = async () => {
+      if (!nav.wakeLock || !activeRef.current || document.visibilityState !== "visible") return;
+      try {
+        wakeLock = await nav.wakeLock.request("screen");
+      } catch {
+        /* denied / unsupported — fall back to normal screen timeout */
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void acquireWakeLock();
+    };
+    void acquireWakeLock();
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
       activeRef.current = false;
       stt.abort();
       queueRef.current?.stop();
       speechRef.current?.stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+      wakeLock?.release().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

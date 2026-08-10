@@ -13,6 +13,7 @@
 // working untouched while new departments get their own namespaced keys.
 // ---------------------------------------------------------------------------
 import { kv } from "@vercel/kv";
+import { sendPush } from "../push";
 import type { AccountingPolicy, Escalation } from "../policy-ledger";
 
 export type DepartmentPolicy = AccountingPolicy;
@@ -137,6 +138,15 @@ export async function addEscalations(
       escalationKey(departmentId),
       [...existing, ...created].slice(-MAX_ESCALATIONS)
     );
+    void sendPush({
+      title: "A decision needs you",
+      body:
+        created.length === 1
+          ? created[0].question
+          : `${created.length} questions are waiting on you.`,
+      url: "/review",
+      tag: "escalation",
+    }).catch(() => {});
   }
   return created;
 }

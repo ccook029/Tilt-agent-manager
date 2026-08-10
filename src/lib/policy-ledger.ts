@@ -18,6 +18,7 @@
 // policies instead of injecting all of them.
 // ---------------------------------------------------------------------------
 import { kv } from "@vercel/kv";
+import { sendPush } from "./push";
 
 const POLICY_KEY = "accounting-policy-ledger";
 const ESCALATION_KEY = "accounting-escalations";
@@ -208,6 +209,15 @@ export async function addEscalations(
   if (created.length > 0) {
     const merged = [...existing, ...created].slice(-MAX_ESCALATIONS);
     await kv.set(ESCALATION_KEY, merged);
+    void sendPush({
+      title: "A decision needs you",
+      body:
+        created.length === 1
+          ? created[0].question
+          : `${created.length} questions are waiting on you.`,
+      url: "/strategy",
+      tag: "escalation",
+    }).catch(() => {});
   }
   return created;
 }
