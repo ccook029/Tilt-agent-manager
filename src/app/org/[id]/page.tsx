@@ -175,6 +175,9 @@ export default function EmployeePage() {
         <p className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-4 text-sm text-gray-400">{employee.charter}</p>
       )}
 
+      {/* Wiring — every data pipe this person runs on, testable live. */}
+      <WiringPanel employeeId={id} firstName={firstNameOf(employee.name)} />
+
       {/* Chat is the primary way to work with an employee. Bosses come in
           already grounded in their team's recent output and can hand out
           agreed work via one-click assign cards. */}
@@ -241,6 +244,159 @@ export default function EmployeePage() {
           emptyHint="Nothing yet — assigned work and completed runs will show here, live."
         />
       </section>
+    </div>
+  );
+}
+
+// ---- Wiring panel -----------------------------------------------------------
+// The agent-audit surface: lists every data pipe and tool this employee's
+// prompts actually inject, with a "Test connections" button that hits each
+// source LIVE and lights it green (with proof), amber (works with a caveat /
+// known gap), or red (broken — fix me). Backed by /api/org/wiring/[id].
+
+interface WiringFeedDef {
+  id: string;
+  label: string;
+  description: string;
+  kind: "data" | "tool" | "action";
+}
+interface WiringResult extends WiringFeedDef {
+  status: "ok" | "warn" | "fail";
+  note: string;
+  ms: number;
+}
+
+function WiringPanel({ employeeId, firstName }: { employeeId: string; firstName: string }) {
+  const [feeds, setFeeds] = useState<WiringFeedDef[]>([]);
+  const [produces, setProduces] = useState<string[]>([]);
+  const [results, setResults] = useState<Record<string, WiringResult>>({});
+  const [checking, setChecking] = useState(false);
+  const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/org/wiring/${encodeURIComponent(employeeId)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        setFeeds(d.feeds ?? []);
+        setProduces(d.produces ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [employeeId]);
+
+  const runCheck = async () => {
+    setChecking(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/org/wiring/${encodeURIComponent(employeeId)}`, { method: "POST" });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "check failed");
+      const map: Record<string, WiringResult> = {};
+      for (const r of d.results as WiringResult[]) map[r.id] = r;
+      setResults(map);
+      setCheckedAt(d.checkedAt ?? new Date().toISOString());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't run the check.");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  if (feeds.length === 0 && produces.length === 0) return null;
+
+  const light = (f: WiringFeedDef) => {
+    const r = results[f.id];
+    if (!r) return <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-gray-700" title="Not tested yet" />;
+    const color =
+      r.status === "ok" ? "bg-emerald-400" : r.status === "warn" ? "bg-amber-400" : "bg-red-500";
+    return <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${color}`} />;
+  };
+
+  const kindTag = (k: WiringFeedDef["kind"]) =>
+    k === "data" ? "data feed" : k === "tool" ? "tool" : "action";
+
+  return (
+    <div className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600">
+            Wiring — what {firstName} runs on
+          </p>
+          {checkedAt && (
+            <p className="mt-0.5 text-[10px] text-gray-600">
+              Last tested {new Date(checkedAt).toLocaleTimeString()}
+            </p>
+          )}
+        </div>
+        {feeds.length > 0 && (
+          <button
+            onClick={runCheck}
+            disabled={checking}
+            className="rounded-md bg-[#0094b8] px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-[#00a8d1] disabled:opacity-50"
+          >
+            {checking ? "Testing every connection…" : "Test connections"}
+          </button>
+        )}
+      </div>
+
+      {feeds.length > 0 && (
+        <ul className="space-y-2.5">
+          {feeds.map((f) => {
+            const r = results[f.id];
+            return (
+              <li key={f.id} className="flex items-start gap-2.5">
+                {light(f)}
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-200">
+                    {f.label}
+                    <span className="ml-2 rounded-full border border-gray-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-gray-600">
+                      {kindTag(f.kind)}
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-500">{f.description}</p>
+                  {r && (
+                    <p
+                      className={`mt-0.5 text-xs ${
+                        r.status === "ok"
+                          ? "text-emerald-400/90"
+                          : r.status === "warn"
+                            ? "text-amber-400/90"
+                            : "text-red-400"
+                      }`}
+                    >
+                      {r.status === "ok" ? "✓ " : r.status === "warn" ? "△ " : "✕ "}
+                      {r.note}
+                      <span className="ml-1 text-gray-600">({(r.ms / 1000).toFixed(1)}s)</span>
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+
+      {produces.length > 0 && (
+        <div className="mt-4 border-t border-gray-800/60 pt-3">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
+            What {firstName} produces
+          </p>
+          <ul className="space-y-1">
+            {produces.map((p, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-gray-400">
+                <span className="mt-0.5 text-gray-600">→</span>
+                <span>{p}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
