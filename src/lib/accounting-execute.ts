@@ -815,22 +815,35 @@ export async function reclassifyToInvoice(opts: {
     );
   }
   const amt = txn.amount ?? 0;
+  let summary: string;
   if (amt > invoice.balance + 0.01) {
-    throw new Error(
-      `undid the original posting, but $${amt.toFixed(2)} exceeds ${invoiceNumber}'s open balance of $${invoice.balance.toFixed(2)} — the line is back in Uncategorized for a human look`
+    // The invoice is already (fully or mostly) paid — a payment was recorded
+    // by hand, and this bank line IS that payment showing up in the feed. The
+    // correct reconciliation is a MATCH to the recorded payment, not a second
+    // payment. Use Zoho's own match candidates; a unique same-amount hit is
+    // safe to take.
+    const candidates = await fetchMatchCandidates(original.targetId).catch(() => []);
+    const sameAmount = candidates.filter(
+      (c) => c.amount == null || Math.abs((c.amount ?? 0) - amt) < 0.005
     );
+    if (sameAmount.length !== 1) {
+      throw new Error(
+        `undid the original posting, but ${invoiceNumber} is already paid (balance $${invoice.balance.toFixed(2)}) and Zoho offered ${sameAmount.length} match candidates — the line is back in Uncategorized; match it to the recorded payment in Zoho Banking`
+      );
+    }
+    await matchTxn(original.targetId, sameAmount);
+    summary = `Reclassified $${amt.toFixed(2)}: undid "${original.summary.slice(0, 70)}" and matched the bank line to the payment already recorded on ${invoiceNumber} (${invoice.customer_name}) — revenue no longer double-counted, nothing posted twice`;
+  } else {
+    await categorizeTxnAsCustomerPayment(original.targetId, {
+      customer_id: invoice.customer_id,
+      invoice_id: invoice.invoice_id,
+      amount: amt,
+      date: txn.date,
+      account_id: txn.account_id,
+      description: txn.description,
+    });
+    summary = `Reclassified $${amt.toFixed(2)}: undid "${original.summary.slice(0, 70)}" and applied it as a payment on ${invoiceNumber} (${invoice.customer_name}) — revenue no longer double-counted`;
   }
-
-  await categorizeTxnAsCustomerPayment(original.targetId, {
-    customer_id: invoice.customer_id,
-    invoice_id: invoice.invoice_id,
-    amount: amt,
-    date: txn.date,
-    account_id: txn.account_id,
-    description: txn.description,
-  });
-
-  const summary = `Reclassified $${amt.toFixed(2)}: undid "${original.summary.slice(0, 70)}" and applied it as a payment on ${invoiceNumber} (${invoice.customer_name}) — revenue no longer double-counted`;
   await logActions([
     makeAction({
       type: "reclassify-to-invoice",
