@@ -404,6 +404,40 @@ export async function categorizeTxnAsCustomerPayment(
   );
 }
 
+export interface MatchCandidate {
+  transaction_id: string;
+  transaction_type: string;
+  amount?: number;
+  date?: string;
+  reference_number?: string;
+}
+
+/** Zoho's own suggested matches for an uncategorized feed line (existing
+ * payments/expenses the line probably duplicates). */
+export async function fetchMatchCandidates(
+  transactionId: string
+): Promise<MatchCandidate[]> {
+  const res = await booksGet<{ matching_transactions?: MatchCandidate[] }>(
+    `/banktransactions/uncategorized/${transactionId}/match`,
+    {}
+  );
+  return res.matching_transactions ?? [];
+}
+
+/** Match a feed line to existing recorded transaction(s) — the "this deposit
+ * IS that already-recorded payment" reconciliation, not a new posting. */
+export async function matchTxn(
+  transactionId: string,
+  candidates: Array<{ transaction_id: string; transaction_type: string }>
+): Promise<void> {
+  await booksPost(`/banktransactions/uncategorized/${transactionId}/match`, {
+    transactions_to_be_matched: candidates.map((c) => ({
+      transaction_id: c.transaction_id,
+      transaction_type: c.transaction_type,
+    })),
+  });
+}
+
 /** Reverse a categorization — returns the feed line to Uncategorized. */
 export async function uncategorizeTxn(transactionId: string): Promise<void> {
   await booksPost(`/banktransactions/${transactionId}/uncategorize`, {});

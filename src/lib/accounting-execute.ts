@@ -26,6 +26,8 @@ import {
   fetchChartOfAccounts,
   fetchTaxes,
   fetchInvoiceByNumber,
+  fetchMatchCandidates,
+  matchTxn,
   categorizeTxnAsExpense,
   categorizeTxnAsDeposit,
   categorizeTxnAsCustomerPayment,
@@ -191,6 +193,22 @@ export async function runCategorizationBatch(opts?: {
   const taxByName = new Map<string, ZohoTax>(
     taxes.map((t) => [t.tax_name.trim().toLowerCase(), t])
   );
+  // Forgiving tax lookup: exact name, then with a "(13%)"-style suffix
+  // stripped (Penny once copied the display format verbatim), then a unique
+  // containment match ("HST" ↔ "HST 13"). Null = genuinely unknown.
+  const resolveTax = (raw: string): ZohoTax | null => {
+    const name = raw.trim().toLowerCase();
+    if (!name) return null;
+    const exact = taxByName.get(name);
+    if (exact) return exact;
+    const stripped = name.replace(/\s*\(?\d+(\.\d+)?\s*%\)?\s*$/, "").trim();
+    if (stripped && taxByName.get(stripped)) return taxByName.get(stripped)!;
+    const contains = taxes.filter((t) => {
+      const tn = t.tax_name.trim().toLowerCase();
+      return tn.includes(stripped || name) || (stripped || name).includes(tn);
+    });
+    return contains.length === 1 ? contains[0] : null;
+  };
 
   // Deterministic pre-match: for each bank line, find the Interac email with
   // the same amount within ±5 days. Matched DIRECTION-AGNOSTICALLY on purpose:
@@ -257,9 +275,9 @@ export async function runCategorizationBatch(opts?: {
     "## Chart of Accounts (the ONLY valid category names)",
     coaBlock || "(unavailable)",
     "",
-    "## TAX CODES (the ONLY valid values for \"tax\")",
+    "## TAX CODES (use the exact name inside the quotes as \"tax\")",
     taxes.length > 0
-      ? taxes.map((t) => `- ${t.tax_name} (${t.tax_percentage}%)`).join("\n")
+      ? taxes.map((t) => `- "${t.tax_name}" — ${t.tax_percentage}%`).join("\n")
       : "(no tax codes configured — leave \"tax\" out everywhere)",
     "",
     ...(interac.length > 0 ? [renderInteracBlock(interac), ""] : []),
@@ -354,17 +372,18 @@ export async function runCategorizationBatch(opts?: {
       });
       continue;
     }
-    // Tax code (optional): must exactly match a configured Zoho tax.
+    // Tax code (optional): resolved forgivingly against the configured taxes.
     let tax: ZohoTax | undefined;
     if (taxName && taxName.toLowerCase() !== "null" && taxName.toLowerCase() !== "none") {
-      tax = taxByName.get(taxName.toLowerCase());
-      if (!tax) {
+      const resolved = resolveTax(taxName);
+      if (!resolved) {
         skipped.push({
           transaction_id: txnId,
-          reason: `tax "${taxName}" not found in Zoho's configured taxes`,
+          reason: `tax "${taxName}" not found in Zoho's configured taxes (${taxes.map((t) => t.tax_name).join(", ") || "none configured"})`,
         });
         continue;
       }
+      tax = resolved;
     }
 
     const summary =
@@ -457,9 +476,36 @@ export async function runCategorizationBatch(opts?: {
       continue;
     }
     if ((txn.amount ?? 0) > invoice.balance + 0.01) {
+      // The invoice is already (fully or partly) paid — this feed line most
+      // likely duplicates a payment that's ALREADY recorded in Books. The
+      // right reconciliation is a MATCH to that existing transaction, not a
+      // new posting. Ask Zoho for its own match candidates; a unique
+      // same-amount hit is safe to take automatically.
+      const candidates = await fetchMatchCandidates(txnId).catch(() => []);
+      const sameAmount = candidates.filter(
+        (c) => c.amount == null || Math.abs((c.amount ?? 0) - (txn.amount ?? 0)) < 0.005
+      );
+      if (live && sameAmount.length === 1) {
+        try {
+          await matchTxn(txnId, sameAmount);
+          executed.push({
+            transaction_id: txnId,
+            summary: `Matched $${(txn.amount ?? 0).toFixed(2)} to the already-recorded ${sameAmount[0].transaction_type.replace(/_/g, " ")} (${invoiceNumber} was already paid) — line reconciled, nothing double-posted`,
+            account: `matched — ${invoiceNumber}`,
+            amount: txn.amount ?? 0,
+          });
+          continue;
+        } catch (err) {
+          skipped.push({
+            transaction_id: txnId,
+            reason: `${invoiceNumber} is already paid; auto-match failed (${err instanceof Error ? err.message : String(err)}) — match or exclude this line in Zoho Banking`,
+          });
+          continue;
+        }
+      }
       skipped.push({
         transaction_id: txnId,
-        reason: `$${(txn.amount ?? 0).toFixed(2)} exceeds ${invoiceNumber}'s open balance of $${invoice.balance.toFixed(2)} — needs a human split`,
+        reason: `${invoiceNumber} is already fully paid (balance $${invoice.balance.toFixed(2)}) — this line likely duplicates a recorded payment; ${sameAmount.length} match candidate${sameAmount.length === 1 ? "" : "s"} found, match or exclude it in Zoho Banking`,
       });
       continue;
     }
