@@ -33,12 +33,14 @@
     "tailwindcss": "^4.2.1",
     "tesseract.js": "^7.0.0",
     "typescript": "^5.9.3",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5",
     "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/mailparser": "^3.4.6",
     "@types/react-dom": "^19.2.3",
+    "@types/web-push": "^3.6.4",
     "dotenv": "^16.4.7",
     "drizzle-kit": "^0.31.6",
     "tsx": "^4.20.6"

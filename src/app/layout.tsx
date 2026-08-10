@@ -11,6 +11,7 @@ import IntroOverlay from "@/components/intro-overlay";
 import DepartmentsMenu from "@/components/departments-menu";
 import SignOut from "@/components/sign-out";
 import OwnerNav from "@/components/owner-nav";
+import PushSetup from "@/components/push-setup";
 
 const SITE_URL = "https://tilt-agent-manager-i3tk.vercel.app";
 const OG_DESCRIPTION =
@@ -127,6 +128,7 @@ export default function RootLayout({
               >
                 Knowledge
               </Link>
+              <PushSetup />
               <SignOut />
             </nav>
           </div>

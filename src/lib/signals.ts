@@ -7,6 +7,7 @@
 // integrate with a single POST — no shared code needed.
 // ---------------------------------------------------------------------------
 import { kv } from "@vercel/kv";
+import { sendPush } from "./push";
 
 const KEY = "tilt-signals";
 const MAX_SIGNALS = 300;
@@ -26,6 +27,15 @@ export async function postSignal(s: Omit<Signal, "at">): Promise<void> {
     KEY,
     [...list, { ...s, at: new Date().toISOString() }].slice(-MAX_SIGNALS)
   );
+  // A new sale/order is worth a phone buzz; other signals stay in the feed.
+  if (s.source === "web-orders") {
+    void sendPush({
+      title: "New sale",
+      body: s.headline,
+      url: "/activity",
+      tag: "sale",
+    }).catch(() => {});
+  }
 }
 
 /** Signals from the last `hours` (newest first). */
