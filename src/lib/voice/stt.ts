@@ -86,7 +86,7 @@ function getBrowserRecognitionCtor(): SpeechRecognitionCtor | null {
 // natural pause — that pause IS the turn boundary in a back-and-forth. The
 // Voice Mode loop restarts it after the agent finishes speaking.
 // ---------------------------------------------------------------------------
-function createBrowserStt(opts: { lang?: string }): SpeechToText {
+function createBrowserStt(opts: { lang?: string; continuous?: boolean }): SpeechToText {
   const Ctor = getBrowserRecognitionCtor();
   let rec: SpeechRecognitionLike | null = null;
   let handlers: SttHandlers | null = null;
@@ -94,7 +94,8 @@ function createBrowserStt(opts: { lang?: string }): SpeechToText {
   let aborted = false;
   // Whether a recognition is currently live. Guards the always-on mic loop from
   // spawning a second recognition (which would double-capture audio) if start()
-  // is called while one is already running.
+  // is called while one is already running. Kept accurate via onstart/onend so a
+  // watchdog can safely re-call start() to self-heal a silently-dead recognizer.
   let running = false;
 
   const impl: SpeechToText & { _bind(h: SttHandlers): void } = {
@@ -109,25 +110,35 @@ function createBrowserStt(opts: { lang?: string }): SpeechToText {
       }
       if (running) return; // already listening — don't stack a second recognition
       aborted = false;
-      // Fresh instance per phrase — reusing one across start/stop is flaky in
-      // Chrome (it can fire stale results or refuse to restart).
+      // One long-lived recognition (continuous) is far more reliable than
+      // stop/restart per phrase: Chrome's start() throws if the prior session
+      // hasn't released yet, which used to strand us on "Listening…" with a dead
+      // mic. In continuous mode we let it run and emit a final per pause.
       rec = new Ctor();
       rec.lang = opts.lang ?? "en-US";
-      rec.continuous = false;
+      rec.continuous = opts.continuous ?? false;
       rec.interimResults = true;
       rec.maxAlternatives = 1;
 
-      let finalText = "";
+      rec.onstart = () => {
+        running = true;
+      };
       rec.onresult = (e) => {
         let interim = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const result = e.results[i];
           const chunk = result[0]?.transcript ?? "";
-          if (result.isFinal) finalText += chunk;
-          else interim += chunk;
+          if (result.isFinal) {
+            // Emit each completed phrase immediately — snappier, and it works
+            // whether or not the recognizer ever ends (it doesn't, in continuous
+            // mode). onEnd is now purely a "recognizer died, restart me" signal.
+            const finalChunk = chunk.trim();
+            if (finalChunk) handlers?.onFinal(finalChunk);
+          } else {
+            interim += chunk;
+          }
         }
         if (interim) handlers?.onPartial?.(interim.trim());
-        if (finalText) handlers?.onPartial?.(finalText.trim());
       };
       rec.onerror = (e) => {
         // "no-speech"/"aborted" are normal loop events, not failures to surface.
@@ -137,15 +148,14 @@ function createBrowserStt(opts: { lang?: string }): SpeechToText {
       rec.onend = () => {
         running = false;
         if (aborted) return;
-        const text = finalText.trim();
-        if (text) handlers?.onFinal(text);
         handlers?.onEnd?.();
       };
       try {
         rec.start();
         running = true;
       } catch {
-        // start() throws if called while already started — treat as benign.
+        // start() throws if called while already started — treat as benign and
+        // let the watchdog retry on its next tick.
         running = false;
       }
     },
@@ -198,7 +208,7 @@ function createDeepgramStt(_opts: { lang?: string }): SpeechToText {
  */
 export function createSpeechToText(
   handlers: SttHandlers,
-  opts: { provider?: SttProvider; lang?: string } = {}
+  opts: { provider?: SttProvider; lang?: string; continuous?: boolean } = {}
 ): SpeechToText {
   const provider = opts.provider ?? "browser";
   const engine =
