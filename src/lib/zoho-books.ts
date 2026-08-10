@@ -268,6 +268,7 @@ export const fetchRecentInvoices = (sinceIso: string) =>
 export const fetchOpenBills = () =>
   getAllPages<BooksBill>("/bills", "bills", { status: "unpaid" });
 
+
 // ---- Write operations (Wave 1: bank-transaction categorization) -----------
 //
 // These are the Accounting team's "hands". Scope is deliberately narrow:
@@ -302,7 +303,9 @@ async function booksPost<T>(
   return res.json() as Promise<T>;
 }
 
-/** Categorize a money-OUT feed line as an expense to the given expense account. */
+/** Categorize a money-OUT feed line as an expense to the given expense account.
+ * With tax_id + is_inclusive_tax, Zoho splits the amount into net expense and
+ * the recoverable tax (ITC) itself — no manual journal entry needed. */
 export async function categorizeTxnAsExpense(
   transactionId: string,
   opts: {
@@ -311,6 +314,8 @@ export async function categorizeTxnAsExpense(
     date: string;
     amount: number;
     description?: string;
+    tax_id?: string;
+    is_inclusive_tax?: boolean;
   }
 ): Promise<void> {
   await booksPost(
@@ -321,11 +326,16 @@ export async function categorizeTxnAsExpense(
       date: opts.date,
       amount: opts.amount,
       description: opts.description ?? "",
+      ...(opts.tax_id
+        ? { tax_id: opts.tax_id, is_inclusive_tax: opts.is_inclusive_tax ?? true }
+        : {}),
     }
   );
 }
 
-/** Categorize a money-IN feed line as a deposit from the given account. */
+/** Categorize a money-IN feed line. Plain deposits post as "deposit"; a sale
+ * with tax posts as "sales_without_invoices" with the tax code, so Zoho splits
+ * revenue vs tax-payable itself. */
 export async function categorizeTxnAsDeposit(
   transactionId: string,
   opts: {
@@ -334,15 +344,21 @@ export async function categorizeTxnAsDeposit(
     date: string;
     amount: number;
     description?: string;
+    transaction_type?: "deposit" | "sales_without_invoices";
+    tax_id?: string;
+    is_inclusive_tax?: boolean;
   }
 ): Promise<void> {
   await booksPost(`/banktransactions/uncategorized/${transactionId}/categorize`, {
-    transaction_type: "deposit",
+    transaction_type: opts.transaction_type ?? "deposit",
     from_account_id: opts.from_account_id,
     to_account_id: opts.to_account_id,
     date: opts.date,
     amount: opts.amount,
     description: opts.description ?? "",
+    ...(opts.tax_id
+      ? { tax_id: opts.tax_id, is_inclusive_tax: opts.is_inclusive_tax ?? true }
+      : {}),
   });
 }
 

@@ -24,11 +24,13 @@ import { callClaude } from "./anthropic";
 import {
   fetchUncategorizedBankTxns,
   fetchChartOfAccounts,
+  fetchTaxes,
   categorizeTxnAsExpense,
   categorizeTxnAsDeposit,
   txnDirection,
   type BooksBankTxn,
   type BooksAccount,
+  type ZohoTax,
 } from "./zoho-books";
 import { renderPolicyBlock, addEscalations, type Escalation } from "./policy-ledger";
 import { getActions, logActions, makeAction } from "./action-log";
@@ -48,6 +50,19 @@ const MATERIALITY_THRESHOLD = 2500;
 // The first live batch is small on purpose: verify a handful in Zoho Books,
 // then subsequent runs use the full batch size.
 const FIRST_LIVE_BATCH_CAP = 5;
+
+// Zoho only accepts certain account types on each side of a categorization.
+// Validating here (instead of letting the write 404 with "enter valid expense
+// account") turns a cryptic API error into a clear skip reason.
+const EXPENSE_ACCOUNT_TYPES = new Set([
+  "expense",
+  "other_expense",
+  "cost_of_goods_sold",
+  "fixed_asset",
+  "other_current_asset",
+  "other_asset",
+]);
+const DEPOSIT_ACCOUNT_TYPES = new Set(["income", "other_income", "equity"]);
 
 export interface CategorizationResult {
   mode: "executed" | "proposed";
@@ -86,11 +101,18 @@ WHEN TO CATEGORIZE vs ESCALATE:
 - ESCALATE (ask Chris) when: you don't know who/what the transaction is, more than one account is plausible, it looks like a transfer between Tilt accounts / an owner draw / a loan movement (these are NOT expenses or income), OR the amount is $${MATERIALITY_THRESHOLD}+ even if you're confident.
 - Money-in lines are revenue ONLY if you're sure — unknown e-Transfers/deposits could be transfers or owner contributions. When unsure, escalate.
 
+SALES TAX (HST) — you can post tax splits yourself now:
+- When the amount INCLUDES sales tax (a tax-inclusive stick sale, an expense with HST), set "tax" to the EXACT tax name from the TAX CODES list. The system posts it TAX-INCLUSIVE and Zoho itself splits the amount — net to your account, tax to Tax Payable (sales) or the recoverable ITC (purchases). Do NOT escalate a transaction just because it needs an income/tax or expense/ITC split — that's what "tax" is for, and it replaces any manual journal entry.
+- A tax-inclusive money-IN sale posts as a "sale without invoice" against the income account; a plain deposit (no tax) posts as a deposit. Money-OUT with tax posts as a tax-inclusive expense.
+- Leave "tax" out entirely when no sales tax applies (transfers you were told to post, tax-exempt lines, reimbursements policy says are flat).
+
+ACCOUNT TYPES (hard rule): a MONEY OUT line must go to an expense-type account (expense / other expense / COGS / an asset purchase). A MONEY IN line must go to income / other income / equity. Anything else (posting money-out to a liability, money-in to a bank account) will be rejected — those situations are transfers or payments, so escalate them instead.
+
 Return ONLY your work as a fenced json object (nothing after it):
 \`\`\`json
 {
   "categorize": [
-    { "transaction_id": "exact id from the list", "account": "exact account name from the Chart of Accounts", "basis": "policy name / why it's unambiguous", "summary": "Categorize $X PAYEE → ACCOUNT" }
+    { "transaction_id": "exact id from the list", "account": "exact account name from the Chart of Accounts", "tax": "exact tax name from TAX CODES — ONLY when the amount includes sales tax; omit otherwise", "basis": "policy name / why it's unambiguous", "summary": "Categorize $X PAYEE → ACCOUNT (+ tax)" }
   ],
   "escalated": [
     { "transaction_id": "exact id", "amount": 0, "question": "plain-English question for Chris (who is this / how should we treat it)", "recommendation": "your best guess", "options": ["A", "B"] }
@@ -124,9 +146,10 @@ export async function runCategorizationBatch(opts?: {
   // Pull a chunk of the real uncategorized backlog + the valid categories +
   // (when the inbox is connected) Interac notification emails, which carry the
   // sender names the bank feed strips off e-Transfers.
-  const [uncategorized, accounts, interac] = await Promise.all([
+  const [uncategorized, accounts, taxes, interac] = await Promise.all([
     fetchUncategorizedBankTxns(limit),
     fetchChartOfAccounts().catch(() => [] as BooksAccount[]),
+    fetchTaxes().catch(() => [] as ZohoTax[]),
     isInboxConfigured()
       ? fetchInteracNotifications().catch((e) => {
           console.warn("[accounting-execute] Inbox pull failed:", e);
@@ -154,6 +177,9 @@ export async function runCategorizationBatch(opts?: {
   );
   const accountByName = new Map<string, BooksAccount>(
     accounts.map((a) => [a.account_name.trim().toLowerCase(), a])
+  );
+  const taxByName = new Map<string, ZohoTax>(
+    taxes.map((t) => [t.tax_name.trim().toLowerCase(), t])
   );
 
   // Deterministic pre-match: for each bank line, find the Interac email with the
@@ -211,6 +237,11 @@ export async function runCategorizationBatch(opts?: {
     "## Chart of Accounts (the ONLY valid category names)",
     coaBlock || "(unavailable)",
     "",
+    "## TAX CODES (the ONLY valid values for \"tax\")",
+    taxes.length > 0
+      ? taxes.map((t) => `- ${t.tax_name} (${t.tax_percentage}%)`).join("\n")
+      : "(no tax codes configured — leave \"tax\" out everywhere)",
+    "",
     ...(interac.length > 0 ? [renderInteracBlock(interac), ""] : []),
     `## Uncategorized Transactions to process (${uncategorized.items.length} of ~${uncategorized.total} total)`,
     "Lines marked EMAIL MATCH were deterministically matched to an Interac e-Transfer notification by amount + date + direction. Treat the matched name as the payee/payer, and treat the matched message memo (e.g. \"Jer fuel\", \"stick payment\") as a STRONG hint for the category — it's the counterparty's own description of what the money was for. If a memo makes the category obvious, use it and don't escalate.",
@@ -236,6 +267,7 @@ export async function runCategorizationBatch(opts?: {
   for (const d of decisions) {
     const txnId = String(d.transaction_id ?? "");
     const accountName = String(d.account ?? "").trim();
+    const taxName = String(d.tax ?? "").trim();
     const txn = txnById.get(txnId);
     const account = accountByName.get(accountName.toLowerCase());
 
@@ -264,10 +296,39 @@ export async function runCategorizationBatch(opts?: {
       });
       continue;
     }
+    // Zoho rejects type-incompatible accounts with a cryptic 404 ("enter valid
+    // expense account") — catch it here with a reason a human can act on.
+    const acctType = String(account.account_type ?? "").toLowerCase();
+    if (direction === "out" && !EXPENSE_ACCOUNT_TYPES.has(acctType)) {
+      skipped.push({
+        transaction_id: txnId,
+        reason: `"${account.account_name}" is ${acctType || "unknown type"} — not a valid expense account for a money-out line (transfers/payments should be escalated)`,
+      });
+      continue;
+    }
+    if (direction === "in" && !DEPOSIT_ACCOUNT_TYPES.has(acctType)) {
+      skipped.push({
+        transaction_id: txnId,
+        reason: `"${account.account_name}" is ${acctType || "unknown type"} — money-in must go to income/other income/equity (transfers should be escalated)`,
+      });
+      continue;
+    }
+    // Tax code (optional): must exactly match a configured Zoho tax.
+    let tax: ZohoTax | undefined;
+    if (taxName && taxName.toLowerCase() !== "null" && taxName.toLowerCase() !== "none") {
+      tax = taxByName.get(taxName.toLowerCase());
+      if (!tax) {
+        skipped.push({
+          transaction_id: txnId,
+          reason: `tax "${taxName}" not found in Zoho's configured taxes`,
+        });
+        continue;
+      }
+    }
 
     const summary =
       String(d.summary ?? "") ||
-      `Categorize $${(txn.amount ?? 0).toFixed(2)} ${direction === "in" ? "in" : "out"} ${txn.payee ?? txn.description ?? ""} → ${account.account_name}`;
+      `Categorize $${(txn.amount ?? 0).toFixed(2)} ${direction === "in" ? "in" : "out"} ${txn.payee ?? txn.description ?? ""} → ${account.account_name}${tax ? ` (${tax.tax_name} inclusive)` : ""}`;
 
     if (live) {
       try {
@@ -278,6 +339,14 @@ export async function runCategorizationBatch(opts?: {
             date: txn.date,
             amount: txn.amount,
             description: txn.description,
+            // A taxed money-in is a sale — Zoho splits revenue vs tax payable.
+            ...(tax
+              ? {
+                  transaction_type: "sales_without_invoices" as const,
+                  tax_id: tax.tax_id,
+                  is_inclusive_tax: true,
+                }
+              : {}),
           });
         } else {
           await categorizeTxnAsExpense(txnId, {
@@ -286,12 +355,14 @@ export async function runCategorizationBatch(opts?: {
             date: txn.date,
             amount: txn.amount,
             description: txn.description,
+            // A taxed money-out splits net expense vs recoverable ITC in Zoho.
+            ...(tax ? { tax_id: tax.tax_id, is_inclusive_tax: true } : {}),
           });
         }
       } catch (err) {
         skipped.push({
           transaction_id: txnId,
-          reason: `Zoho write failed: ${err instanceof Error ? err.message : String(err)}`,
+          reason: `Zoho write failed (account "${account.account_name}"${tax ? `, tax ${tax.tax_name}` : ""}): ${err instanceof Error ? err.message : String(err)}`,
         });
         continue;
       }
