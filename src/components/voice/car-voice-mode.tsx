@@ -7,6 +7,12 @@
 //   listen → transcribe → STREAM the reply → speak it sentence-by-sentence
 //          → auto-reopen the mic → (repeat)
 //
+// The mic stays LIVE the whole time — including while the agent is speaking —
+// so you can just start talking to cut him off (barge-in), exactly like the
+// Claude/ChatGPT voice apps. No tapping, no "start speaking" button. A short
+// word-count threshold + an echo check (heard text vs. what he's currently
+// saying) keep the phone speaker's own bleed from making him interrupt himself.
+//
 // Two ways to drive it:
 //   • Single agent — pass `agentId` + `agentName` + `streamReply` (used by a
 //     specific chat page, so the turn also shows in that chat's transcript).
@@ -50,6 +56,25 @@ const RING: Record<Phase, string> = {
   error: "#f87171",
 };
 
+// A barge-in has to be at least this many words before we cut the agent off —
+// filters out one-syllable echo blips the mic catches from the phone speaker.
+const BARGE_IN_MIN_WORDS = 2;
+
+const wordsOf = (s: string): string[] =>
+  s.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean);
+
+// True when what the mic just heard is really the agent's own voice bleeding
+// back through the speaker (not the user talking). We compare the heard text
+// against what the agent is currently saying: heavy word overlap ⇒ it's echo.
+function looksLikeEcho(heardText: string, agentIsSaying: string): boolean {
+  const heardWords = wordsOf(heardText);
+  if (heardWords.length === 0) return true;
+  const spoken = new Set(wordsOf(agentIsSaying));
+  if (spoken.size === 0) return false;
+  const overlap = heardWords.filter((w) => spoken.has(w)).length / heardWords.length;
+  return overlap >= 0.6;
+}
+
 export default function CarVoiceMode({
   agentId,
   agentName,
@@ -90,6 +115,12 @@ export default function CarVoiceMode({
   const sttRef = useRef<SpeechToText | null>(null);
   const queueRef = useRef<SpeechQueue | null>(null);
   const speechRef = useRef<SpeechHandle | null>(null);
+  // Monotonic turn id — bumped whenever a new user utterance supersedes an
+  // in-flight reply (barge-in). The old turn checks this and bails silently.
+  const turnRef = useRef(0);
+  // The reply text the agent has streamed so far this turn — used to tell real
+  // interruptions apart from the agent's own voice echoing back into the mic.
+  const spokenTextRef = useRef("");
 
   // The active agent + its send fn, kept in refs so the loop always uses the
   // current one (even after a mid-session switch) without rebinding STT.
@@ -115,76 +146,119 @@ export default function CarVoiceMode({
     setPhaseState(p);
   }, []);
 
+  // Keep the mic live. Unlike before, this runs in EVERY active phase (not just
+  // "listening") so we can hear you interrupt while the agent is speaking. The
+  // STT layer no-ops if a recognition is already running, so calling it is safe.
+  const startMic = useCallback(() => {
+    if (!activeRef.current) return;
+    if (phaseRef.current === "paused" || phaseRef.current === "error") return;
+    sttRef.current?.start();
+  }, []);
+
   const beginListening = useCallback(() => {
     if (!activeRef.current) return;
     setHeard("");
     setPhase("listening");
-    setTimeout(() => {
-      if (activeRef.current && phaseRef.current === "listening") sttRef.current?.start();
-    }, 150);
-  }, [setPhase]);
+    setTimeout(() => startMic(), 150);
+  }, [setPhase, startMic]);
+
+  // A new utterance supersedes whatever the agent was mid-reply on: bump the
+  // turn id (so the old async turn bails) and cut its audio immediately.
+  const stopSpeechRef = useRef<() => void>(() => {});
+  const cancelTurn = useCallback(() => {
+    turnRef.current += 1;
+    stopSpeechRef.current();
+  }, []);
 
   const runStreamingTurn = useCallback(
     async (text: string) => {
+      // Claim this turn; any earlier in-flight turn is now stale.
+      const myTurn = ++turnRef.current;
+      stopSpeechRef.current();
+      spokenTextRef.current = "";
       setLastReply("");
       setPhase("thinking");
+      // Keep hearing you — the mic stays live through thinking + speaking so you
+      // can cut in at any moment.
+      startMic();
       const queue = new SpeechQueue(agentRef.current.agentId, {
         onFirstAudio: () => {
-          if (activeRef.current && phaseRef.current !== "paused") setPhase("speaking");
+          if (activeRef.current && turnRef.current === myTurn && phaseRef.current !== "paused")
+            setPhase("speaking");
         },
       });
       queueRef.current = queue;
-      const chunker = createSentenceChunker((s) => queue.enqueue(s));
+      const chunker = createSentenceChunker((s) => {
+        if (turnRef.current === myTurn) queue.enqueue(s);
+      });
       try {
         const full = await streamRef.current!(text, {
           onDelta: (d) => {
-            if (activeRef.current) chunker.push(d);
+            if (!activeRef.current || turnRef.current !== myTurn) return;
+            spokenTextRef.current += d;
+            chunker.push(d);
           },
         });
+        if (turnRef.current !== myTurn) {
+          queue.stop();
+          return; // superseded by a barge-in mid-generation
+        }
         setLastReply(full);
         chunker.flush();
         queue.end();
         await queue.drained();
       } catch (err) {
         queue.stop();
-        if (activeRef.current) {
+        if (activeRef.current && turnRef.current === myTurn) {
           const detail = err instanceof Error && err.message ? ` (${err.message})` : "";
           setErrorMsg(`Couldn't reach ${agentRef.current.agentName}${detail} — tap to retry.`);
           setPhase("error");
         }
         return;
       }
-      if (!activeRef.current) return;
-      beginListening();
+      // Superseded while draining, or session ended → don't touch the UI.
+      if (!activeRef.current || turnRef.current !== myTurn) return;
+      setHeard("");
+      setPhase("listening");
+      startMic();
     },
-    [beginListening, setPhase]
+    [setPhase, startMic]
   );
 
   const runBufferedTurn = useCallback(
     async (text: string) => {
+      const myTurn = ++turnRef.current;
+      stopSpeechRef.current();
+      spokenTextRef.current = "";
       setPhase("thinking");
+      startMic();
       try {
         const reply = await sendRef.current!(text);
-        if (!activeRef.current) return;
+        if (!activeRef.current || turnRef.current !== myTurn) return;
+        spokenTextRef.current = reply;
         setLastReply(reply);
         setPhase("speaking");
         const handle = playAgentSpeech(agentRef.current.agentId, reply, {
           onStart: () => {
-            if (activeRef.current && phaseRef.current !== "paused") setPhase("speaking");
+            if (activeRef.current && turnRef.current === myTurn && phaseRef.current !== "paused")
+              setPhase("speaking");
           },
         });
         speechRef.current = handle;
         await handle.done;
         speechRef.current = null;
-        if (activeRef.current) beginListening();
+        if (!activeRef.current || turnRef.current !== myTurn) return;
+        setHeard("");
+        setPhase("listening");
+        startMic();
       } catch {
-        if (activeRef.current) {
+        if (activeRef.current && turnRef.current === myTurn) {
           setErrorMsg(`Couldn't reach ${agentRef.current.agentName} — tap to try again.`);
           setPhase("error");
         }
       }
     },
-    [beginListening, setPhase]
+    [setPhase, startMic]
   );
 
   const handleFinal = useCallback(
@@ -192,6 +266,10 @@ export default function CarVoiceMode({
       if (!activeRef.current) return;
       const t = text.trim();
       if (!t) return;
+      // If the agent is still talking and this "final" is really his own voice
+      // echoing back through the speaker, drop it — don't start a phantom turn.
+      const p = phaseRef.current;
+      if ((p === "speaking" || p === "thinking") && looksLikeEcho(t, spokenTextRef.current)) return;
       setLastTranscript(t);
       setHeard("");
       if (streamRef.current) await runStreamingTurn(t);
@@ -211,15 +289,27 @@ export default function CarVoiceMode({
     }
     const stt = createSpeechToText({
       onPartial: (t) => {
-        if (activeRef.current && phaseRef.current === "listening") setHeard(t);
+        if (!activeRef.current) return;
+        const p = phaseRef.current;
+        if (p === "listening") {
+          setHeard(t);
+          return;
+        }
+        // Barge-in: you started talking while the agent was thinking/speaking.
+        if (p === "speaking" || p === "thinking") {
+          if (wordsOf(t).length < BARGE_IN_MIN_WORDS) return; // too short — likely echo
+          if (looksLikeEcho(t, spokenTextRef.current)) return; // it's his own voice
+          cancelTurn(); // cut him off now; the mic's final drives the next turn
+          setHeard(t);
+          setPhase("listening");
+        }
       },
       onFinal: (t) => void handleFinal(t),
       onEnd: () => {
-        if (activeRef.current && phaseRef.current === "listening") {
-          setTimeout(() => {
-            if (activeRef.current && phaseRef.current === "listening") sttRef.current?.start();
-          }, 250);
-        }
+        if (!activeRef.current) return;
+        if (phaseRef.current === "paused" || phaseRef.current === "error") return;
+        // Mic keeps itself alive across every active phase so barge-in always works.
+        setTimeout(() => startMic(), 250);
       },
       onError: (e) => {
         if (!activeRef.current) return;
@@ -273,12 +363,15 @@ export default function CarVoiceMode({
     speechRef.current?.stop();
     speechRef.current = null;
   }, []);
+  // Let cancelTurn (defined earlier) reach the real stopSpeech.
+  stopSpeechRef.current = stopSpeech;
 
   const onMainTap = useCallback(() => {
     if (!activeRef.current) return;
     switch (phaseRef.current) {
       case "speaking":
-        stopSpeech();
+        // Manual interrupt (barge-in also does this automatically now).
+        cancelTurn();
         beginListening();
         break;
       case "listening":
@@ -292,20 +385,20 @@ export default function CarVoiceMode({
       case "thinking":
         break;
     }
-  }, [beginListening, setPhase, stopSpeech]);
+  }, [beginListening, setPhase, cancelTurn]);
 
   // Switch agents mid-session: cut any speech, stop the mic, rebind, listen.
   const switchTo = useCallback(
     (idx: number) => {
       if (idx === activeIdx) return;
+      cancelTurn();
       sttRef.current?.abort();
-      stopSpeech();
       setActiveIdx(idx);
       setLastTranscript("");
       setLastReply("");
       beginListening();
     },
-    [activeIdx, beginListening, stopSpeech]
+    [activeIdx, beginListening, cancelTurn]
   );
 
   const endSession = useCallback(() => {
@@ -396,9 +489,9 @@ export default function CarVoiceMode({
           End conversation
         </button>
         <p className="text-xs text-gray-600">
-          Tap the circle to{" "}
-          {phase === "speaking" ? "interrupt" : phase === "listening" ? "pause" : "listen"} · saved
-          to your {active.agentName} chat
+          {phase === "speaking"
+            ? `Just start talking to cut in · saved to your ${active.agentName} chat`
+            : `Tap the circle to ${phase === "listening" ? "pause" : "listen"} · saved to your ${active.agentName} chat`}
         </p>
       </div>
     </div>
