@@ -80,19 +80,38 @@ export interface CategorizationResult {
   report: string;
 }
 
-function parseResultObject(text: string): {
+interface ParsedResult {
   categorize?: Array<Record<string, unknown>>;
   apply_to_invoice?: Array<Record<string, unknown>>;
   escalated?: Array<Record<string, unknown>>;
-} {
+}
+
+/** Parse the model's decisions. `ok:false` means the response existed but no
+ * decision object could be recovered (usually a truncated reply) — callers
+ * MUST surface that loudly instead of reporting a quiet all-zero run. */
+function parseResultObject(text: string): { data: ParsedResult; ok: boolean } {
+  const tryParse = (s: string): ParsedResult | null => {
+    try {
+      const parsed = JSON.parse(s.trim());
+      return typeof parsed === "object" && parsed ? (parsed as ParsedResult) : null;
+    } catch {
+      return null;
+    }
+  };
+  // 1) Complete fenced block(s) — take the last.
   const matches = [...text.matchAll(/```json\s*([\s\S]*?)```/gi)];
-  if (matches.length === 0) return {};
-  try {
-    const parsed = JSON.parse(matches[matches.length - 1][1].trim());
-    return typeof parsed === "object" && parsed ? parsed : {};
-  } catch {
-    return {};
+  if (matches.length > 0) {
+    const parsed = tryParse(matches[matches.length - 1][1]);
+    if (parsed) return { data: parsed, ok: true };
   }
+  // 2) An unfenced or fence-truncated object: first "{" to the last "}".
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  if (first !== -1 && last > first) {
+    const parsed = tryParse(text.slice(first, last + 1));
+    if (parsed) return { data: parsed, ok: true };
+  }
+  return { data: {}, ok: false };
 }
 
 const EXECUTION_SYSTEM_PROMPT = `${WORKER_EXPERTISE}
@@ -131,7 +150,7 @@ Return ONLY your work as a fenced json object (nothing after it):
   ]
 }
 \`\`\`
-Be conservative — a smaller number of correct categorizations plus honest escalations beats guessing.`;
+Be conservative — a smaller number of correct categorizations plus honest escalations beats guessing. Keep it COMPACT: no prose before or after the json; "basis" and "summary" under ~15 words each; escalation questions to the point. A response that runs long risks being cut off, which wastes the whole batch.`;
 
 /**
  * Run one categorization batch/chunk. Designed to be called repeatedly (cron,
@@ -290,11 +309,41 @@ export async function runCategorizationBatch(opts?: {
     systemPrompt: EXECUTION_SYSTEM_PROMPT,
     userMessage,
     model: CLAUDE_MODEL,
-    maxTokens: 6000,
+    // Room for 15 decisions + escalations; a truncated reply here previously
+    // parsed as "nothing to do" and produced a silent all-zero run.
+    maxTokens: 12000,
     temperature: 0,
   });
 
-  const parsed = parseResultObject(res.text);
+  const { data: parsed, ok: parsedOk } = parseResultObject(res.text);
+  if (!parsedOk && uncategorized.items.length > 0) {
+    // The model replied but no decision object could be recovered — say so
+    // LOUDLY instead of reporting a quiet "0 written, 0 escalated" run.
+    console.error(
+      `[accounting-execute] Unparseable decision response (${res.text.length} chars). Tail: ${res.text.slice(-300)}`
+    );
+    const report = [
+      `# Categorization ${live ? "Run" : "Dry Run"} — ${batchId}`,
+      "",
+      "⚠️ **This run did nothing** — Penny's decision response couldn't be parsed (usually a cut-off reply), so no writes, no skips, no escalations.",
+      `📦 Backlog: ~${uncategorized.total} total, unchanged.`,
+      "",
+      "Run it again — this is transient. If it happens repeatedly, that's a bug to flag.",
+      "",
+      `_Debug: response was ${res.text.length} chars; tail: “…${res.text.slice(-160).replace(/\n/g, " ")}”_`,
+    ].join("\n");
+    return {
+      mode: live ? "executed" : "proposed",
+      batchId,
+      scanned: uncategorized.items.length,
+      totalBacklog: uncategorized.total,
+      executed: [],
+      skipped: [],
+      escalated: [],
+      remaining: uncategorized.total,
+      report,
+    };
+  }
   const decisions = Array.isArray(parsed.categorize) ? parsed.categorize : [];
   const invoiceApplications = Array.isArray(parsed.apply_to_invoice) ? parsed.apply_to_invoice : [];
   const escalatedRaw = Array.isArray(parsed.escalated) ? parsed.escalated : [];
