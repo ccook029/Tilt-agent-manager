@@ -482,6 +482,51 @@ export async function runCategorizationBatch(opts?: {
         });
         continue;
       }
+
+      // GUARD 1b — Zoho already knows this money: a same-amount match
+      // candidate means the deposit corresponds to a transaction ALREADY
+      // recorded (e.g. Chris recorded the invoice payment by hand and the
+      // feed line arrived later — the Barbara Cook / INV-00563 case, which
+      // the open-invoice check can't see because the invoice reads paid).
+      // A unique candidate reconciles by match; several hold for a human.
+      const cands = await fetchMatchCandidates(txnId).catch(() => []);
+      const sameAmountCands = cands.filter(
+        (c) => c.amount == null || Math.abs((c.amount ?? 0) - amt) < 0.005
+      );
+      if (sameAmountCands.length === 1) {
+        if (live) {
+          try {
+            await matchTxn(txnId, sameAmountCands);
+          } catch (err) {
+            skipped.push({
+              transaction_id: txnId,
+              reason: `same-amount recorded transaction found but auto-match failed (${err instanceof Error ? err.message : String(err)}) — match or post it manually in Zoho Banking`,
+            });
+            continue;
+          }
+        }
+        executed.push({
+          transaction_id: txnId,
+          summary: `Matched $${amt.toFixed(2)} (${who}) to the already-recorded ${sameAmountCands[0].transaction_type.replace(/_/g, " ")} — reconciled, not posted as new income`,
+          account: "matched — already recorded",
+          amount: amt,
+        });
+        writtenThisBatch.add(`${direction}|${amt.toFixed(2)}`);
+        continue;
+      }
+      if (sameAmountCands.length > 1) {
+        skipped.push({
+          transaction_id: txnId,
+          reason: `$${amt.toFixed(2)} matches ${sameAmountCands.length} already-recorded transactions — held; question raised`,
+        });
+        guardQuestions.push({
+          question: `The $${amt.toFixed(2)} deposit on ${txn.date} (${who}) matches ${sameAmountCands.length} already-recorded transactions in Zoho — is it one of those (match it in Zoho Banking), or genuinely new income?`,
+          reason: "Posting it as new income would double-count if it's a payment that was already recorded",
+          recommendation: "Match it to the right recorded transaction in Zoho Banking; if it's truly new income, say so and Penny posts it next batch",
+          dollarAmount: amt,
+        });
+        continue;
+      }
     }
 
     // GUARD 2 — same amount+direction already written earlier in THIS batch:
