@@ -308,22 +308,40 @@ export default function CarVoiceMode({
       onEnd: () => {
         if (!activeRef.current) return;
         if (phaseRef.current === "paused" || phaseRef.current === "error") return;
-        // Mic keeps itself alive across every active phase so barge-in always works.
-        setTimeout(() => startMic(), 250);
+        // Recognizer stopped (a pause hit its limit, or a transient blip). Bring
+        // it right back — the mic must stay live in every active phase. The
+        // watchdog below is the backstop if this restart itself throws.
+        setTimeout(() => startMic(), 200);
       },
       onError: (e) => {
         if (!activeRef.current) return;
-        const denied = e.code === "not-allowed" || e.code === "service-not-allowed";
+        // Only a hard permission/hardware failure is worth stopping for. Blips
+        // like "network" self-heal: onEnd + the watchdog restart the recognizer,
+        // so we DON'T strand the user on an error screen for those.
+        const fatal =
+          e.code === "not-allowed" ||
+          e.code === "service-not-allowed" ||
+          e.code === "audio-capture";
+        if (!fatal) return;
         setErrorMsg(
-          denied
-            ? "Microphone access is blocked. Allow the mic for this site, then tap to retry."
-            : "The mic dropped. Tap the circle to start listening again."
+          "Microphone access is blocked. Allow the mic for this site, then tap to retry."
         );
         setPhase("error");
       },
-    });
+    }, { continuous: true });
     sttRef.current = stt;
     beginListening();
+
+    // Watchdog: the single source of truth that the mic is alive whenever it
+    // should be. Every second, if we're in an active phase, (re)start the
+    // recognizer — start() is a no-op when one is already running, so this only
+    // ever revives a recognizer that died silently (Chrome does this) or one
+    // whose restart threw. This is what kills the "stuck on Listening…" freeze.
+    const watchdog = setInterval(() => {
+      if (!activeRef.current) return;
+      const p = phaseRef.current;
+      if (p === "listening" || p === "thinking" || p === "speaking") startMic();
+    }, 1000);
 
     // Keep the phone screen awake for the whole conversation (Android/Chrome)
     // so it doesn't sleep mid-sentence. The lock is auto-released when the tab
@@ -348,6 +366,7 @@ export default function CarVoiceMode({
 
     return () => {
       activeRef.current = false;
+      clearInterval(watchdog);
       stt.abort();
       queueRef.current?.stop();
       speechRef.current?.stop();
