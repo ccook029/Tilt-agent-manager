@@ -92,6 +92,10 @@ function createBrowserStt(opts: { lang?: string }): SpeechToText {
   let handlers: SttHandlers | null = null;
   // Tracks whether we intentionally aborted, so onend stays silent then.
   let aborted = false;
+  // Whether a recognition is currently live. Guards the always-on mic loop from
+  // spawning a second recognition (which would double-capture audio) if start()
+  // is called while one is already running.
+  let running = false;
 
   const impl: SpeechToText & { _bind(h: SttHandlers): void } = {
     supported: Boolean(Ctor),
@@ -103,6 +107,7 @@ function createBrowserStt(opts: { lang?: string }): SpeechToText {
         handlers?.onError({ code: "unsupported", message: "Speech recognition isn't available in this browser." });
         return;
       }
+      if (running) return; // already listening — don't stack a second recognition
       aborted = false;
       // Fresh instance per phrase — reusing one across start/stop is flaky in
       // Chrome (it can fire stale results or refuse to restart).
@@ -130,6 +135,7 @@ function createBrowserStt(opts: { lang?: string }): SpeechToText {
         handlers?.onError({ code: e.error || "error", message: e.message || e.error || "Speech recognition error." });
       };
       rec.onend = () => {
+        running = false;
         if (aborted) return;
         const text = finalText.trim();
         if (text) handlers?.onFinal(text);
@@ -137,8 +143,10 @@ function createBrowserStt(opts: { lang?: string }): SpeechToText {
       };
       try {
         rec.start();
+        running = true;
       } catch {
         // start() throws if called while already started — treat as benign.
+        running = false;
       }
     },
     stop() {
@@ -150,6 +158,7 @@ function createBrowserStt(opts: { lang?: string }): SpeechToText {
     },
     abort() {
       aborted = true;
+      running = false;
       try {
         rec?.abort();
       } catch {
