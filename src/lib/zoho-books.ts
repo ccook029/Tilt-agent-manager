@@ -131,6 +131,7 @@ export function txnDirection(t: BooksBankTxn): "in" | "out" | "unknown" {
 export interface BooksInvoice {
   invoice_id: string;
   invoice_number: string;
+  customer_id?: string;
   customer_name: string;
   status: string;
   total: number;
@@ -360,6 +361,47 @@ export async function categorizeTxnAsDeposit(
       ? { tax_id: opts.tax_id, is_inclusive_tax: opts.is_inclusive_tax ?? true }
       : {}),
   });
+}
+
+/** Look up one invoice by its exact number (e.g. "INV-00566"). */
+export async function fetchInvoiceByNumber(
+  invoiceNumber: string
+): Promise<BooksInvoice | null> {
+  const res = await booksGet<{ invoices?: BooksInvoice[] }>("/invoices", {
+    invoice_number: invoiceNumber.trim(),
+  });
+  const hit = (res.invoices ?? []).find(
+    (i) => i.invoice_number.trim().toLowerCase() === invoiceNumber.trim().toLowerCase()
+  );
+  return hit ?? null;
+}
+
+/** Categorize a money-IN feed line as a payment applied to an existing
+ * invoice — clears A/R instead of double-counting revenue that was already
+ * recognized when the invoice was raised. */
+export async function categorizeTxnAsCustomerPayment(
+  transactionId: string,
+  opts: {
+    customer_id: string;
+    invoice_id: string;
+    amount: number;
+    date: string;
+    account_id: string; // the bank account the money landed in
+    description?: string;
+  }
+): Promise<void> {
+  await booksPost(
+    `/banktransactions/uncategorized/${transactionId}/categorize/customerpayments`,
+    {
+      customer_id: opts.customer_id,
+      payment_mode: "banktransfer",
+      amount: opts.amount,
+      date: opts.date,
+      account_id: opts.account_id,
+      description: opts.description ?? "",
+      invoices: [{ invoice_id: opts.invoice_id, amount_applied: opts.amount }],
+    }
+  );
 }
 
 /** Reverse a categorization — returns the feed line to Uncategorized. */

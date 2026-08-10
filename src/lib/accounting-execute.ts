@@ -25,8 +25,10 @@ import {
   fetchUncategorizedBankTxns,
   fetchChartOfAccounts,
   fetchTaxes,
+  fetchInvoiceByNumber,
   categorizeTxnAsExpense,
   categorizeTxnAsDeposit,
+  categorizeTxnAsCustomerPayment,
   txnDirection,
   type BooksBankTxn,
   type BooksAccount,
@@ -78,6 +80,7 @@ export interface CategorizationResult {
 
 function parseResultObject(text: string): {
   categorize?: Array<Record<string, unknown>>;
+  apply_to_invoice?: Array<Record<string, unknown>>;
   escalated?: Array<Record<string, unknown>>;
 } {
   const matches = [...text.matchAll(/```json\s*([\s\S]*?)```/gi)];
@@ -108,11 +111,18 @@ SALES TAX (HST) — you can post tax splits yourself now:
 
 ACCOUNT TYPES (hard rule): a MONEY OUT line must go to an expense-type account (expense / other expense / COGS / an asset purchase). A MONEY IN line must go to income / other income / equity. Anything else (posting money-out to a liability, money-in to a bank account) will be rejected — those situations are transfers or payments, so escalate them instead.
 
+MONEY DIRECTION: each line's MONEY IN / MONEY OUT label is the system's best read; a line with EMAIL MATCH has its direction CONFIRMED by the Interac notification (received = in, sent = out) — trust that over the raw label. Always include "direction" ("in" or "out") in each decision — your independent read from the payee/memo/policy. If your direction disagrees with the system's, the line is skipped for a human look rather than posted wrong; that's intended.
+
+PAYMENTS ON EXISTING INVOICES: when a deposit pays an invoice Tilt already raised (a policy says "applied against INV-00xxx", or the memo/name clearly matches an open invoice), do NOT categorize it to an income account — that double-counts revenue. Put it in "apply_to_invoice" with the exact invoice number instead; the system applies it as a customer payment and clears A/R.
+
 Return ONLY your work as a fenced json object (nothing after it):
 \`\`\`json
 {
   "categorize": [
-    { "transaction_id": "exact id from the list", "account": "exact account name from the Chart of Accounts", "tax": "exact tax name from TAX CODES — ONLY when the amount includes sales tax; omit otherwise", "basis": "policy name / why it's unambiguous", "summary": "Categorize $X PAYEE → ACCOUNT (+ tax)" }
+    { "transaction_id": "exact id from the list", "direction": "in|out — your independent read", "account": "exact account name from the Chart of Accounts", "tax": "exact tax name from TAX CODES — ONLY when the amount includes sales tax; omit otherwise", "basis": "policy name / why it's unambiguous", "summary": "Categorize $X PAYEE → ACCOUNT (+ tax)" }
+  ],
+  "apply_to_invoice": [
+    { "transaction_id": "exact id", "invoice_number": "INV-00xxx", "basis": "policy / memo evidence this pays that invoice", "summary": "Apply $X from PAYER → INV-00xxx" }
   ],
   "escalated": [
     { "transaction_id": "exact id", "amount": 0, "question": "plain-English question for Chris (who is this / how should we treat it)", "recommendation": "your best guess", "options": ["A", "B"] }
@@ -182,22 +192,18 @@ export async function runCategorizationBatch(opts?: {
     taxes.map((t) => [t.tax_name.trim().toLowerCase(), t])
   );
 
-  // Deterministic pre-match: for each bank line, find the Interac email with the
-  // same amount within ±5 days AND the same money direction (a MONEY IN line
-  // pairs with a "received" notification; a MONEY OUT line with a "sent" one —
-  // e.g. an e-Transfer to a supplier for fuel). A unique hit is annotated right
-  // on the transaction, carrying the counterparty name AND the sender's memo
-  // ("Jer fuel - Jan.07"), which is often the whole answer to the category.
+  // Deterministic pre-match: for each bank line, find the Interac email with
+  // the same amount within ±5 days. Matched DIRECTION-AGNOSTICALLY on purpose:
+  // some feeds carry an inverted debit/credit flag (we saw Interac deposits
+  // flagged as money-out in production), and a unique "received $210" email is
+  // PROOF of money-in that beats the flag. The unique hit is annotated on the
+  // transaction — counterparty name + the sender's own memo ("Jer fuel"), and
+  // its direction becomes authoritative for validation and the write.
   const emailMatchFor = (t: BooksBankTxn): InteracNotification | null => {
     if (interac.length === 0) return null;
-    const dir = txnDirection(t);
-    const wantDir =
-      dir === "in" ? "received" : dir === "out" ? "sent" : null;
-    if (!wantDir) return null;
     const txnTime = new Date(t.date).getTime();
     const hits = interac.filter(
       (n) =>
-        n.direction === wantDir &&
         n.amount != null &&
         Math.abs(n.amount - (t.amount ?? 0)) < 0.005 &&
         n.date &&
@@ -206,15 +212,29 @@ export async function runCategorizationBatch(opts?: {
     return hits.length === 1 ? hits[0] : null;
   };
 
+  /** Best-evidence direction: a unique email match trumps the feed's flag. */
+  const effectiveDirection = (
+    t: BooksBankTxn,
+    match: InteracNotification | null
+  ): "in" | "out" | "unknown" => {
+    if (match?.direction === "received") return "in";
+    if (match?.direction === "sent") return "out";
+    return txnDirection(t);
+  };
+
+  const matchByTxnId = new Map<string, InteracNotification | null>(
+    uncategorized.items.map((t) => [String(t.transaction_id), emailMatchFor(t)])
+  );
+
   const txnBlock = uncategorized.items
     .map((t) => {
-      const dir = txnDirection(t);
-      const match = emailMatchFor(t);
+      const match = matchByTxnId.get(String(t.transaction_id)) ?? null;
+      const dir = effectiveDirection(t, match);
       const counterparty = match
         ? `${match.direction === "sent" ? "to" : "from"} "${match.name ?? "?"}"`
         : "";
       const matchNote = match
-        ? ` | EMAIL MATCH: ${counterparty}${match.message ? ` — message: "${match.message}"` : ""}`
+        ? ` | EMAIL MATCH (direction confirmed): ${counterparty}${match.message ? ` — message: "${match.message}"` : ""}`
         : "";
       const dirLabel =
         dir === "in" ? "MONEY IN" : dir === "out" ? "MONEY OUT" : "DIRECTION UNKNOWN — do not categorize; escalate";
@@ -258,6 +278,7 @@ export async function runCategorizationBatch(opts?: {
 
   const parsed = parseResultObject(res.text);
   const decisions = Array.isArray(parsed.categorize) ? parsed.categorize : [];
+  const invoiceApplications = Array.isArray(parsed.apply_to_invoice) ? parsed.apply_to_invoice : [];
   const escalatedRaw = Array.isArray(parsed.escalated) ? parsed.escalated : [];
 
   // ---- Validate + execute each decision (code-enforced guardrails) --------
@@ -287,12 +308,32 @@ export async function runCategorizationBatch(opts?: {
       skipped.push({ transaction_id: txnId, reason: "missing bank account id on the feed line" });
       continue;
     }
-    const direction = txnDirection(txn);
+    const match = matchByTxnId.get(txnId) ?? null;
+    let direction = effectiveDirection(txn, match);
+    const pennyDirection = String(d.direction ?? "").trim().toLowerCase();
     if (direction === "unknown") {
-      // Never guess deposit-vs-expense — a wrong guess writes the wrong entry.
+      // No flag, no email evidence — accept Penny's stated read (she's
+      // instructed to only state it when policy/memo makes it certain), and
+      // the account-type gate below still has to agree with it.
+      if (pennyDirection === "in" || pennyDirection === "out") {
+        direction = pennyDirection;
+      } else {
+        skipped.push({
+          transaction_id: txnId,
+          reason: "money direction could not be determined (no debit/credit flag, type, or memo wording) — needs a human look",
+        });
+        continue;
+      }
+    } else if (
+      (pennyDirection === "in" || pennyDirection === "out") &&
+      pennyDirection !== direction &&
+      !match
+    ) {
+      // Penny disagrees with the feed's flag and there's no email evidence to
+      // break the tie — don't post either version, surface it.
       skipped.push({
         transaction_id: txnId,
-        reason: "money direction could not be determined (no debit/credit flag, type, or memo wording) — needs a human look",
+        reason: `direction conflict: feed says ${direction.toUpperCase()}, Penny says ${pennyDirection.toUpperCase()} — needs a human look`,
       });
       continue;
     }
@@ -372,6 +413,83 @@ export async function runCategorizationBatch(opts?: {
       transaction_id: txnId,
       summary,
       account: account.account_name,
+      amount: txn.amount ?? 0,
+    });
+  }
+
+  // ---- Apply deposits to existing invoices (clears A/R, no double-count) ---
+  for (const a of invoiceApplications) {
+    const txnId = String(a.transaction_id ?? "");
+    const invoiceNumber = String(a.invoice_number ?? "").trim();
+    const txn = txnById.get(txnId);
+    if (!txn) {
+      skipped.push({ transaction_id: txnId, reason: "unknown transaction id (not in this batch)" });
+      continue;
+    }
+    if (!invoiceNumber) {
+      skipped.push({ transaction_id: txnId, reason: "apply_to_invoice without an invoice number" });
+      continue;
+    }
+    if (!txn.account_id) {
+      skipped.push({ transaction_id: txnId, reason: "missing bank account id on the feed line" });
+      continue;
+    }
+    const match = matchByTxnId.get(txnId) ?? null;
+    const direction = effectiveDirection(txn, match);
+    if (direction === "out") {
+      skipped.push({
+        transaction_id: txnId,
+        reason: `can't apply a money-out line to ${invoiceNumber} — invoice payments are deposits`,
+      });
+      continue;
+    }
+    if ((txn.amount ?? 0) >= MATERIALITY_THRESHOLD) {
+      skipped.push({ transaction_id: txnId, reason: `$${txn.amount} is at/above the $${MATERIALITY_THRESHOLD} materiality gate` });
+      continue;
+    }
+    const invoice = await fetchInvoiceByNumber(invoiceNumber).catch(() => null);
+    if (!invoice) {
+      skipped.push({ transaction_id: txnId, reason: `invoice ${invoiceNumber} not found in Zoho Books` });
+      continue;
+    }
+    if (!invoice.customer_id) {
+      skipped.push({ transaction_id: txnId, reason: `invoice ${invoiceNumber} has no customer id on the API record` });
+      continue;
+    }
+    if ((txn.amount ?? 0) > invoice.balance + 0.01) {
+      skipped.push({
+        transaction_id: txnId,
+        reason: `$${(txn.amount ?? 0).toFixed(2)} exceeds ${invoiceNumber}'s open balance of $${invoice.balance.toFixed(2)} — needs a human split`,
+      });
+      continue;
+    }
+
+    const summary =
+      String(a.summary ?? "") ||
+      `Apply $${(txn.amount ?? 0).toFixed(2)} from ${match?.name ?? txn.payee ?? "deposit"} → ${invoiceNumber} (${invoice.customer_name})`;
+
+    if (live) {
+      try {
+        await categorizeTxnAsCustomerPayment(txnId, {
+          customer_id: invoice.customer_id,
+          invoice_id: invoice.invoice_id,
+          amount: txn.amount ?? 0,
+          date: txn.date,
+          account_id: txn.account_id,
+          description: txn.description,
+        });
+      } catch (err) {
+        skipped.push({
+          transaction_id: txnId,
+          reason: `Zoho write failed (payment on ${invoiceNumber}): ${err instanceof Error ? err.message : String(err)}`,
+        });
+        continue;
+      }
+    }
+    executed.push({
+      transaction_id: txnId,
+      summary,
+      account: `A/R — ${invoiceNumber}`,
       amount: txn.amount ?? 0,
     });
   }
