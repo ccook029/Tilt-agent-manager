@@ -1,14 +1,16 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// /org — the company org chart + department controls.
+// /org — the company, laid out the way it actually runs.
 //
-// Per department: the boss and reporting lines (from the directory the engine
-// actually enforces), a Dispatch button (the boss plans and hands out work),
-// an Assign-work form (Chris gives any employee a work order directly), and
-// the graduation toggle (auto-ship boss-approved work — off by default).
+// Reads top-down like a command structure: the founders, then Reese (Chief of
+// Staff — the hub every manager reports to), then each department as a card:
+// boss on top, reports beneath with connector lines, and a plain-language
+// "what they do" line for every person. The machinery (dispatch, graduation,
+// assign-work) is tucked behind "Team actions" so the structure reads first.
+// Tap anyone to open their office — chat, work history, live wiring check.
 // ---------------------------------------------------------------------------
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { dispatchInBackground } from "@/lib/client/dispatch";
 
@@ -21,6 +23,7 @@ interface Employee {
   reportsTo: string | null;
   personaId?: string;
   skills: string[];
+  charter?: string;
   staffed: boolean;
   enabled: boolean;
 }
@@ -37,6 +40,49 @@ interface Department {
   managerId: string | null;
   members: string[];
   tools?: DeptTool[];
+}
+
+// Narrative order: money → making → selling → growing → telling → building →
+// caring → the site → the numbers. (Executive renders as the hub, not a card.)
+const DEPT_ORDER = [
+  "finance",
+  "operations",
+  "sales",
+  "bizdev",
+  "marketing",
+  "product",
+  "cx",
+  "web",
+  "intelligence",
+];
+
+// A distinct accent per department so the eye can anchor.
+const DEPT_ACCENT: Record<string, { dot: string; border: string }> = {
+  finance: { dot: "bg-emerald-400", border: "border-emerald-900/40" },
+  operations: { dot: "bg-cyan-400", border: "border-cyan-900/40" },
+  sales: { dot: "bg-orange-400", border: "border-orange-900/40" },
+  bizdev: { dot: "bg-amber-400", border: "border-amber-900/40" },
+  marketing: { dot: "bg-rose-400", border: "border-rose-900/40" },
+  product: { dot: "bg-purple-400", border: "border-purple-900/40" },
+  cx: { dot: "bg-teal-400", border: "border-teal-900/40" },
+  web: { dot: "bg-sky-400", border: "border-sky-900/40" },
+  intelligence: { dot: "bg-blue-400", border: "border-blue-900/40" },
+};
+
+/** First sentence of a charter, tightened to one legible line. */
+function jobLine(e: Employee): string {
+  const src = e.charter?.trim() || "";
+  if (!src) return e.skills.slice(0, 3).join(" · ");
+  const sentence = src.split(/(?<=[.!?])\s+/)[0] ?? src;
+  return sentence.length > 110 ? `${sentence.slice(0, 107)}…` : sentence;
+}
+
+function initials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2);
 }
 
 export default function OrgPage() {
@@ -62,17 +108,29 @@ export default function OrgPage() {
     load();
   }, [load]);
 
+  const chief = employees["chief-of-staff"];
+  const ordered = useMemo(() => {
+    const byId = new Map(departments.map((d) => [d.id, d]));
+    const inOrder = DEPT_ORDER.map((id) => byId.get(id)).filter(
+      (d): d is Department => Boolean(d)
+    );
+    // Anything new/unknown (except executive, which renders as the hub) lands at the end.
+    const extras = departments.filter(
+      (d) => d.id !== "executive" && !DEPT_ORDER.includes(d.id)
+    );
+    return [...inOrder, ...extras];
+  }, [departments]);
+
   return (
-    <div className="mx-auto max-w-4xl space-y-8 px-4 py-8">
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-3xl font-bold uppercase tracking-wide">
-            Org Chart
+            The Company
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Every department, its boss, and who reports to whom. Dispatch a
-            team, assign work directly, and graduate a department when its
-            boss has earned auto-ship.
+            Tap anyone to open their office — chat, assign work, see everything
+            they&apos;ve done, and test the data they run on.
           </p>
         </div>
         <Link
@@ -83,115 +141,212 @@ export default function OrgPage() {
         </Link>
       </div>
 
-      {/* Leadership root */}
-      <div className="rounded-xl border border-[#0094b8]/40 bg-[#0094b8]/10 p-4 text-center">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#00d6ff]">
-          Leadership
-        </p>
-        <p className="mt-1 text-sm text-gray-200">
-          Chris Cook · Jeremy Elliott — Co-Founders
-        </p>
-      </div>
-
       {loading ? (
         <p className="text-gray-500">Loading…</p>
       ) : (
-        <div className="space-y-6">
-          {departments.map((dept) => {
-            const boss = dept.managerId ? employees[dept.managerId] : null;
-            const members = dept.members
-              .map((id) => employees[id])
-              .filter(Boolean)
-              .filter((e) => e.id !== dept.managerId);
-            // A boss can only dispatch when they actually have staffed reports.
-            // Solo departments (e.g. Operations = Stockton) fall back to
-            // Assign-work rather than a Dispatch button that would error.
-            const hasStaffedReports = members.some((e) => e.staffed && e.enabled);
-            return (
-              <div
-                key={dept.id}
-                id={dept.id}
-                className="scroll-mt-24 rounded-xl border border-gray-800/60 bg-[#111]/40 p-5"
+        <>
+          {/* ---- The chain of command: You → Reese → the departments ---- */}
+          <div className="flex flex-col items-center">
+            <div className="w-full max-w-md rounded-xl border border-[#0094b8]/40 bg-[#0094b8]/10 p-3.5 text-center">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#00d6ff]">
+                Founders
+              </p>
+              <p className="mt-0.5 text-sm font-medium text-gray-100">
+                Chris Cook · Jeremy Elliott
+              </p>
+              <p className="text-[11px] text-gray-500">
+                Every decision trigger ends here.
+              </p>
+            </div>
+
+            <div className="h-5 w-px bg-gray-700" />
+
+            {chief ? (
+              <Link
+                href="/org/chief-of-staff"
+                className="w-full max-w-md rounded-xl border border-gray-700 bg-[#111]/70 p-3.5 text-center transition-colors hover:border-[#00d6ff]/50"
               >
-                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="font-display text-lg font-bold uppercase tracking-wide text-gray-100">
-                      {dept.name}
-                    </h2>
-                    <p className="mt-1 text-xs text-gray-500">{dept.mission}</p>
-                  </div>
-                  {boss?.staffed && hasStaffedReports && (
-                    <DeptControls
-                      dept={dept}
-                      bossName={boss.name}
-                      autoShip={autoShip[dept.id] === true}
-                      onChanged={load}
-                    />
-                  )}
+                <div className="flex items-center justify-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0094b8] text-xs font-bold text-white">
+                    {initials(chief.name)}
+                  </span>
+                  <span className="text-left">
+                    <span className="block text-sm font-semibold text-gray-100">
+                      {chief.name} — Chief of Staff
+                    </span>
+                    <span className="block text-[11px] text-gray-500">
+                      Runs the whole team for you. Every manager below reports to
+                      him. Ask him anything, by chat or voice.
+                    </span>
+                  </span>
                 </div>
+              </Link>
+            ) : null}
 
-                {boss ? (
-                  <div className="mb-3">
-                    <PersonRow employee={boss} isBoss />
-                  </div>
-                ) : (
-                  <p className="mb-3 text-xs text-gray-600">
-                    Reports directly to leadership (no department manager).
-                  </p>
-                )}
+            <div className="h-5 w-px bg-gray-700" />
+          </div>
 
-                {members.length > 0 && (
-                  <div className="space-y-1.5 border-l border-gray-800 pl-4">
-                    {members.map((e) => (
-                      <PersonRow key={e.id} employee={e} />
-                    ))}
-                  </div>
-                )}
-
-                {(dept.tools?.length ?? 0) > 0 && (
-                  <div className="mt-4 border-t border-gray-800/60 pt-3">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
-                      Tools & workspaces
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {dept.tools!.map((t) =>
-                        t.external ? (
-                          <a
-                            key={t.href}
-                            href={t.href}
-                            target="_blank"
-                            rel="noreferrer"
-                            title={t.description}
-                            className="rounded-full border border-gray-700 bg-gray-800/40 px-3 py-1 text-[11px] text-gray-300 transition-colors hover:border-[#00d6ff]/50 hover:text-[#00d6ff]"
-                          >
-                            {t.label} ↗
-                          </a>
-                        ) : (
-                          <Link
-                            key={t.href}
-                            href={t.href}
-                            title={t.description}
-                            className="rounded-full border border-gray-700 bg-gray-800/40 px-3 py-1 text-[11px] text-gray-300 transition-colors hover:border-[#00d6ff]/50 hover:text-[#00d6ff]"
-                          >
-                            {t.label}
-                          </Link>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <AssignWorkForm
-                  members={[boss, ...members]
-                    .filter((e): e is Employee => Boolean(e))
-                    .filter((e) => e.staffed && e.enabled)}
-                />
-              </div>
-            );
-          })}
-        </div>
+          {/* ---- Departments ---- */}
+          <div className="grid gap-4 md:grid-cols-2">
+            {ordered.map((dept) => (
+              <DeptCard
+                key={dept.id}
+                dept={dept}
+                employees={employees}
+                autoShip={autoShip[dept.id] === true}
+                onChanged={load}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
+  );
+}
+
+// ---- One department card ----------------------------------------------------
+
+function DeptCard({
+  dept,
+  employees,
+  autoShip,
+  onChanged,
+}: {
+  dept: Department;
+  employees: Record<string, Employee>;
+  autoShip: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const accent = DEPT_ACCENT[dept.id] ?? { dot: "bg-gray-500", border: "border-gray-800/60" };
+  const boss = dept.managerId ? employees[dept.managerId] : null;
+  const reports = dept.members
+    .map((id) => employees[id])
+    .filter(Boolean)
+    .filter((e) => e.id !== dept.managerId && e.enabled);
+  const staffedAll = [boss, ...reports].filter(
+    (e): e is Employee => Boolean(e && e.staffed && e.enabled)
+  );
+  const hasStaffedReports = reports.some((e) => e.staffed);
+
+  return (
+    <div
+      id={dept.id}
+      className={`scroll-mt-24 rounded-xl border ${accent.border} bg-[#111]/40 p-4`}
+    >
+      <div className="mb-3 flex items-start gap-2">
+        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${accent.dot}`} />
+        <div className="min-w-0">
+          <h2 className="font-display text-base font-bold uppercase tracking-wide text-gray-100">
+            {dept.name}
+          </h2>
+          <p className="text-[11px] leading-snug text-gray-500">{dept.mission}</p>
+        </div>
+      </div>
+
+      {boss ? (
+        <PersonRow employee={boss} isBoss />
+      ) : (
+        <p className="mb-1 text-[11px] text-gray-600">
+          Reports directly to leadership (no manager).
+        </p>
+      )}
+
+      {reports.length > 0 && (
+        <div className="ml-4 mt-1 space-y-0.5 border-l border-gray-800 pl-3">
+          {reports.map((e) => (
+            <PersonRow key={e.id} employee={e} />
+          ))}
+        </div>
+      )}
+
+      {/* The machinery, tucked away so the structure reads first. */}
+      {staffedAll.length > 0 && (
+        <details className="group mt-3 border-t border-gray-800/60 pt-2">
+          <summary className="cursor-pointer select-none text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-300">
+            Team actions{" "}
+            <span className="text-gray-700">
+              — dispatch, assign work{dept.tools?.length ? ", tools" : ""} ▾
+            </span>
+          </summary>
+          <div className="mt-2.5 space-y-3">
+            {boss?.staffed && hasStaffedReports && (
+              <DeptControls
+                dept={dept}
+                bossName={boss.name}
+                autoShip={autoShip}
+                onChanged={onChanged}
+              />
+            )}
+            {(dept.tools?.length ?? 0) > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {dept.tools!.map((t) =>
+                  t.external ? (
+                    <a
+                      key={t.href}
+                      href={t.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={t.description}
+                      className="rounded-full border border-gray-700 bg-gray-800/40 px-2.5 py-1 text-[10px] text-gray-300 transition-colors hover:border-[#00d6ff]/50 hover:text-[#00d6ff]"
+                    >
+                      {t.label} ↗
+                    </a>
+                  ) : (
+                    <Link
+                      key={t.href}
+                      href={t.href}
+                      title={t.description}
+                      className="rounded-full border border-gray-700 bg-gray-800/40 px-2.5 py-1 text-[10px] text-gray-300 transition-colors hover:border-[#00d6ff]/50 hover:text-[#00d6ff]"
+                    >
+                      {t.label}
+                    </Link>
+                  )
+                )}
+              </div>
+            )}
+            <AssignWorkForm members={staffedAll} />
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+// ---- Person row -------------------------------------------------------------
+
+function PersonRow({ employee, isBoss }: { employee: Employee; isBoss?: boolean }) {
+  return (
+    <Link
+      href={`/org/${employee.id}`}
+      className="block rounded-lg px-1.5 py-1.5 transition-colors hover:bg-gray-900/60"
+    >
+      <div className="flex items-start gap-2.5">
+        <div
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+            isBoss ? "bg-[#0094b8] text-white" : "bg-gray-800 text-gray-300"
+          }`}
+        >
+          {initials(employee.name)}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-sm leading-tight text-gray-200">
+            {employee.name}
+            <span className="ml-1.5 text-[11px] text-gray-500">· {employee.title}</span>
+            {isBoss && (
+              <span className="ml-1.5 rounded-full bg-[#0094b8]/20 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[#00d6ff]">
+                Boss
+              </span>
+            )}
+            {!employee.staffed && (
+              <span className="ml-1.5 rounded-full border border-gray-700 px-1.5 py-0.5 text-[9px] text-gray-500">
+                not staffed
+              </span>
+            )}
+          </p>
+          <p className="truncate text-[11px] leading-snug text-gray-500">{jobLine(employee)}</p>
+        </div>
+      </div>
+    </Link>
   );
 }
 
@@ -261,8 +416,8 @@ function DeptControls({
   };
 
   return (
-    <div className="flex shrink-0 flex-col items-end gap-1.5">
-      <div className="flex items-center gap-2">
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={dispatch}
           disabled={busy !== null}
@@ -287,7 +442,7 @@ function DeptControls({
           {autoShip ? "Graduated ✓" : "Owner gate on"}
         </button>
       </div>
-      {note && <p className="max-w-[16rem] text-right text-[10px] text-gray-500">{note}</p>}
+      {note && <p className="text-[10px] text-gray-500">{note}</p>}
     </div>
   );
 }
@@ -338,7 +493,7 @@ function AssignWorkForm({ members }: { members: Employee[] }) {
   };
 
   return (
-    <div className="mt-4 border-t border-gray-800/60 pt-3">
+    <div>
       {!open ? (
         <button
           onClick={() => setOpen(true)}
@@ -366,7 +521,7 @@ function AssignWorkForm({ members }: { members: Employee[] }) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Title (optional)"
-              className="min-w-[14rem] flex-1 rounded-md border border-gray-700 bg-gray-800/50 px-2 py-1.5 text-xs text-gray-200 focus:border-[#00d6ff] focus:outline-none"
+              className="min-w-[12rem] flex-1 rounded-md border border-gray-700 bg-gray-800/50 px-2 py-1.5 text-xs text-gray-200 focus:border-[#00d6ff] focus:outline-none"
               disabled={busy}
             />
           </div>
@@ -398,54 +553,5 @@ function AssignWorkForm({ members }: { members: Employee[] }) {
         </div>
       )}
     </div>
-  );
-}
-
-function PersonRow({
-  employee,
-  isBoss,
-}: {
-  employee: Employee;
-  isBoss?: boolean;
-}) {
-  const row = (
-    <div className="flex items-center gap-3">
-      <div
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
-          isBoss ? "bg-[#0094b8] text-white" : "bg-gray-800 text-gray-300"
-        }`}
-      >
-        {employee.name
-          .split(" ")
-          .map((n) => n[0])
-          .join("")
-          .slice(0, 2)}
-      </div>
-      <div className="min-w-0">
-        <p className="truncate text-sm text-gray-200">
-          {employee.name}
-          {isBoss && (
-            <span className="ml-2 rounded-full bg-[#0094b8]/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#00d6ff]">
-              Boss
-            </span>
-          )}
-        </p>
-        <p className="truncate text-xs text-gray-500">{employee.title}</p>
-      </div>
-      {!employee.staffed && (
-        <span className="ml-auto shrink-0 rounded-full border border-gray-700 px-2 py-0.5 text-[10px] text-gray-500">
-          not staffed yet
-        </span>
-      )}
-    </div>
-  );
-
-  return (
-    <Link
-      href={`/org/${employee.id}`}
-      className="block rounded-lg transition-colors hover:bg-gray-900/50"
-    >
-      {row}
-    </Link>
   );
 }
