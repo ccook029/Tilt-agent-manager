@@ -223,13 +223,22 @@ export async function fetchUncategorizedBankTxns(
 
   for (const acct of accounts) {
     try {
+      // Zoho's documented filter is filter_by=Status.Uncategorized — a bare
+      // "status" param is silently IGNORED, which made this return ALL
+      // transactions (mostly already categorized). Penny then "categorized"
+      // categorized lines, every write bounced, and the real backlog sat
+      // untouched. Belt-and-braces: filter server-side AND drop any line that
+      // doesn't say uncategorized.
       const res = await booksGet<Record<string, unknown>>("/banktransactions", {
         account_id: acct.account_id,
-        status: "uncategorized",
+        filter_by: "Status.Uncategorized",
         page: "1",
         per_page: "200",
       });
-      const txns = (res.banktransactions as BooksBankTxn[]) ?? [];
+      const all = (res.banktransactions as BooksBankTxn[]) ?? [];
+      const txns = all.filter(
+        (t) => !t.status || String(t.status).toLowerCase() === "uncategorized"
+      );
       const ctx = res.page_context as { total?: number } | undefined;
       total += ctx?.total ?? txns.length;
       for (const t of txns) {

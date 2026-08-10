@@ -35,6 +35,7 @@ import { websiteRepoConfigured } from "../web/github";
 import { VENDORS } from "./vendors";
 import { getRunLogsByAgent } from "../store";
 import { getEmployeeById } from "./directory";
+import { fetchUncategorizedBankTxns } from "../zoho-books";
 
 export interface WiringFeed {
   id: string;
@@ -209,6 +210,25 @@ const policyLedgerFeed = (): WiringFeed => ({
   },
 });
 
+const uncategorizedFeed = (): WiringFeed => ({
+  id: "uncategorized-backlog",
+  label: "Uncategorized backlog (direct from the bank feeds)",
+  description:
+    "The exact transaction list Penny's categorization runs work from — filtered to genuinely uncategorized lines.",
+  kind: "data",
+  check: async () => {
+    const { items, total } = await fetchUncategorizedBankTxns(5);
+    if (total === 0) return "backlog clear — 0 uncategorized transactions";
+    const statuses = items.map((t) => String(t.status ?? "?").toLowerCase());
+    const wrong = statuses.filter((s) => s && s !== "uncategorized" && s !== "?");
+    if (wrong.length > 0)
+      return {
+        warn: `~${total} total, but sample contains non-uncategorized lines (${wrong.join(", ")}) — the Zoho filter isn't holding`,
+      };
+    return `~${total} uncategorized · sample of ${items.length} verified genuinely uncategorized`;
+  },
+});
+
 const companySnapshotFeed = (): WiringFeed => ({
   id: "company-snapshot",
   label: "Whole-company snapshot",
@@ -353,7 +373,7 @@ const WIRING: Record<string, EmployeeWiring> = {
     ],
   },
   accounting: {
-    feeds: [booksFeed(), salesFeed(), policyLedgerFeed()],
+    feeds: [booksFeed(), uncategorizedFeed(), salesFeed(), policyLedgerFeed()],
     produces: [
       "Bookkeeping runs (categorization, reconciliation, cleanups) → Report History",
       "Guardrailed auto-categorization writes in Zoho Books (weekday cron)",

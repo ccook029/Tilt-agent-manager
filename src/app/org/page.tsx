@@ -198,8 +198,86 @@ export default function OrgPage() {
               />
             ))}
           </div>
+
+          <RhythmCard />
         </>
       )}
+    </div>
+  );
+}
+
+// ---- Company rhythm — the standing schedule -------------------------------
+
+interface RhythmJobView {
+  id: string;
+  label: string;
+  schedule: string;
+  description: string;
+  on: boolean;
+}
+
+function RhythmCard() {
+  const [jobs, setJobs] = useState<RhythmJobView[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/org/rhythm")
+      .then((r) => r.json())
+      .then((d) => setJobs(d.jobs ?? []))
+      .catch(() => {});
+  }, []);
+
+  const toggle = async (job: RhythmJobView) => {
+    setBusy(job.id);
+    try {
+      await fetch("/api/org/rhythm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: job.id, on: !job.on }),
+      });
+      setJobs((js) => js.map((j) => (j.id === job.id ? { ...j, on: !j.on } : j)));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (jobs.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-4">
+      <h2 className="font-display text-base font-bold uppercase tracking-wide text-gray-100">
+        Company rhythm
+      </h2>
+      <p className="mt-0.5 text-[11px] text-gray-500">
+        Standing duties that run on their own — results land in your review
+        queue (and your phone) like any other work. Toggle any of them off.
+      </p>
+      <ul className="mt-3 space-y-2.5">
+        {jobs.map((j) => (
+          <li key={j.id} className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm text-gray-200">
+                {j.label}
+                <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-600">
+                  {j.schedule}
+                </span>
+              </p>
+              <p className="text-[11px] leading-snug text-gray-500">{j.description}</p>
+            </div>
+            <button
+              onClick={() => toggle(j)}
+              disabled={busy === j.id}
+              className={`shrink-0 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                j.on
+                  ? "border-emerald-700/60 bg-emerald-900/30 text-emerald-300"
+                  : "border-gray-700 text-gray-500 hover:border-gray-500"
+              }`}
+            >
+              {j.on ? "On" : "Off"}
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
