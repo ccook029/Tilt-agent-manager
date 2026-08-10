@@ -27,6 +27,7 @@ import { autoScanAndFile } from "@/lib/accounting-ap";
 import { runSocialPlanWeekly } from "@/lib/pipelines/social-plan";
 import { runMarketingWeekly } from "@/lib/pipelines/marketing";
 import { isDispatchDue } from "@/lib/org/dispatch-cadence";
+import { getDueRhythmJobs } from "@/lib/org/rhythm";
 import { sendMorningBrief } from "@/lib/morning-brief";
 
 export const maxDuration = 300;
@@ -116,6 +117,15 @@ async function getScheduledTasks(now: Date): Promise<PipelineTask[]> {
   // Friday (day 5): Materials R&D
   if (day === 5) {
     tasks.push({ name: "Materials R&D Research", run: () => runResearchScan() });
+  }
+
+  // Company rhythm: the standing duties of otherwise on-demand roles — Reese's
+  // Monday founder briefing, weekly bizdev prospecting, Jules's team-order
+  // sweep, monthly consignment audit + cash outlook. Each is toggleable from
+  // /org; a job with nothing to do skips silently.
+  const rhythmJobs = await getDueRhythmJobs(now).catch(() => []);
+  for (const job of rhythmJobs) {
+    tasks.push({ name: job.label, run: () => job.run() });
   }
 
   // Sunday (day 0): regenerate the social content plan for the coming weeks.
