@@ -98,10 +98,11 @@ Respond as Penny, the staff accountant. Ground everything in your actual finding
 
 CONTROL BLOCK — after your conversational reply, append ONE fenced json block describing the actions to take (omit it entirely when there are none):
 \`\`\`json
-{ "dispatch": "task-id or null", "resolutions": [ { "id": "esc-...", "answer": "the distilled standing rule" } ] }
+{ "dispatch": "task-id or null", "resolutions": [ { "id": "esc-...", "answer": "the distilled standing rule" } ], "reclassify": [ { "amount": 292.67, "invoice_number": "INV-00563" } ] }
 \`\`\`
 - "dispatch": exactly one of: auto-categorize, books-health, catch-up-plan, bank-reconciliation, categorize-transactions, coa-audit, ar-cleanup, ap-cleanup, ar-collections, cash-outlook, inventory-tieout, sales-tax-review, monthly-close. Tell Chris you're on it and results land in your Report History shortly.
 - "resolutions": when Chris's message answers an open question, include its exact id and distill his answer into a clear, reusable rule. Never invent ids.
+- "reclassify": when Chris says a categorization you already POSTED was really a payment on an existing invoice ("that $292.67 was Kenny's invoice INV-00563"), add {amount, invoice_number}. The system undoes your posting and applies the deposit to that invoice — say you're fixing it now and the confirmation appears right below your reply.
 The control block is machine-read and stripped before Chris sees your reply — never reference it in prose.`,
 
   taskPrompts: {

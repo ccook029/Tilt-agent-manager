@@ -32,13 +32,14 @@ import {
   categorizeTxnAsExpense,
   categorizeTxnAsDeposit,
   categorizeTxnAsCustomerPayment,
+  uncategorizeTxn,
   txnDirection,
   type BooksBankTxn,
   type BooksAccount,
   type ZohoTax,
 } from "./zoho-books";
 import { renderPolicyBlock, addEscalations, type Escalation } from "./policy-ledger";
-import { getActions, logActions, makeAction } from "./action-log";
+import { getActions, logActions, makeAction, markActionReversed } from "./action-log";
 import { recordProgress } from "./progress";
 import { WORKER_EXPERTISE } from "./accounting-knowledge";
 import {
@@ -763,4 +764,84 @@ export async function runCategorizationBatch(opts?: {
     remaining,
     report,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Reclassify: fix a posted categorization from chat ("that $292.67 was
+// actually Kenny's invoice"). Undoes the original write (the feed line
+// returns to Uncategorized) and re-applies the deposit as a customer payment
+// on the named invoice — the full fix, no Zoho clicks needed from Chris.
+// ---------------------------------------------------------------------------
+export async function reclassifyToInvoice(opts: {
+  invoiceNumber: string;
+  amount?: number;
+  transactionId?: string;
+}): Promise<string> {
+  const invoiceNumber = opts.invoiceNumber.trim();
+  if (!invoiceNumber) throw new Error("no invoice number given");
+
+  // Find the original write in the audit log — by txn id, else by amount
+  // (newest first so "the $292.67 one" means the one just posted).
+  const actions = (await getActions())
+    .filter((a) => a.mode === "executed" && !a.reversed && a.type === "categorize-transaction")
+    .reverse();
+  const original = opts.transactionId
+    ? actions.find((a) => a.targetId === String(opts.transactionId))
+    : actions.find((a) => {
+        const amt = Number((a.after as { amount?: unknown } | undefined)?.amount ?? NaN);
+        return opts.amount != null && Math.abs(amt - opts.amount) < 0.005;
+      });
+  if (!original) {
+    throw new Error(
+      `couldn't find an executed categorization${opts.amount != null ? ` for $${opts.amount.toFixed(2)}` : ""} in the audit log`
+    );
+  }
+
+  // Check the destination BEFORE undoing anything.
+  const invoice = await fetchInvoiceByNumber(invoiceNumber);
+  if (!invoice) throw new Error(`invoice ${invoiceNumber} not found in Zoho Books`);
+  if (!invoice.customer_id) throw new Error(`invoice ${invoiceNumber} has no customer id on the API record`);
+
+  // Undo the original posting — the feed line returns to Uncategorized.
+  await uncategorizeTxn(original.targetId);
+  await markActionReversed(original.id, "reclassify-to-invoice");
+
+  // Re-find the line to recover its bank account id / date / amount.
+  const { items } = await fetchUncategorizedBankTxns(200);
+  const txn = items.find((t) => String(t.transaction_id) === original.targetId);
+  if (!txn || !txn.account_id) {
+    throw new Error(
+      `undid the original posting, but couldn't re-locate the feed line — it's back in Uncategorized; the next batch (or a manual Match in Zoho Banking) can apply it to ${invoiceNumber}`
+    );
+  }
+  const amt = txn.amount ?? 0;
+  if (amt > invoice.balance + 0.01) {
+    throw new Error(
+      `undid the original posting, but $${amt.toFixed(2)} exceeds ${invoiceNumber}'s open balance of $${invoice.balance.toFixed(2)} — the line is back in Uncategorized for a human look`
+    );
+  }
+
+  await categorizeTxnAsCustomerPayment(original.targetId, {
+    customer_id: invoice.customer_id,
+    invoice_id: invoice.invoice_id,
+    amount: amt,
+    date: txn.date,
+    account_id: txn.account_id,
+    description: txn.description,
+  });
+
+  const summary = `Reclassified $${amt.toFixed(2)}: undid "${original.summary.slice(0, 70)}" and applied it as a payment on ${invoiceNumber} (${invoice.customer_name}) — revenue no longer double-counted`;
+  await logActions([
+    makeAction({
+      type: "reclassify-to-invoice",
+      mode: "executed",
+      targetId: original.targetId,
+      summary,
+      before: { undone: original.summary },
+      after: { invoice: invoiceNumber, amount: amt },
+      batchId: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+      index: 0,
+    }),
+  ]);
+  return summary;
 }
