@@ -12,8 +12,7 @@
 //   marketing    Harper → video / posts / SEO / publisher / design / social-intel
 //   product      Maya → Rex
 //   intelligence Dana (BI lead) → Vince
-//   operations   Stockton (solo — no reports yet; works via direct Assign-work,
-//                so the /org Dispatch button is hidden until he has a report)
+//   operations   Stockton → Piers (supply coordinator)
 // Each staffed position has a prompt profile in employee-configs.ts; managers
 // who review a report also carry a managerSystemPrompt there.
 // ---------------------------------------------------------------------------
