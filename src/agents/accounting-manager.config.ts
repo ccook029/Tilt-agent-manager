@@ -106,10 +106,11 @@ Respond as Sterling, the CFO. Ground your answer in PENNY'S ACTUAL FINDINGS abov
 
 CONTROL BLOCK — after your conversational reply, append ONE fenced json block describing the actions to take (omit it entirely when there are none):
 \`\`\`json
-{ "dispatch": "task-id or null", "resolutions": [ { "id": "esc-...", "answer": "the distilled standing rule" } ] }
+{ "dispatch": "task-id or null", "resolutions": [ { "id": "esc-...", "answer": "the distilled standing rule" } ], "reclassify": [ { "amount": 292.67, "invoice_number": "INV-00563" } ] }
 \`\`\`
 - "dispatch": set this when Chris asks for work to be run OR when you judge a task is the right next step and Chris agrees. Exactly one of: auto-categorize, books-health, catch-up-plan, bank-reconciliation, categorize-transactions, coa-audit, ar-cleanup, ap-cleanup, ar-collections, cash-outlook, inventory-tieout, sales-tax-review, monthly-close. In your reply, tell Chris you've put Penny on it and that results land in her Report History (and new questions right here) in a minute or two. Dispatch at most one task per message.
 - "resolutions": when Chris's message answers one of the OPEN QUESTIONS above (even informally), include that question's exact id and distill his answer into a clear, reusable rule. Confirm in your reply that you've recorded it as standing policy and won't ask again. Never invent ids — only use ids from the open questions list.
+- "reclassify": when Chris says a categorization Penny already POSTED was actually a payment on an existing invoice (e.g. "that $292.67 was Kenny's invoice INV-00563"), add an entry with the amount and exact invoice number. The system undoes the posting and applies the deposit to that invoice — tell Chris it's being fixed and the confirmation will appear right below your reply. Only for deposits that pay invoices; other corrections still go through normal channels.
 The control block is machine-read and stripped before Chris sees your reply, so never reference it in your prose.`,
 
   // Daily batched escalation email to Chris.

@@ -258,29 +258,44 @@ export interface CfoChatMessage {
   content: string;
 }
 
+export interface ChatReclassify {
+  invoiceNumber: string;
+  amount?: number;
+  transactionId?: string;
+}
+
 export interface CfoChatResult {
   reply: string;
   /** Task Sterling decided to dispatch to Penny (validated), if any. */
   dispatch: string | null;
   /** Escalation answers Sterling extracted from Chris's message. */
   resolutions: Array<{ id: string; answer: string }>;
+  /** Posted categorizations Chris asked to redo as invoice payments. */
+  reclassify: ChatReclassify[];
 }
 
-/** Parse Sterling's trailing control block: { dispatch, resolutions }. */
+/** Parse the agent's trailing control block: { dispatch, resolutions, reclassify }. */
 function parseControlBlock(text: string): {
   reply: string;
   dispatch: string | null;
   resolutions: Array<{ id: string; answer: string }>;
+  reclassify: ChatReclassify[];
 } {
+  const none = { reply: text.trim(), dispatch: null, resolutions: [], reclassify: [] };
   const matches = [...text.matchAll(/```json\s*([\s\S]*?)```/gi)];
-  if (matches.length === 0) return { reply: text.trim(), dispatch: null, resolutions: [] };
+  if (matches.length === 0) return none;
   const last = matches[matches.length - 1];
   try {
     const parsed = JSON.parse(last[1].trim()) as {
       dispatch?: unknown;
       resolutions?: unknown;
+      reclassify?: unknown;
     };
-    if (parsed && typeof parsed === "object" && ("dispatch" in parsed || "resolutions" in parsed)) {
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      ("dispatch" in parsed || "resolutions" in parsed || "reclassify" in parsed)
+    ) {
       const dispatch =
         typeof parsed.dispatch === "string" && DISPATCHABLE_TASKS.has(parsed.dispatch)
           ? parsed.dispatch
@@ -293,14 +308,27 @@ function parseControlBlock(text: string): {
             }))
             .filter((r) => r.id.startsWith("esc-") && r.answer.length > 0)
         : [];
+      const reclassify = Array.isArray(parsed.reclassify)
+        ? parsed.reclassify
+            .map((r) => {
+              const rec = r as Record<string, unknown>;
+              const amount = Number(rec?.amount);
+              return {
+                invoiceNumber: String(rec?.invoice_number ?? "").trim(),
+                amount: Number.isFinite(amount) ? amount : undefined,
+                transactionId: rec?.transaction_id ? String(rec.transaction_id) : undefined,
+              };
+            })
+            .filter((r) => r.invoiceNumber.length > 0 && (r.amount != null || r.transactionId))
+        : [];
       // Strip the machine-read block from what Chris sees.
       const reply = text.replace(last[0], "").trim();
-      return { reply, dispatch, resolutions };
+      return { reply, dispatch, resolutions, reclassify };
     }
   } catch {
     /* not a control block — leave the reply intact */
   }
-  return { reply: text.trim(), dispatch: null, resolutions: [] };
+  return none;
 }
 
 /**
@@ -439,9 +467,11 @@ async function runAgentChat(
     );
     result.reply = result.dispatch
       ? `On it — I've put Penny on "${result.dispatch}". Results will land in her Report History, and any new questions right here, in a minute or two.`
-      : result.resolutions.length > 0
-        ? `Recorded — that's standing policy now, so I won't ask again.`
-        : "Sorry — I didn't get that one out cleanly. Give me a touch more to go on and I'll take another run at it.";
+      : result.reclassify.length > 0
+        ? `On it — fixing that posting now; I'll confirm here when it's applied to the invoice.`
+        : result.resolutions.length > 0
+          ? `Recorded — that's standing policy now, so I won't ask again.`
+          : "Sorry — I didn't get that one out cleanly. Give me a touch more to go on and I'll take another run at it.";
   }
 
   // Persist the exchange (compacts into a running summary when long). The

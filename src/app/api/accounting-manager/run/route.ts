@@ -22,6 +22,7 @@ import {
   type CfoChatMessage,
 } from "@/lib/accounting-loop";
 import { loadCfoChat, clearCfoChat, type ChatAgent } from "@/lib/cfo-chat-store";
+import { reclassifyToInvoice } from "@/lib/accounting-execute";
 import {
   resolveEscalation,
   assignEscalation,
@@ -175,9 +176,21 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // Execute reclassify orders inline (a few Zoho calls) so the reply can
+      // confirm the fix actually happened — "fixed" must never be a guess.
+      let replyText = result.reply;
+      for (const r of result.reclassify) {
+        try {
+          const summary = await reclassifyToInvoice(r);
+          replyText += `\n\n✅ ${summary}`;
+        } catch (err) {
+          replyText += `\n\n⚠️ Couldn't complete the reclassify (${r.invoiceNumber}${r.amount != null ? `, $${r.amount.toFixed(2)}` : ""}): ${err instanceof Error ? err.message : String(err)}`;
+        }
+      }
+
       return NextResponse.json({
         ok: true,
-        reply: result.reply,
+        reply: replyText,
         dispatched: result.dispatch,
         recordedPolicies: recorded,
         open: await getOpenEscalations(),
