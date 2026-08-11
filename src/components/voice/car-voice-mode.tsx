@@ -33,6 +33,48 @@ import { SpeechQueue, createSentenceChunker } from "@/lib/voice/speech-queue";
 import { playAgentSpeech, type SpeechHandle } from "@/lib/voice/tts-playback";
 import { streamVoiceReply } from "@/lib/voice/voice-client";
 
+/**
+ * Execute the ```assign / ```dispatch blocks a boss ended their spoken reply
+ * with. Best-effort and silent on failure: the spoken turn is already over, and
+ * the work order (or dispatch) surfaces on /work and /review either way.
+ */
+async function runControlBlocks(reply: string): Promise<void> {
+  const re = /```(assign|dispatch)\s*([\s\S]*?)```/g;
+  for (let m = re.exec(reply); m; m = re.exec(reply)) {
+    let spec: Record<string, string>;
+    try {
+      spec = JSON.parse(m[2].trim()) as Record<string, string>;
+    } catch {
+      continue; // malformed block — nothing safe to do with it
+    }
+    try {
+      if (m[1] === "assign" && spec.assignee && spec.title && spec.brief) {
+        await fetch("/api/org/work-orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            assigneeId: spec.assignee,
+            title: spec.title,
+            brief: spec.brief,
+            run: true,
+          }),
+        });
+      } else if (m[1] === "dispatch" && spec.department) {
+        await fetch(
+          `/api/org/departments/${encodeURIComponent(spec.department)}/dispatch`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ direction: spec.direction ?? "", run: true }),
+          }
+        );
+      }
+    } catch {
+      // Network error — the founder will see it missing from /work.
+    }
+  }
+}
+
 type Phase = "listening" | "thinking" | "speaking" | "paused" | "error";
 
 export interface VoiceAgent {
@@ -205,6 +247,12 @@ export default function CarVoiceMode({
         }
         setLastReply(full);
         chunker.flush();
+        // Act on any control blocks the reply ended with. Hands-free, there's
+        // no card to click — and an agent who says "I've given that to Nova"
+        // and quietly does nothing is worse than one who says he can't. The
+        // work order still lands in the founders' review queue, so this
+        // proposes work rather than shipping it.
+        void runControlBlocks(full);
         queue.end();
         await queue.drained();
       } catch (err) {

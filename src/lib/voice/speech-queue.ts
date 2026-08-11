@@ -39,7 +39,25 @@ export function createSentenceChunker(onSentence: (sentence: string) => void) {
    */
   const MIN_CHARS = 140;
 
+  /**
+   * True while we're inside an unclosed ``` fence. Control blocks (```assign,
+   * ```dispatch) are stripped for the ear as whole blocks, so a chunk boundary
+   * landing in the middle of one would leave half a JSON object in a clip and
+   * read it out literally. Nothing is emitted until the fence closes.
+   */
+  let inFence = false;
+
+  /** Move text from `buf` into `ready`, tracking fence state as it goes. */
+  const consume = (n: number) => {
+    const taken = buf.slice(0, n);
+    buf = buf.slice(n);
+    ready += taken;
+    const fences = taken.split("```").length - 1;
+    if (fences % 2 === 1) inFence = !inFence;
+  };
+
   const emit = () => {
+    if (inFence) return;
     const out = ready.trim();
     ready = "";
     if (out) {
@@ -52,20 +70,19 @@ export function createSentenceChunker(onSentence: (sentence: string) => void) {
     for (;;) {
       const m = BOUNDARY.exec(buf);
       if (!m) break;
-      const end = m.index + m[0].length;
-      ready += buf.slice(0, end);
-      buf = buf.slice(end);
+      consume(m.index + m[0].length);
       // The first chunk goes the moment it's ready — that's what makes the
       // agent start talking a second after you stop. Everything after it is
       // batched, because by then we're buying smoothness, not a fast start.
       if (emitted === 0 || ready.trim().length >= MIN_CHARS) emit();
     }
     // Safety valve: don't sit on a very long clause waiting for punctuation.
-    if (buf.length > 220) {
+    // Suspended inside a fence — a block has no sentence breaks and must stay
+    // whole.
+    if (!inFence && buf.length > 220) {
       const cut = buf.lastIndexOf(" ", 200);
       if (cut > 40) {
-        ready += buf.slice(0, cut);
-        buf = buf.slice(cut);
+        consume(cut);
         emit();
       }
     }
@@ -79,6 +96,8 @@ export function createSentenceChunker(onSentence: (sentence: string) => void) {
     flush() {
       ready += buf;
       buf = "";
+      // End of stream: whatever fence state we're in, this is the last of it.
+      inFence = false;
       emit();
     },
   };
