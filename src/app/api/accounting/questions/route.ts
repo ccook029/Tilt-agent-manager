@@ -16,7 +16,7 @@ import { executeProposedAction, sweepAnsweredQuestions } from "@/lib/accounting-
 import { getCurrentStaff } from "@/lib/os-identity";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET() {
   return NextResponse.json({ open: await getOpenEscalations() });
@@ -35,8 +35,15 @@ export async function POST(request: NextRequest) {
   // already been decided — the fix for questions piling up after the answer
   // was already given.
   if (action === "sweep") {
-    const result = await sweepAnsweredQuestions();
-    return NextResponse.json({ ok: true, ...result, open: await getOpenEscalations() });
+    try {
+      const result = await sweepAnsweredQuestions();
+      return NextResponse.json({ ok: true, ...result, open: await getOpenEscalations() });
+    } catch (err) {
+      // Never 500 silently — the desk shows whatever went wrong verbatim.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[api] questions sweep failed:", msg);
+      return NextResponse.json({ error: `Sweep failed: ${msg}` }, { status: 500 });
+    }
   }
 
   if (!escalationId) {

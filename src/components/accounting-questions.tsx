@@ -79,17 +79,26 @@ export default function AccountingQuestions({
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setSweepNote(d.error ?? "Couldn't run the check.");
+        setSweepNote(
+          d.error ??
+            `The check failed (HTTP ${res.status}) — nothing was closed. Try again; if it keeps failing, that's a bug worth flagging.`
+        );
         return;
       }
       setQuestions(d.open ?? []);
-      setSweepNote(
+      // Report partial progress honestly: some batches can close while others fail.
+      const parts: string[] = [];
+      parts.push(
         d.closed > 0
           ? `Closed ${d.closed} question${d.closed === 1 ? "" : "s"} already covered by your standing policies — ${d.remaining} still need you.`
-          : "Nothing to close — every open question still needs a real decision."
+          : "Nothing to close — every open question still needs a real decision from you."
       );
+      if (Array.isArray(d.errors) && d.errors.length > 0) {
+        parts.push(`⚠️ ${d.errors.join(" · ")}`);
+      }
+      setSweepNote(parts.join(" "));
     } catch {
-      setSweepNote("Network error — try again.");
+      setSweepNote("Network error — nothing was closed. Try again.");
     } finally {
       setBusy(null);
     }
@@ -179,7 +188,15 @@ export default function AccountingQuestions({
         </div>
       </div>
 
-      {sweepNote && <p className="mb-2 text-xs text-emerald-400/90">{sweepNote}</p>}
+      {sweepNote && (
+        <p
+          className={`mb-2 text-xs ${
+            /fail|error|⚠️/i.test(sweepNote) ? "text-amber-400/90" : "text-emerald-400/90"
+          }`}
+        >
+          {sweepNote}
+        </p>
+      )}
 
       {doneList.length > 0 && (
         <ul className="mb-3 space-y-1">
