@@ -38,7 +38,12 @@ import {
   type BooksAccount,
   type ZohoTax,
 } from "./zoho-books";
-import { renderPolicyBlock, addEscalations, type Escalation } from "./policy-ledger";
+import {
+  renderPolicyBlock,
+  addEscalations,
+  type Escalation,
+  type EscalationContext,
+} from "./policy-ledger";
 import { getActions, logActions, makeAction, markActionReversed } from "./action-log";
 import { recordProgress } from "./progress";
 import { WORKER_EXPERTISE } from "./accounting-knowledge";
@@ -363,6 +368,7 @@ export async function runCategorizationBatch(opts?: {
     reason: string;
     recommendation?: string;
     dollarAmount?: number;
+    context?: EscalationContext;
   }> = [];
   // Amount+direction pairs written earlier in THIS batch (feed-duplicate guard).
   const writtenThisBatch = new Set<string>();
@@ -477,8 +483,16 @@ export async function runCategorizationBatch(opts?: {
         guardQuestions.push({
           question: `The $${amt.toFixed(2)} deposit on ${txn.date} (${who}) matches open invoice ${invHit.invoice_number} for ${invHit.customer_name} — is it the payment on that invoice (payer may differ from the customer), or a separate new sale?`,
           reason: `Posting it as new income would double-count revenue if ${invHit.invoice_number} covers it`,
-          recommendation: `Apply it to ${invHit.invoice_number} — if you confirm, Penny will apply it next batch`,
+          recommendation: `Apply it to ${invHit.invoice_number}`,
           dollarAmount: amt,
+          context: {
+            transactionId: txnId,
+            amount: amt,
+            date: txn.date,
+            payee: who,
+            proposedAction: { type: "apply_to_invoice", invoiceNumber: invHit.invoice_number },
+            affirmativeLabel: `Yes — apply to ${invHit.invoice_number}`,
+          },
         });
         continue;
       }
@@ -524,6 +538,7 @@ export async function runCategorizationBatch(opts?: {
           reason: "Posting it as new income would double-count if it's a payment that was already recorded",
           recommendation: "Match it to the right recorded transaction in Zoho Banking; if it's truly new income, say so and Penny posts it next batch",
           dollarAmount: amt,
+          context: { transactionId: txnId, amount: amt, date: txn.date, payee: who },
         });
         continue;
       }
@@ -541,8 +556,21 @@ export async function runCategorizationBatch(opts?: {
       guardQuestions.push({
         question: `Two bank lines in the same batch are each $${amt.toFixed(2)} ${direction === "in" ? "in" : "out"} (latest: ${txn.date}, ${who}) — are they separate real charges, or did the bank feed import the same one twice?`,
         reason: "Identical amounts in one batch can be a duplicated feed line — posting both would double-count",
-        recommendation: "If it's a duplicate, exclude the extra line in Zoho Banking; if both are real, say so and Penny will post it next batch",
+        recommendation: `If both are real, post it to ${account.account_name}`,
         dollarAmount: amt,
+        context: {
+          transactionId: txnId,
+          amount: amt,
+          date: txn.date,
+          payee: who,
+          proposedAction: {
+            type: "post",
+            account: account.account_name,
+            direction,
+            tax: tax?.tax_name,
+          },
+          affirmativeLabel: `Both are real — post to ${account.account_name}`,
+        },
       });
       continue;
     }
@@ -562,8 +590,21 @@ export async function runCategorizationBatch(opts?: {
       guardQuestions.push({
         question: `A $${amt.toFixed(2)} line (${txn.date}, ${who}) is headed to ${account.account_name}, but an identical amount was posted there on ${histHit.timestamp.slice(0, 10)} ("${histHit.summary.slice(0, 80)}") — is this a separate real charge?`,
         reason: "Same amount to the same account within two weeks can be a duplicate bank line",
-        recommendation: "If both are real (e.g. repeat fuel e-Transfers), confirm and Penny will post it next batch; if it's a duplicate, exclude it in Zoho Banking",
+        recommendation: `If it's a separate real charge, post it to ${account.account_name}`,
         dollarAmount: amt,
+        context: {
+          transactionId: txnId,
+          amount: amt,
+          date: txn.date,
+          payee: who,
+          proposedAction: {
+            type: "post",
+            account: account.account_name,
+            direction,
+            tax: tax?.tax_name,
+          },
+          affirmativeLabel: `It's separate — post to ${account.account_name}`,
+        },
       });
       continue;
     }
@@ -752,12 +793,24 @@ export async function runCategorizationBatch(opts?: {
   // ---- Route the unknowns + guard holds to the CFO chat / digest -----------
   const newEscalations = await addEscalations([
     ...escalatedRaw
-      .map((e) => ({
-        question: String(e.question ?? "").trim(),
-        reason: `Uncategorized transaction ${e.transaction_id ?? ""} ($${e.amount ?? "?"}) — Penny needs to know how to treat it`,
-        recommendation: e.recommendation ? String(e.recommendation) : undefined,
-        dollarAmount: typeof e.amount === "number" ? e.amount : undefined,
-      }))
+      .map((e) => {
+        const eTxnId = e.transaction_id ? String(e.transaction_id) : undefined;
+        const eTxn = eTxnId ? txnById.get(eTxnId) : undefined;
+        return {
+          question: String(e.question ?? "").trim(),
+          reason: `Uncategorized transaction ${eTxnId ?? ""} ($${e.amount ?? "?"}) — Penny needs to know how to treat it`,
+          recommendation: e.recommendation ? String(e.recommendation) : undefined,
+          dollarAmount: typeof e.amount === "number" ? e.amount : undefined,
+          context: eTxnId
+            ? {
+                transactionId: eTxnId,
+                amount: typeof e.amount === "number" ? e.amount : eTxn?.amount,
+                date: eTxn?.date,
+                payee: eTxn?.payee ?? matchByTxnId.get(eTxnId)?.name ?? undefined,
+              }
+            : undefined,
+        };
+      })
       .filter((e) => e.question.length > 0),
     ...guardQuestions,
   ]);
@@ -897,6 +950,179 @@ export async function reclassifyToInvoice(opts: {
       summary,
       before: { undone: original.summary },
       after: { invoice: invoiceNumber, amount: amt },
+      batchId: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+      index: 0,
+    }),
+  ]);
+  return summary;
+}
+
+// ---------------------------------------------------------------------------
+// Act on an answered question: perform the action a held line was waiting on.
+// This is what makes "Yes — post it" on Penny's desk do the actual work,
+// instead of only recording a policy the next run has to re-derive.
+// ---------------------------------------------------------------------------
+export async function executeProposedAction(
+  ctx: EscalationContext
+): Promise<string> {
+  const action = ctx.proposedAction;
+  const txnId = ctx.transactionId;
+  if (!action || !txnId) throw new Error("this question has no action to run");
+
+  if (action.type === "apply_to_invoice") {
+    // Reuse the full repair path: it handles open invoices (apply) AND
+    // already-paid ones (match to the recorded payment).
+    return applyHeldToInvoice(txnId, action.invoiceNumber);
+  }
+
+  // Re-fetch the line: it must still be uncategorized to act on.
+  const { items } = await fetchUncategorizedBankTxns(200);
+  const txn = items.find((t) => String(t.transaction_id) === txnId);
+  if (!txn) {
+    throw new Error(
+      "that bank line is no longer uncategorized — it looks like it was already handled in Zoho"
+    );
+  }
+  if (!txn.account_id) throw new Error("the feed line has no bank account id");
+  const amt = txn.amount ?? 0;
+
+  if (action.type === "match") {
+    const candidates = await fetchMatchCandidates(txnId).catch(() => []);
+    const sameAmount = candidates.filter(
+      (c) => c.amount == null || Math.abs((c.amount ?? 0) - amt) < 0.005
+    );
+    if (sameAmount.length !== 1) {
+      throw new Error(
+        `Zoho offered ${sameAmount.length} same-amount candidates — match this one by hand in Zoho Banking`
+      );
+    }
+    await matchTxn(txnId, sameAmount);
+    const summary = `Matched $${amt.toFixed(2)} to the already-recorded ${sameAmount[0].transaction_type.replace(/_/g, " ")} — reconciled, nothing double-posted`;
+    await logActions([
+      makeAction({
+        type: "categorize-transaction",
+        mode: "executed",
+        targetId: txnId,
+        summary,
+        after: { account: "matched", amount: amt },
+        batchId: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+        index: 0,
+      }),
+    ]);
+    return summary;
+  }
+
+  // action.type === "post" — write the categorization Penny had staged.
+  const accounts = await fetchChartOfAccounts();
+  const account = accounts.find(
+    (a) => a.account_name.trim().toLowerCase() === action.account.trim().toLowerCase()
+  );
+  if (!account) throw new Error(`account "${action.account}" not found in the Chart of Accounts`);
+  let tax: ZohoTax | undefined;
+  if (action.tax) {
+    const taxes = await fetchTaxes().catch(() => [] as ZohoTax[]);
+    tax = taxes.find(
+      (t) => t.tax_name.trim().toLowerCase() === action.tax!.trim().toLowerCase()
+    );
+  }
+
+  if (action.direction === "in") {
+    await categorizeTxnAsDeposit(txnId, {
+      from_account_id: account.account_id,
+      to_account_id: txn.account_id,
+      date: txn.date,
+      amount: amt,
+      description: txn.description,
+      ...(tax
+        ? {
+            transaction_type: "sales_without_invoices" as const,
+            tax_id: tax.tax_id,
+            is_inclusive_tax: true,
+          }
+        : {}),
+    });
+  } else {
+    await categorizeTxnAsExpense(txnId, {
+      account_id: account.account_id,
+      paid_through_account_id: txn.account_id,
+      date: txn.date,
+      amount: amt,
+      description: txn.description,
+      ...(tax ? { tax_id: tax.tax_id, is_inclusive_tax: true } : {}),
+    });
+  }
+
+  const summary = `Posted $${amt.toFixed(2)} ${action.direction === "in" ? "in" : "out"} → ${account.account_name}${tax ? ` (${tax.tax_name} inclusive)` : ""} — you confirmed it`;
+  await logActions([
+    makeAction({
+      type: "categorize-transaction",
+      mode: "executed",
+      targetId: txnId,
+      summary,
+      before: { status: "held pending your answer" },
+      after: { account: account.account_name, amount: amt },
+      batchId: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+      index: 0,
+    }),
+  ]);
+  return summary;
+}
+
+/** Apply/match a still-uncategorized line to an invoice (no prior posting to undo). */
+async function applyHeldToInvoice(txnId: string, invoiceNumber: string): Promise<string> {
+  const invoice = await fetchInvoiceByNumber(invoiceNumber);
+  if (!invoice) throw new Error(`invoice ${invoiceNumber} not found in Zoho Books`);
+  if (!invoice.customer_id) throw new Error(`invoice ${invoiceNumber} has no customer id`);
+  const { items } = await fetchUncategorizedBankTxns(200);
+  const txn = items.find((t) => String(t.transaction_id) === txnId);
+  if (!txn || !txn.account_id) {
+    throw new Error("that bank line is no longer uncategorized — it looks like it was already handled");
+  }
+  const amt = txn.amount ?? 0;
+
+  if (amt > invoice.balance + 0.01) {
+    // Already paid → reconcile by matching the recorded payment.
+    const candidates = await fetchMatchCandidates(txnId).catch(() => []);
+    const sameAmount = candidates.filter(
+      (c) => c.amount == null || Math.abs((c.amount ?? 0) - amt) < 0.005
+    );
+    if (sameAmount.length !== 1) {
+      throw new Error(
+        `${invoiceNumber} is already paid (balance $${invoice.balance.toFixed(2)}) and Zoho offered ${sameAmount.length} match candidates — match it by hand in Zoho Banking`
+      );
+    }
+    await matchTxn(txnId, sameAmount);
+    const summary = `Matched $${amt.toFixed(2)} to the payment already recorded on ${invoiceNumber} (${invoice.customer_name}) — reconciled, revenue counted once`;
+    await logActions([
+      makeAction({
+        type: "categorize-transaction",
+        mode: "executed",
+        targetId: txnId,
+        summary,
+        after: { account: `matched — ${invoiceNumber}`, amount: amt },
+        batchId: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+        index: 0,
+      }),
+    ]);
+    return summary;
+  }
+
+  await categorizeTxnAsCustomerPayment(txnId, {
+    customer_id: invoice.customer_id,
+    invoice_id: invoice.invoice_id,
+    amount: amt,
+    date: txn.date,
+    account_id: txn.account_id,
+    description: txn.description,
+  });
+  const summary = `Applied $${amt.toFixed(2)} to ${invoiceNumber} (${invoice.customer_name}) — A/R cleared, revenue counted once`;
+  await logActions([
+    makeAction({
+      type: "categorize-transaction",
+      mode: "executed",
+      targetId: txnId,
+      summary,
+      after: { account: `A/R — ${invoiceNumber}`, amount: amt },
       batchId: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
       index: 0,
     }),
