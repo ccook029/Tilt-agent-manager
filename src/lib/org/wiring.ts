@@ -36,6 +36,7 @@ import { VENDORS } from "./vendors";
 import { getRunLogsByAgent } from "../store";
 import { getEmployeeById } from "./directory";
 import { fetchUncategorizedBankTxns } from "../zoho-books";
+import { TRANSFER_REGISTER } from "../etransfer-register";
 
 export interface WiringFeed {
   id: string;
@@ -229,6 +230,21 @@ const uncategorizedFeed = (): WiringFeed => ({
   },
 });
 
+const transferRegisterFeed = (): WiringFeed => ({
+  id: "etransfer-register",
+  label: "e-Transfer register (payer names + memos)",
+  description:
+    "The bank's own transfer history — who sent/received each e-Transfer and their memo, which the bank feed strips off.",
+  kind: "data",
+  check: async () => {
+    const n = TRANSFER_REGISTER.length;
+    if (n === 0) throw new Error("register is empty");
+    const newest = TRANSFER_REGISTER[0]?.date ?? "?";
+    const oldest = TRANSFER_REGISTER[n - 1]?.date ?? "?";
+    return `${n} transfers on file · ${oldest} → ${newest}`;
+  },
+});
+
 const companySnapshotFeed = (): WiringFeed => ({
   id: "company-snapshot",
   label: "Whole-company snapshot",
@@ -373,7 +389,13 @@ const WIRING: Record<string, EmployeeWiring> = {
     ],
   },
   accounting: {
-    feeds: [booksFeed(), uncategorizedFeed(), salesFeed(), policyLedgerFeed()],
+    feeds: [
+      booksFeed(),
+      uncategorizedFeed(),
+      transferRegisterFeed(),
+      salesFeed(),
+      policyLedgerFeed(),
+    ],
     produces: [
       "Bookkeeping runs (categorization, reconciliation, cleanups) → Report History",
       "Guardrailed auto-categorization writes in Zoho Books (weekday cron)",

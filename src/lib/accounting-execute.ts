@@ -50,6 +50,7 @@ import {
 import { getActions, logActions, makeAction, markActionReversed } from "./action-log";
 import { recordProgress } from "./progress";
 import { WORKER_EXPERTISE } from "./accounting-knowledge";
+import { findTransfer, renderRecurringPatterns } from "./etransfer-register";
 import {
   isInboxConfigured,
   fetchInteracNotifications,
@@ -261,11 +262,17 @@ export async function runCategorizationBatch(opts?: {
     return hits.length === 1 ? hits[0] : null;
   };
 
-  /** Best-evidence direction: a unique email match trumps the feed's flag. */
+  /**
+   * Best-evidence direction. The bank's own transfer register wins (it states
+   * which way the money moved), then a unique Interac email, then the feed's
+   * own flag — which is inverted on some Interac lines.
+   */
   const effectiveDirection = (
     t: BooksBankTxn,
     match: InteracNotification | null
   ): "in" | "out" | "unknown" => {
+    const reg = findTransfer(t.amount ?? 0, t.date);
+    if (reg) return reg.direction;
     if (match?.direction === "received") return "in";
     if (match?.direction === "sent") return "out";
     return txnDirection(t);
@@ -282,12 +289,16 @@ export async function runCategorizationBatch(opts?: {
       const counterparty = match
         ? `${match.direction === "sent" ? "to" : "from"} "${match.name ?? "?"}"`
         : "";
+      const reg = findTransfer(t.amount ?? 0, t.date);
+      const regNote = reg
+        ? ` | REGISTER (authoritative): ${reg.direction === "in" ? "from" : "to"} "${reg.counterparty}"${reg.memo ? ` — memo: "${reg.memo}"` : " — no memo"}`
+        : "";
       const matchNote = match
         ? ` | EMAIL MATCH (direction confirmed): ${counterparty}${match.message ? ` — message: "${match.message}"` : ""}`
         : "";
       const dirLabel =
         dir === "in" ? "MONEY IN" : dir === "out" ? "MONEY OUT" : "DIRECTION UNKNOWN — do not categorize; escalate";
-      return `- id=${t.transaction_id} | ${t.date} | $${(t.amount ?? 0).toFixed(2)} | ${dirLabel} | ${t.payee ?? "—"} | ${(t.description ?? "").slice(0, 80)} | bank=${t.account_name ?? "?"}${matchNote}`;
+      return `- id=${t.transaction_id} | ${t.date} | $${(t.amount ?? 0).toFixed(2)} | ${dirLabel} | ${t.payee ?? "—"} | ${(t.description ?? "").slice(0, 80)} | bank=${t.account_name ?? "?"}${regNote}${matchNote}`;
     })
     .join("\n");
 
@@ -313,6 +324,9 @@ export async function runCategorizationBatch(opts?: {
     "",
     ...(interac.length > 0 ? [renderInteracBlock(interac), ""] : []),
     `## Uncategorized Transactions to process (${uncategorized.items.length} of ~${uncategorized.total} total)`,
+    renderRecurringPatterns(),
+    "",
+    "Lines marked REGISTER were matched to the bank's own e-Transfer register by amount + date. That entry is AUTHORITATIVE for both the counterparty and the money direction — trust it over the MONEY IN/OUT label if they disagree, and treat its memo as the payer's own description of what the money was for (it is usually the whole answer: a named stick sale, a fuel reimbursement, an insurance payment). Do not escalate asking who someone is when the register already names them.",
     "Lines marked EMAIL MATCH were deterministically matched to an Interac e-Transfer notification by amount + date + direction. Treat the matched name as the payee/payer, and treat the matched message memo (e.g. \"Jer fuel\", \"stick payment\") as a STRONG hint for the category — it's the counterparty's own description of what the money was for. If a memo makes the category obvious, use it and don't escalate.",
     txnBlock,
   ].join("\n");
@@ -426,7 +440,8 @@ export async function runCategorizationBatch(opts?: {
     } else if (
       (pennyDirection === "in" || pennyDirection === "out") &&
       pennyDirection !== direction &&
-      !match
+      !match &&
+      !findTransfer(txn.amount ?? 0, txn.date)
     ) {
       // Penny disagrees with the feed's flag and there's no email evidence to
       // break the tie — don't post either version, surface it.
