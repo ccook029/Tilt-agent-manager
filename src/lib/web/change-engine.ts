@@ -17,12 +17,23 @@ import {
   websiteRepo,
   websiteRepoConfigured,
 } from "./github";
+import { classifyChange } from "./policy";
 
 export interface WebChangeResult {
   ok: boolean;
   prUrl?: string;
+  prNumber?: number;
   summary?: string;
   error?: string;
+  /**
+   * Whether this change is one Nova may ship herself once CI is green (content
+   * and merchandising), or one that waits for Chris. Decided by ./policy.ts and
+   * re-checked server-side at merge time against the PR's real file list — this
+   * flag is for the UI, never the authority.
+   */
+  autoMergeable?: boolean;
+  /** When it isn't auto-mergeable, why — shown on the card. */
+  holdReason?: string;
 }
 
 const EDIT_SYSTEM = `You are a senior web engineer editing the Tilt Hockey storefront (a Next.js/TypeScript app). Make the SMALLEST correct change that satisfies the request, expressed as exact find/replace operations on the given file. Rules: each "find" must be a VERBATIM, UNIQUE substring copied from the file (include enough surrounding text to be unique); never reformat or touch unrelated code; preserve types and syntax. If the change doesn't belong in this file or can't be done safely, return no edits and say why.`;
@@ -127,12 +138,24 @@ export async function executeWebChange(input: {
     const branch = `nova/${slug(input.title)}-${Date.now().toString(36)}`;
     await createBranch(branch, baseSha);
     await commitFile(path, next, `Nova: ${input.title}`, branch, sha);
-    const prUrl = await openPr(
+    const verdict = classifyChange([path]);
+    const pr = await openPr(
       input.title,
       branch,
-      `${parsed?.summary ?? input.request}\n\n---\nRequested via the Website Manager (Nova) in Tilt HQ:\n\n> ${input.request}\n\nFile: \`${path}\` in \`${websiteRepo()}\`. Review and merge to ship.`
+      `${parsed?.summary ?? input.request}\n\n---\nRequested via the Website Manager (Nova) in Tilt HQ:\n\n> ${input.request}\n\nFile: \`${path}\` in \`${websiteRepo()}\`.\n\n${
+        verdict.autoMergeable
+          ? "Content/merchandising change — Nova merges this herself once CI is green."
+          : `Held for review — ${verdict.reason}.`
+      }`
     );
-    return { ok: true, prUrl, summary: parsed?.summary };
+    return {
+      ok: true,
+      prUrl: pr.url,
+      prNumber: pr.number,
+      summary: parsed?.summary,
+      autoMergeable: verdict.autoMergeable,
+      holdReason: verdict.autoMergeable ? undefined : verdict.reason,
+    };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

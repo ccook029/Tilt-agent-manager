@@ -309,9 +309,64 @@ function DispatchCard({ spec }: { spec: DispatchSpec }) {
 }
 
 function WebChangeCard({ spec }: { spec: WebChangeSpec }) {
-  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [state, setState] = useState<
+    "idle" | "busy" | "done" | "shipping" | "shipped" | "error"
+  >("idle");
   const [prUrl, setPrUrl] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // Set when the change is content/merchandising and Nova may ship it herself.
+  const [shipPr, setShipPr] = useState<number | null>(null);
+
+  // Poll the merge endpoint while CI runs. That endpoint re-derives the policy
+  // from the PR's real files every time, so this loop can only ever ship what
+  // the server independently agrees is shippable.
+  useEffect(() => {
+    if (state !== "shipping" || shipPr === null) return;
+    let cancelled = false;
+    // ~5 minutes at 8s — a storefront build lands well inside that.
+    let attemptsLeft = 38;
+
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch("/api/web/merge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prNumber: shipPr, title: spec.title }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (cancelled) return;
+
+        if (d.status === "merged") {
+          setState("shipped");
+          setNote("Live on tilthockey.com.");
+          return;
+        }
+        if (d.status === "pending" && attemptsLeft-- > 0) {
+          setNote(d.reason ?? "Waiting for the build…");
+          setTimeout(tick, 8000);
+          return;
+        }
+        // blocked / failed / out of attempts — stop and say why. The PR stays
+        // open, so nothing is lost; it just needs a human.
+        setState("done");
+        setNote(
+          d.reason ??
+            (attemptsLeft <= 0
+              ? "The build is taking a while — the PR is open for you to merge."
+              : "Held for review.")
+        );
+      } catch {
+        if (cancelled) return;
+        setState("done");
+        setNote("Couldn't reach the merge check — the PR is open for you.");
+      }
+    };
+    void tick();
+    return () => {
+      cancelled = true;
+    };
+  }, [state, shipPr, spec.title]);
 
   const run = async () => {
     setState("busy");
@@ -324,9 +379,15 @@ function WebChangeCard({ spec }: { spec: WebChangeSpec }) {
       });
       const d = await res.json().catch(() => ({}));
       if (res.ok && d.ok) {
-        setState("done");
         setPrUrl(d.prUrl ?? null);
-        setNote(d.summary ?? null);
+        if (d.autoMergeable && d.prNumber) {
+          setShipPr(d.prNumber);
+          setState("shipping");
+          setNote("Waiting for the build…");
+        } else {
+          setState("done");
+          setNote(d.holdReason ? `Held for review — ${d.holdReason}.` : d.summary ?? null);
+        }
       } else {
         setState("error");
         setNote(d.error ?? "Couldn't open the PR.");
@@ -345,20 +406,54 @@ function WebChangeCard({ spec }: { spec: WebChangeSpec }) {
       <p className="mt-1 text-sm font-medium text-gray-100">{spec.title}</p>
       <p className="mt-0.5 text-[11px] text-gray-500">{spec.path}</p>
       <p className="mt-1 text-xs leading-relaxed text-gray-400">{spec.request}</p>
-      <div className="mt-2.5 flex items-center gap-2">
-        {state === "done" ? (
-          prUrl ? (
-            <a
-              href={prUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs font-semibold text-emerald-400 hover:underline"
-            >
-              ✓ PR opened — review &amp; merge to ship →
-            </a>
-          ) : (
-            <span className="text-xs text-emerald-400">✓ {note ?? "Done."}</span>
-          )
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        {state === "shipped" ? (
+          <span className="text-xs font-semibold text-emerald-400">
+            ✓ Shipped — {note}
+            {prUrl && (
+              <a
+                href={prUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="ml-1.5 font-normal text-gray-400 hover:underline"
+              >
+                (PR)
+              </a>
+            )}
+          </span>
+        ) : state === "shipping" ? (
+          <span className="text-xs text-amber-300">
+            <span className="mr-1.5 inline-block animate-pulse">●</span>
+            {note ?? "Waiting for the build…"}
+            {prUrl && (
+              <a
+                href={prUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="ml-1.5 text-gray-400 hover:underline"
+              >
+                (PR)
+              </a>
+            )}
+          </span>
+        ) : state === "done" ? (
+          <span className="text-xs text-gray-300">
+            {prUrl ? (
+              <a
+                href={prUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-emerald-400 hover:underline"
+              >
+                ✓ PR opened — review &amp; merge to ship →
+              </a>
+            ) : (
+              <span className="text-emerald-400">✓ {note ?? "Done."}</span>
+            )}
+            {prUrl && note && (
+              <span className="ml-1.5 text-gray-500">{note}</span>
+            )}
+          </span>
         ) : (
           <>
             <button
