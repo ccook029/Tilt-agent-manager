@@ -77,6 +77,43 @@ export function classifyPath(path: string): PathVerdict {
   };
 }
 
+/**
+ * Does this diff touch money?
+ *
+ * Nova may edit the catalogue's words but not its numbers. Prices in
+ * products.ts take three shapes — `price: 135.0`, `comparePrice: 199`, and
+ * `priceModifiers`, a NESTED map whose inner lines (`"70\"": 10`) don't contain
+ * the word "price" at all — so keyword matching alone would wave the nested
+ * ones straight through.
+ *
+ * The rule is therefore structural and deliberately blunt: in a catalogue file,
+ * a changed line may not mention price, and may not add or remove a bare
+ * numeric value. Copy, names, badges, colour names, image paths and true/false
+ * flags are all strings or booleans, so they pass; anything numeric stops.
+ *
+ * It over-blocks a little — a genuine "6 colorways" copy edit lands on Chris —
+ * and that's the right direction to be wrong in. A held PR costs one click; a
+ * wrong price is a real transaction at the wrong number.
+ */
+export function touchesMoney(patch: string): boolean {
+  for (const line of patch.split("\n")) {
+    // Only added/removed lines; context lines and hunk headers are unchanged.
+    if (!/^[+-]/.test(line) || /^(\+\+\+|---)/.test(line)) continue;
+    const body = line.slice(1);
+
+    if (/price/i.test(body)) return true;
+    // key: 135.0   |   "70\"": 10   |   a bare 24.99 in an array
+    if (/:\s*-?\d+(\.\d+)?\s*,?\s*$/.test(body)) return true;
+    if (/^\s*-?\d+(\.\d+)?\s*,?\s*$/.test(body)) return true;
+  }
+  return false;
+}
+
+/** Catalogue files where the money rule applies. */
+function isCatalogueFile(path: string): boolean {
+  return /^src\/data\/.+\.ts$/.test(path);
+}
+
 export interface ChangeVerdict {
   autoMergeable: boolean;
   /** Every file the PR touches, each with its own verdict. */
@@ -105,4 +142,41 @@ export function classifyChange(paths: string[]): ChangeVerdict {
       blocked.length > 1 ? ` (and ${blocked.length - 1} more)` : ""
     }`,
   };
+}
+
+/**
+ * The full verdict, over paths AND diffs. This is what the merge endpoint uses:
+ * a path can be allowed while its diff still moves a price, and only the diff
+ * can tell you that.
+ *
+ * A file with no patch (binary, or too large for GitHub to inline) is treated
+ * as unreadable rather than harmless — an image is fine, but an unreadable
+ * catalogue file is held.
+ */
+export function classifyPr(
+  prFiles: { filename: string; patch?: string }[]
+): ChangeVerdict {
+  const byPath = classifyChange(prFiles.map((f) => f.filename));
+  if (!byPath.autoMergeable) return byPath;
+
+  for (const file of prFiles) {
+    const path = file.filename.replace(/^\/+/, "");
+    if (!isCatalogueFile(path)) continue;
+
+    if (!file.patch) {
+      return {
+        autoMergeable: false,
+        files: byPath.files,
+        reason: `${path}'s diff couldn't be read, so it wasn't cleared for auto-merge`,
+      };
+    }
+    if (touchesMoney(file.patch)) {
+      return {
+        autoMergeable: false,
+        files: byPath.files,
+        reason: `${path} changes a price or another number — prices always need a founder`,
+      };
+    }
+  }
+  return { autoMergeable: true, files: byPath.files };
 }

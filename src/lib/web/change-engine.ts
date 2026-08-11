@@ -17,7 +17,7 @@ import {
   websiteRepo,
   websiteRepoConfigured,
 } from "./github";
-import { classifyChange } from "./policy";
+import { classifyPr } from "./policy";
 
 export interface WebChangeResult {
   ok: boolean;
@@ -138,7 +138,24 @@ export async function executeWebChange(input: {
     const branch = `nova/${slug(input.title)}-${Date.now().toString(36)}`;
     await createBranch(branch, baseSha);
     await commitFile(path, next, `Nova: ${input.title}`, branch, sha);
-    const verdict = classifyChange([path]);
+    // Predict the merge verdict from the edits we just applied, so the card
+    // doesn't promise "this'll go live" and then get held at the gate. Shaped
+    // as a patch (find = removed lines, replace = added) so the same money rule
+    // runs here as at merge time. The merge endpoint re-checks against the real
+    // diff regardless — this is the honest hint, not the decision.
+    const pseudoPatch = edits
+      .map(
+        (e) =>
+          `${String(e.find ?? "")
+            .split("\n")
+            .map((l) => `-${l}`)
+            .join("\n")}\n${String(e.replace ?? "")
+            .split("\n")
+            .map((l) => `+${l}`)
+            .join("\n")}`
+      )
+      .join("\n");
+    const verdict = classifyPr([{ filename: path, patch: pseudoPatch }]);
     const pr = await openPr(
       input.title,
       branch,

@@ -23,7 +23,7 @@ import {
   websiteRepo,
   websiteRepoConfigured,
 } from "@/lib/web/github";
-import { classifyChange } from "@/lib/web/policy";
+import { classifyPr } from "@/lib/web/policy";
 import { postSignal } from "@/lib/signals";
 
 export const maxDuration = 60;
@@ -54,9 +54,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: "merged", note: "Already merged." });
     }
 
-    // Gate 1 — the policy, re-derived from what the PR actually changes.
+    // Gate 1 — the policy, re-derived from what the PR actually changes: both
+    // which files, and what the diffs do to them (an allowed file can still
+    // move a price).
     const files = await listPrFiles(prNumber);
-    const verdict = classifyChange(files);
+    const verdict = classifyPr(files);
     if (!verdict.autoMergeable) {
       return NextResponse.json({
         status: "blocked",

@@ -104,12 +104,18 @@ export async function openPr(
   return { url: data.html_url, number: data.number };
 }
 
-/** Every file a PR touches — the input to the auto-merge policy. */
-export async function listPrFiles(prNumber: number): Promise<string[]> {
+/**
+ * Every file a PR touches, with its diff — the input to the auto-merge policy.
+ * The patch matters as much as the path: products.ts is an allowed file, but
+ * only the diff can say whether this particular change moves a price.
+ */
+export async function listPrFiles(
+  prNumber: number
+): Promise<{ filename: string; patch?: string }[]> {
   const data = (await gh(
     `/repos/${websiteRepo()}/pulls/${prNumber}/files?per_page=100`
-  )) as { filename: string }[];
-  return data.map((f) => f.filename);
+  )) as { filename: string; patch?: string }[];
+  return data.map((f) => ({ filename: f.filename, patch: f.patch }));
 }
 
 export interface PrState {
