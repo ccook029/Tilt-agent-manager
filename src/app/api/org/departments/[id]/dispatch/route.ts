@@ -18,6 +18,7 @@ export async function POST(
     const body = (await request.json().catch(() => ({}))) as {
       maxPieces?: number;
       run?: boolean;
+      direction?: string;
     };
     const result = await runDepartmentDispatch(id, {
       maxPieces:
@@ -25,6 +26,7 @@ export async function POST(
           ? Math.max(1, Math.min(8, body.maxPieces))
           : undefined,
       run: body.run,
+      direction: body.direction,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {

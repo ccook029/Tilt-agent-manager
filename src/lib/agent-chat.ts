@@ -25,6 +25,7 @@ import {
   getEmployeeById,
   getDepartmentById,
   getDirectReports,
+  getOrgReach,
 } from "./org/directory";
 import {
   getEmployeeProfile,
@@ -91,18 +92,65 @@ async function renderTeamWork(reports: Employee[]): Promise<string> {
   return sections.join("\n\n---\n\n");
 }
 
-function assignProtocol(reports: Employee[]): string {
-  const roster = reports
-    .map((r) => `  - ${r.id} — ${r.name}, ${r.title}`)
+function assignProtocol(reports: Employee[], directIds?: Set<string>): string {
+  // Grouped by department once the roster is company-wide — a flat list of 29
+  // names is hard to pick from, and the department tells the agent who owns what.
+  const byDept = new Map<string, Employee[]>();
+  for (const r of reports) {
+    const list = byDept.get(r.departmentId) ?? [];
+    list.push(r);
+    byDept.set(r.departmentId, list);
+  }
+  const roster = [...byDept.entries()]
+    .map(([deptId, people]) => {
+      const dept = getDepartmentById(deptId);
+      const lines = people
+        .map(
+          (r) =>
+            `    - ${r.id} — ${r.name}, ${r.title}${
+              directIds && !directIds.has(r.id) ? " (skip-level)" : ""
+            }`
+        )
+        .join("\n");
+      return `  ${dept?.name ?? deptId}:\n${lines}`;
+    })
     .join("\n");
+
+  const skipNote = directIds
+    ? `\nAnyone marked (skip-level) does not report to you directly. You can still assign to them when the work genuinely belongs to that person — say in the brief that it came from the founders, so their boss has the context on review.`
+    : "";
+
   return `## Handing out work from this chat
-When the discussion lands on something your team should produce, end your reply with ONE fenced block per piece of work:
+When the discussion lands on something that should be produced, end your reply with ONE fenced block per piece of work:
 \`\`\`assign
 { "assignee": "<employee-id>", "title": "<short title>", "brief": "<the full brief — specific enough to execute without guessing, folding in everything agreed in this chat>" }
 \`\`\`
-Your team (use these exact ids):
-${roster}
-The founder confirms each block with one click, which runs the full worker → your-review cycle and lands the result in their Review queue. Don't emit an assign block for hypotheticals — only when the work is actually wanted. Never put anything after the assign block(s).`;
+Who you can assign to (use these exact ids):
+${roster}${skipNote}
+The founder confirms each block with one click, which runs the full worker → review cycle and lands the result in their Review queue. Don't emit an assign block for hypotheticals — only when the work is actually wanted. Never put anything after the assign block(s).`;
+}
+
+/**
+ * Ask a department head to plan and dispatch their own period. Offered only to
+ * someone whose reach includes other bosses (in practice the Chief of Staff):
+ * routing a whole department's period is a different act from assigning one
+ * piece of work, and it belongs to whoever can see across departments.
+ */
+function dispatchProtocol(bosses: Employee[]): string {
+  const list = bosses
+    .map((b) => {
+      const dept = getDepartmentById(b.departmentId);
+      return `  - ${b.departmentId} — ${dept?.name ?? b.departmentId} (${b.name})`;
+    })
+    .join("\n");
+  return `## Setting a whole department in motion
+When what's needed is not one piece of work but a department head planning their period against the founders' priorities, end your reply with:
+\`\`\`dispatch
+{ "department": "<department-id>", "direction": "<what the founders want this department focused on — the head reads this before planning>" }
+\`\`\`
+Departments you can set in motion:
+${list}
+The founder confirms it, and that head plans and hands out work to their own team. Use this for "get marketing on the spring push", not for a single deliverable — that's an assign block. Never put anything after the block(s).`;
 }
 
 export interface ChatImage {
@@ -125,6 +173,19 @@ export async function runAgentConversation(
     ? getDirectReports(employee.id).filter((r) => r.staffed && r.enabled)
     : [];
   const isManager = teamReports.length > 0;
+
+  // How far down this person can hand out work. For a department head that's
+  // their own team; for the Chief of Staff it's the whole company, so a founder
+  // can ask him for anything and have it land on the right desk rather than
+  // being told to go find that agent themselves.
+  const reach = employee
+    ? getOrgReach(employee.id).filter((r) => r.staffed && r.enabled)
+    : [];
+  const directIds = new Set(teamReports.map((r) => r.id));
+  // Bosses within reach — the people who can plan a department, not just do a piece.
+  const reachableBosses = reach.filter(
+    (r) => r.role === "manager" && getDirectReports(r.id).some((x) => x.staffed && x.enabled)
+  );
   const name = config?.name ?? employee!.name;
 
   const stored = await loadAgentChat(agentId).catch(() => ({ messages: [] }));
@@ -193,8 +254,20 @@ export async function runAgentConversation(
       orgBlocks += `\n\n## Your team's recent work (you have already read all of this)\n${teamWork}`;
   }
 
+  // Someone whose reach extends past their own direct reports (the Chief of
+  // Staff) assigns from the whole roster and can also set a department in
+  // motion. Everyone else keeps the original team-only protocol.
+  const hasSkipLevelReach = reach.length > teamReports.length;
   const managerGuidance = isManager
-    ? `\n\nYou are the department boss. When asked about your team's work, LEAD WITH THE HIGH LEVEL — the few findings or takeaways that matter, in a handful of tight sentences — and offer the threads worth pulling. Do NOT re-dump a report; the founder can drill down by asking. Have a point of view: what you'd act on, what you'd skip, and why.\n\n${assignProtocol(teamReports)}`
+    ? `\n\nYou are a boss here. When asked about your team's work, LEAD WITH THE HIGH LEVEL — the few findings or takeaways that matter, in a handful of tight sentences — and offer the threads worth pulling. Do NOT re-dump a report; the founder can drill down by asking. Have a point of view: what you'd act on, what you'd skip, and why.
+
+You can act, not just advise. When the founders ask you to get something done, route it — don't tell them to go and talk to that person themselves.
+
+${assignProtocol(hasSkipLevelReach ? reach : teamReports, hasSkipLevelReach ? directIds : undefined)}${
+        hasSkipLevelReach && reachableBosses.length
+          ? `\n\n${dispatchProtocol(reachableBosses)}`
+          : ""
+      }`
     : "";
 
   const imageNote = images.length

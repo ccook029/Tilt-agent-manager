@@ -73,6 +73,7 @@ export function CommandPalette() {
       { id: "home", label: "Go to HQ Home", group: "Navigate", perform: () => router.push("/") },
       { id: "org", label: "Go to Org HQ", group: "Navigate", perform: () => router.push("/org") },
       { id: "review", label: "Go to Review Queue", group: "Navigate", perform: () => router.push("/review") },
+      { id: "work", label: "Go to Where Work Sits", group: "Navigate", perform: () => router.push("/work") },
       { id: "publish", label: "Go to Publisher", group: "Navigate", perform: () => router.push("/publish") },
       { id: "shipments", label: "Go to Shipments", group: "Navigate", perform: () => router.push("/shipments") },
       { id: "dash", label: "Go to Operations Overview", group: "Navigate", perform: () => router.push("/dashboard") },
