@@ -312,12 +312,13 @@ export async function runCategorizationBatch(opts?: {
     .map((a) => `- ${a.account_name} [${a.account_type}]`)
     .join("\n");
 
-  const userMessage = [
+  const policyBlock = await renderPolicyBlock();
+  const buildUserMessage = (block: string) => [
     live
       ? "LIVE MODE: validated decisions will be written to the real books (and are reversible)."
       : "DRY RUN: nothing will be written — decide exactly as if it were live.",
     "",
-    await renderPolicyBlock(),
+    policyBlock,
     "",
     "## Chart of Accounts (the ONLY valid category names)",
     coaBlock || "(unavailable)",
@@ -328,23 +329,44 @@ export async function runCategorizationBatch(opts?: {
       : "(no tax codes configured — leave \"tax\" out everywhere)",
     "",
     ...(interac.length > 0 ? [renderInteracBlock(interac), ""] : []),
-    `## Uncategorized Transactions to process (${uncategorized.items.length} of ~${uncategorized.total} total)`,
+    `## Uncategorized Transactions to process (of ~${uncategorized.total} total)`,
     renderRecurringPatterns(),
     "",
     "Lines marked REGISTER were matched to the bank's own e-Transfer register by amount + date. That entry is AUTHORITATIVE for both the counterparty and the money direction — trust it over the MONEY IN/OUT label if they disagree, and treat its memo as the payer's own description of what the money was for (it is usually the whole answer: a named stick sale, a fuel reimbursement, an insurance payment). Do not escalate asking who someone is when the register already names them.",
     "Lines marked EMAIL MATCH were deterministically matched to an Interac e-Transfer notification by amount + date + direction. Treat the matched name as the payee/payer, and treat the matched message memo (e.g. \"Jer fuel\", \"stick payment\") as a STRONG hint for the category — it's the counterparty's own description of what the money was for. If a memo makes the category obvious, use it and don't escalate.",
-    txnBlock,
+    block,
   ].join("\n");
 
-  const res = await callClaude({
-    systemPrompt: EXECUTION_SYSTEM_PROMPT,
-    userMessage,
-    model: CLAUDE_MODEL,
-    // Room for 15 decisions + escalations; a truncated reply here previously
-    // parsed as "nothing to do" and produced a silent all-zero run.
-    maxTokens: 12000,
-    temperature: 0,
-  });
+  // A big batch can come back with NO text at all (max_tokens burned before any
+  // prose, an overlong prompt, a refusal). Rather than waste the run, retry once
+  // on a halved transaction list — smaller prompt, smaller answer — and keep the
+  // stop reason so an unexplained empty reply is diagnosable, not a mystery.
+  const askPenny = async (block: string, maxTokens: number) =>
+    callClaude({
+      systemPrompt: EXECUTION_SYSTEM_PROMPT,
+      userMessage: buildUserMessage(block),
+      model: CLAUDE_MODEL,
+      maxTokens,
+      temperature: 0,
+    });
+
+  let res = await askPenny(txnBlock, 8000);
+  let retried = false;
+  if (!res.text.trim()) {
+    console.warn(
+      `[accounting-execute] empty reply (stop_reason=${res.stopReason}, blocks=[${(res.blockTypes ?? []).join(",")}]) — retrying on a half batch`
+    );
+    const half = uncategorized.items.slice(0, Math.max(1, Math.ceil(uncategorized.items.length / 2)));
+    const halfIds = new Set(half.map((t) => String(t.transaction_id)));
+    const halfBlock = txnBlock
+      .split("\n")
+      .filter((line) => [...halfIds].some((id) => line.includes(`id=${id} `)))
+      .join("\n");
+    if (halfBlock.trim()) {
+      retried = true;
+      res = await askPenny(halfBlock, 5000);
+    }
+  }
 
   const { data: parsed, ok: parsedOk } = parseResultObject(res.text);
   if (!parsedOk && uncategorized.items.length > 0) {
@@ -361,7 +383,7 @@ export async function runCategorizationBatch(opts?: {
       "",
       "Run it again — this is transient. If it happens repeatedly, that's a bug to flag.",
       "",
-      `_Debug: response was ${res.text.length} chars; tail: “…${res.text.slice(-160).replace(/\n/g, " ")}”_`,
+      `_Debug: ${res.text.length} chars · stop_reason=${res.stopReason ?? "?"} · blocks=[${(res.blockTypes ?? []).join(",") || "none"}]${retried ? " · already retried on a half batch" : ""}; tail: “…${res.text.slice(-160).replace(/\n/g, " ")}”_`,
     ].join("\n");
     return {
       mode: live ? "executed" : "proposed",

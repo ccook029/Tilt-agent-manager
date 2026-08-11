@@ -68,6 +68,12 @@ export interface ClaudeResponse {
   inputTokens: number;
   outputTokens: number;
   model: string;
+  /** Why generation stopped ("end_turn" | "max_tokens" | "refusal" | …). Present
+   * on callClaude; lets callers diagnose an empty reply instead of guessing. */
+  stopReason?: string | null;
+  /** Content block kinds returned — an empty text with only non-text blocks is
+   * the signature of a response that never produced prose. */
+  blockTypes?: string[];
 }
 
 /**
@@ -157,6 +163,8 @@ export async function callClaude(
     inputTokens: response.usage?.input_tokens ?? 0,
     outputTokens: response.usage?.output_tokens ?? 0,
     model,
+    stopReason: response.stop_reason ?? null,
+    blockTypes: response.content.map((b) => b.type),
   };
 }
 
