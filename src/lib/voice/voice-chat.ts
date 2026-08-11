@@ -24,6 +24,7 @@ import { renderOrgKnowledge } from "@/lib/org-knowledge";
 import { getOpenEscalations } from "@/lib/policy-ledger";
 import { getRunLogsByAgent } from "@/lib/store";
 import { getEmployeeProfile } from "@/lib/org/employee-configs";
+import { buildDelegationBlock } from "@/lib/org/delegation";
 import { getCompanySnapshot } from "@/lib/company-snapshot";
 import { CLAUDE_MODEL } from "@/lib/models";
 
@@ -177,7 +178,14 @@ export async function streamChiefOfStaffVoiceReply(
     profile?.managerSystemPrompt ??
     "You are Reese Calder, Chief of Staff at Tilt Hockey Inc., working for the founders Chris and Jeremy.";
 
-  const systemPrompt = base + orgKnowledge + CHIEF_VOICE_DIRECTIVE;
+  // The same delegation block the typed chat gets. Without it he had no roster
+  // here, so asked out loud to get something to Nova he answered — correctly —
+  // that he couldn't reach her, while the typed chat could.
+  const systemPrompt =
+    base +
+    orgKnowledge +
+    CHIEF_VOICE_DIRECTIVE +
+    `\n\n${buildDelegationBlock("chief-of-staff", "voice")}`;
 
   const historyBlock =
     stored.messages.length === 0
