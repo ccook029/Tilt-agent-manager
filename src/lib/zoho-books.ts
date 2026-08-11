@@ -138,6 +138,9 @@ export interface BooksInvoice {
   balance: number;
   date: string;
   due_date: string;
+  /** For web sales, tiltweb sets this to the Stripe PaymentIntent id — the
+   *  join key Penny reconciles Stripe against. */
+  reference_number?: string;
 }
 
 export interface BooksBill {
@@ -632,6 +635,166 @@ export async function recordVendorPayment(input: {
     paid_through_account_id: input.paidThroughAccountId,
     bills: [{ bill_id: input.billId, amount_applied: input.amount }],
   });
+}
+
+// ---- Stripe reconciliation primitives -------------------------------------
+//
+// tiltweb stamps the Stripe PaymentIntent id onto the Zoho invoice's
+// reference_number (and onto the customer payment it records), so the PI id is
+// an exact join key in both directions. Everything below leans on that rather
+// than fuzzy amount/date/email matching.
+
+/** Find an invoice by its exact reference_number (for web sales: the Stripe
+ *  PaymentIntent id, e.g. "pi_3Ab…"). */
+export async function findInvoiceByReference(
+  reference: string
+): Promise<BooksInvoice | null> {
+  const ref = reference.trim();
+  if (!ref) return null;
+  const res = await booksGet<{ invoices?: BooksInvoice[] }>("/invoices", {
+    reference_number: ref,
+  }).catch(() => ({ invoices: [] as BooksInvoice[] }));
+  // Zoho's reference_number filter is a contains-match, so confirm exactly.
+  return (res.invoices ?? []).find((i) => i.reference_number === ref) ?? null;
+}
+
+export interface BooksCustomerPayment {
+  payment_id: string;
+  payment_number?: string;
+  customer_id?: string;
+  amount: number;
+  date: string;
+  reference_number?: string;
+  account_id?: string;
+  account_name?: string;
+}
+
+/** Find a customer payment by its exact reference_number. This is the
+ *  idempotency guard: if the payment leg already exists for a Stripe charge,
+ *  we must never record it twice. */
+export async function findCustomerPaymentByReference(
+  reference: string
+): Promise<BooksCustomerPayment | null> {
+  const ref = reference.trim();
+  if (!ref) return null;
+  const res = await booksGet<{ customerpayments?: BooksCustomerPayment[] }>(
+    "/customerpayments",
+    { reference_number: ref }
+  ).catch(() => ({ customerpayments: [] as BooksCustomerPayment[] }));
+  return (
+    (res.customerpayments ?? []).find((p) => p.reference_number === ref) ?? null
+  );
+}
+
+/**
+ * Record a customer payment against an invoice, deposited into `accountId`.
+ *
+ * For card sales that account is the Stripe CLEARING account, not the bank —
+ * the money is real but Stripe still holds it. The payout later moves it from
+ * clearing into chequing. Depositing straight to chequing here is the classic
+ * double-count: the payment AND the payout would both hit the bank.
+ */
+export async function createCustomerPayment(input: {
+  customerId: string;
+  invoiceId: string;
+  amount: number;
+  date: string;
+  /** Where the money is deposited — the clearing account for card sales. */
+  accountId: string;
+  reference?: string;
+  description?: string;
+  paymentMode?: string;
+}): Promise<{ payment_id: string }> {
+  const res = await booksPost<{ payment?: { payment_id: string } }>(
+    "/customerpayments",
+    {
+      customer_id: input.customerId,
+      payment_mode: input.paymentMode ?? "Stripe",
+      amount: input.amount,
+      date: input.date,
+      account_id: input.accountId,
+      ...(input.reference ? { reference_number: input.reference } : {}),
+      description: input.description ?? "",
+      invoices: [{ invoice_id: input.invoiceId, amount_applied: input.amount }],
+    }
+  );
+  if (!res.payment?.payment_id) {
+    throw new Error("Zoho did not return a created customer payment");
+  }
+  return { payment_id: res.payment.payment_id };
+}
+
+/** Find an expense by its exact reference_number — the idempotency guard for
+ *  the per-payout Stripe fee expense. */
+export async function findExpenseByReference(
+  reference: string
+): Promise<{ expense_id: string; total: number; date: string } | null> {
+  const ref = reference.trim();
+  if (!ref) return null;
+  const res = await booksGet<{
+    expenses?: { expense_id: string; total: number; date: string; reference_number?: string }[];
+  }>("/expenses", { reference_number: ref }).catch(() => ({ expenses: [] }));
+  const hit = (res.expenses ?? []).find((e) => e.reference_number === ref);
+  return hit ? { expense_id: hit.expense_id, total: hit.total, date: hit.date } : null;
+}
+
+/**
+ * Categorize a bank feed line as a fund transfer between two of your own
+ * accounts — the Stripe payout: money leaves Stripe Clearing and lands in
+ * chequing. A transfer is neither income nor expense; booking a payout as
+ * revenue is the single most damaging error in processor reconciliation
+ * because the sale was already recognized when the invoice was raised.
+ */
+export async function categorizeTxnAsTransfer(
+  transactionId: string,
+  opts: {
+    /** Account the money comes FROM (Stripe Clearing for a payout). */
+    from_account_id: string;
+    /** Account the money lands IN (the chequing account). */
+    to_account_id: string;
+    date: string;
+    amount: number;
+    description?: string;
+  }
+): Promise<void> {
+  await booksPost(`/banktransactions/uncategorized/${transactionId}/categorize`, {
+    transaction_type: "transfer_fund",
+    from_account_id: opts.from_account_id,
+    to_account_id: opts.to_account_id,
+    date: opts.date,
+    amount: opts.amount,
+    description: opts.description ?? "",
+  });
+}
+
+/**
+ * Uncategorized feed lines for ONE account within a date window. Used to find
+ * the chequing deposit that corresponds to a Stripe payout. Narrower (and far
+ * cheaper) than fetchUncategorizedBankTxns, which samples across every account.
+ */
+export async function fetchUncategorizedTxnsForAccount(
+  accountId: string,
+  dateStart: string,
+  dateEnd: string
+): Promise<BooksBankTxn[]> {
+  // Same belt-and-braces as fetchUncategorizedBankTxns: filter_by is the
+  // documented filter (a bare "status" param is silently ignored), and we drop
+  // anything that doesn't say uncategorized anyway. Matching a payout against
+  // an already-categorized line would propose a duplicate posting.
+  const rows = await getAllPages<BooksBankTxn>("/banktransactions", "banktransactions", {
+    account_id: accountId,
+    filter_by: "Status.Uncategorized",
+    date_start: dateStart,
+    date_end: dateEnd,
+  }).catch(() => [] as BooksBankTxn[]);
+
+  return rows.filter(
+    (t) =>
+      (!t.status || String(t.status).toLowerCase() === "uncategorized") &&
+      // Date filters are honoured server-side, but re-check: a stray line
+      // outside the window would widen the payout match for no reason.
+      (!t.date || (t.date >= dateStart && t.date <= dateEnd))
+  );
 }
 
 /** Attach a file (the source bill PDF) to a created bill/expense. Multipart. */
