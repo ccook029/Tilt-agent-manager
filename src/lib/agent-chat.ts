@@ -18,6 +18,7 @@ import { getRunLogsByAgent } from "./store";
 import { renderOrgKnowledge } from "./org-knowledge";
 import { renderCrossAgentSignals } from "./cross-agent";
 import { renderOrderBuilderContext } from "./order-builder/logic";
+import { renderStripeReconContext } from "./stripe-recon";
 import { getCompanySnapshot } from "./company-snapshot";
 import { loadAgentChat, appendAgentChat } from "./agent-chat-store";
 import {
@@ -169,6 +170,11 @@ export async function runAgentConversation(
     // numbers instead of only what's been reported to him.
     (agentId === "chief-of-staff"
       ? `\n\n${await getCompanySnapshot().catch(() => "")}`
+      : "") +
+    // Penny owns Stripe reconciliation — give her where the clearing account
+    // stands so "did the web sales settle?" is answerable without a tool call.
+    (agentId === "accounting"
+      ? `\n\n${await renderStripeReconContext().catch(() => "")}`
       : "");
 
   // Org grounding: live department data, own work orders, and — for bosses —

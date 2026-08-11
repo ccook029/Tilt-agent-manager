@@ -162,6 +162,13 @@ function AnalystTab() {
             AP Inbox ↗
           </Link>
           <Link
+            href="/accounting/stripe"
+            className="text-xs text-gray-500 transition-colors hover:text-[#00d6ff]"
+            title="Match Stripe payouts and card sales to the books — Penny proposes the missing payment, fee and payout postings"
+          >
+            Stripe ↗
+          </Link>
+          <Link
             href="/zoho/reconnect"
             className="text-xs text-gray-500 transition-colors hover:text-[#00d6ff]"
             title="Refresh the Zoho connection if agents report auth / 401 errors"

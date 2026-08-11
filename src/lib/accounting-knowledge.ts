@@ -42,6 +42,18 @@ export const RECONCILIATION_DISCIPLINE = `RECONCILIATION DISCIPLINE:
 - Payment processors (Stripe, Shopify, etc.): gross sales ≠ the bank payout. The payout = gross sales − processor fees (− refunds/chargebacks). Record fees as an expense and the payout as a transfer; match each payout to the batch of sales it covers.
 - SALES TAX collected is a LIABILITY owed to the state, never income.`;
 
+export const STRIPE_SETTLEMENT = `HOW TILT'S CARD SALES SETTLE (the three legs):
+- Tilt's storefront (tilthockey.com) takes card payments through Stripe. Every web sale must post THREE times, and each leg has a distinct job:
+  1. Invoice raised at checkout          Dr A/R                          Cr Revenue + HST
+  2. Card paid                           Dr Stripe Clearing              Cr A/R
+  3. Stripe payout lands in the bank     Dr Main Checking (net) + Dr Merchant Fees (+ITC)   Cr Stripe Clearing
+- Leg 2 goes to the CLEARING account, never the bank. The customer's money is real but Stripe still holds it; depositing straight to chequing double-counts once the payout arrives.
+- Leg 3 is a TRANSFER plus a fee expense — never revenue. Revenue was already recognized at leg 1.
+- THE SELF-CHECK: Stripe Clearing should net to roughly zero, holding only money genuinely in transit. A clearing balance that drifts and never returns means a leg is missing. That is the single most useful weekly check on the web-sales pipeline.
+- The join key is exact: tiltweb stamps the Stripe PaymentIntent id onto the Zoho invoice's reference_number, and writes the invoice id back onto the PaymentIntent metadata. Match on that, never on email + amount + date.
+- KNOWN FAILURE MODE: tiltweb attempts leg 2 itself but swallows every error (console.warn only), so failures are invisible and the invoice silently stays unpaid. Unpaid invoices with a successful Stripe charge are almost always this, not a genuinely unpaid customer — check Stripe before chasing anyone for money.
+- The /accounting/stripe console reconciles all of this and proposes the missing postings. Square works the same way (Square Clearing) and has the same gap.`;
+
 export const INVENTORY_ACCOUNTING = `INVENTORY & COGS ACCOUNTING (critical for Tilt):
 - Tilt holds physical inventory (hockey sticks and related goods). Use perpetual-inventory thinking: purchases capitalize to the Inventory Asset account; COGS is recognized when an item sells, moving cost from Inventory Asset to COGS.
 - The Balance Sheet Inventory Asset should tie to the real, physical value of stock on hand. Tilt's master Zoho Sheet is the SOURCE OF TRUTH for stick counts; value true counts at unit cost to get the real inventory value.
@@ -117,6 +129,7 @@ export const WORKER_EXPERTISE = [
   ACCOUNTING_FOUNDATIONS,
   CHART_OF_ACCOUNTS_PRINCIPLES,
   RECONCILIATION_DISCIPLINE,
+  STRIPE_SETTLEMENT,
   INVENTORY_ACCOUNTING,
   COMMON_RED_FLAGS,
   CLEANUP_METHODOLOGY,
@@ -128,6 +141,7 @@ export const MANAGER_EXPERTISE = [
   ACCOUNTING_FOUNDATIONS,
   CHART_OF_ACCOUNTS_PRINCIPLES,
   RECONCILIATION_DISCIPLINE,
+  STRIPE_SETTLEMENT,
   INVENTORY_ACCOUNTING,
   COMMON_RED_FLAGS,
   CLEANUP_METHODOLOGY,
