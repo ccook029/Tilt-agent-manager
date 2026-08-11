@@ -16,6 +16,7 @@ import GenericAgentChat from "@/components/generic-agent-chat";
 import ActionLedger from "@/components/action-ledger";
 import ReportFiles from "@/components/report-files";
 import ReportRenderer from "@/components/report-renderer";
+import AccountingQuestions from "@/components/accounting-questions";
 
 interface RunLog {
   id: string;
@@ -432,6 +433,16 @@ export default function AgentDetailPage() {
           );
         })}
       </div>
+
+      {/* Penny's desk: the questions her runs raised, answerable in place and
+          always visible — the report and the questions in one screen. */}
+      {(isPenny || isCfo) && (
+        <div className="mb-5">
+          <AccountingQuestions
+            title={isCfo ? "Open questions for you" : "Penny's questions"}
+          />
+        </div>
+      )}
 
       {/* Tab content */}
       {activeTab === "chat" && isMaya && (

@@ -48,6 +48,25 @@ export interface AccountingPolicy {
   autoApply: boolean;
 }
 
+/**
+ * What a question is ABOUT, in machine form. Present when Penny (or a code
+ * guard) held a specific bank transaction: the desk shows the money and
+ * offers one-tap actions that really execute.
+ */
+export interface EscalationContext {
+  transactionId?: string;
+  amount?: number;
+  date?: string;
+  payee?: string;
+  /** What answering "yes, go ahead" should DO. */
+  proposedAction?:
+    | { type: "post"; account: string; direction: "in" | "out"; tax?: string }
+    | { type: "apply_to_invoice"; invoiceNumber: string }
+    | { type: "match" };
+  /** Short label for the affirmative button, e.g. "Yes — post it". */
+  affirmativeLabel?: string;
+}
+
 export interface Escalation {
   id: string;
   question: string;
@@ -57,6 +76,12 @@ export interface Escalation {
   recommendation?: string;
   /** Dollar amount at stake, if applicable — used to prioritise. */
   dollarAmount?: number;
+  /**
+   * Structured context for questions raised about a specific bank line, so the
+   * answering UI can show the money AND act on it — "yes, post it" actually
+   * posts, instead of only recording a policy the next run has to re-derive.
+   */
+  context?: EscalationContext;
   status: "open" | "resolved";
   raisedAt: string;
   resolvedAt?: string;
@@ -182,6 +207,7 @@ export async function addEscalations(
     reason: string;
     recommendation?: string;
     dollarAmount?: number;
+    context?: EscalationContext;
   }>
 ): Promise<Escalation[]> {
   const existing = await getEscalations();
@@ -200,6 +226,7 @@ export async function addEscalations(
       reason: item.reason,
       recommendation: item.recommendation,
       dollarAmount: item.dollarAmount,
+      context: item.context,
       status: "open",
       raisedAt: new Date().toISOString(),
     };
