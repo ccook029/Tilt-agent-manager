@@ -16,6 +16,7 @@ export function speakableText(text: string): string {
     // Control blocks become a short spoken note, not read verbatim.
     .replace(/```assign[\s\S]*?```/g, " I've drafted that as a work order — it's on your screen to confirm. ")
     .replace(/```webchange[\s\S]*?```/g, " I've drafted that website change — it's on your screen to confirm. ")
+    .replace(/```dispatch[\s\S]*?```/g, " I've lined that department up — it's on your screen to confirm. ")
     .replace(/```json[\s\S]*?```/g, " ")
     .replace(/```[\s\S]*?```/g, " — the details are on your screen — ")
     // Links → just the visible text.

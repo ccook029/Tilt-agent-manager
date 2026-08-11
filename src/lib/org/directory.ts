@@ -25,7 +25,11 @@ const departments: Department[] = [
     name: "Office of the Founders",
     mission:
       "Keep the founders ahead of the whole company without drowning them: synthesize every department into one clear briefing — what shipped, what needs a decision, what's stuck — so Chris and Jeremy spend their scarce hours on the calls only they can make.",
-    managerId: null,
+    // The Chief of Staff runs this department. Without a managerId the office
+    // had no boss, so a dispatch from here threw before it started and Reese
+    // had no way to push work down — the founders' single point of contact
+    // could brief but not act.
+    managerId: "chief-of-staff",
     tools: [
       {
         label: "Review Queue",
@@ -256,7 +260,9 @@ const employees: Employee[] = [
     name: "Reese Calder",
     title: "Chief of Staff",
     departmentId: "executive",
-    role: "worker",
+    // A manager, not a worker: every department head reports to him, and he
+    // dispatches down the whole org on the founders' behalf.
+    role: "manager",
     reportsTo: null,
     personaId: "chief-of-staff",
     skills: ["founder-briefing", "prioritization", "cross-department-synthesis"],
@@ -491,8 +497,14 @@ const employees: Employee[] = [
     name: "Dana Metrics",
     title: "VP of Analytics",
     departmentId: "intelligence",
-    role: "worker",
-    reportsTo: null,
+    // Dana runs Intelligence (she is the department's managerId), so she is a
+    // manager like every other department head. She was previously role
+    // "worker" with reportsTo null, which made her a second root of the org
+    // tree outside the Chief of Staff's span — and, because the engine skips
+    // boss review for reportsTo: null, sent her work straight to the founders
+    // unreviewed.
+    role: "manager",
+    reportsTo: "chief-of-staff",
     personaId: "website-analytics",
     skills: ["analytics-report", "traffic-analysis"],
     charter:
@@ -714,4 +726,28 @@ export function getManagerOf(employee: Employee): Employee | undefined {
 /** Direct reports of a manager. */
 export function getDirectReports(managerId: string): Employee[] {
   return employees.filter((e) => e.reportsTo === managerId);
+}
+
+/**
+ * Everyone below someone in the reporting tree — direct reports, their reports,
+ * and so on down. The Chief of Staff's reach is the whole company, which is what
+ * lets him route a founder's request to the one person who can actually do it
+ * instead of only to the eight department heads.
+ *
+ * Cycle-safe: a malformed reportsTo loop would otherwise hang the request.
+ */
+export function getOrgReach(managerId: string): Employee[] {
+  const seen = new Set<string>([managerId]);
+  const out: Employee[] = [];
+  const queue = [managerId];
+
+  while (queue.length > 0) {
+    for (const report of getDirectReports(queue.shift()!)) {
+      if (seen.has(report.id)) continue;
+      seen.add(report.id);
+      out.push(report);
+      queue.push(report.id);
+    }
+  }
+  return out;
 }

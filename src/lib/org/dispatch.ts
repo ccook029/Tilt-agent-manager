@@ -13,8 +13,8 @@ import { callClaude } from "../anthropic";
 import { CLAUDE_MANAGER_MODEL } from "../models";
 import {
   getDepartmentById,
+  getDirectReports,
   getEmployeeById,
-  getEmployeesByDepartment,
 } from "./directory";
 import { renderDepartmentContext } from "./department-context";
 import { renderPolicyBlock } from "./ledger";
@@ -36,6 +36,8 @@ interface PlannedPiece {
 
 /** Department-specific planning guidance layered onto the generic prompt. */
 const DISPATCH_INSTRUCTIONS: Record<string, string> = {
+  executive:
+    "You are dispatching to DEPARTMENT HEADS, not to individual contributors — each piece you assign lands with a boss who will run it through their own team. So brief at their altitude: name the outcome the founders need and why it matters now, and leave the how to them. Spread the load across departments rather than stacking three pieces on one head, and don't dispatch work a department is already doing on its own cadence. If something needs one specific person deeper in the org, say so in the brief and let their boss route it.",
   marketing:
     "Respect the weekly cadence in the brand bar across Instagram, TikTok, and Facebook, hit a healthy mix of pillars, and lean into the priority format (short video). Prefer pieces the asset library can actually support; when a piece needs footage that isn't available, say so in its brief so it surfaces as a gap.",
   product:
@@ -76,10 +78,21 @@ function parsePlan(text: string, valid: Set<string>): PlannedPiece[] {
   }
 }
 
+/**
+ * Who this department's boss can dispatch to.
+ *
+ * The reporting line is the edge, not department membership. That distinction
+ * only matters at the top: the Chief of Staff's reports ARE the department
+ * heads, who each sit in their own department, so filtering by department gave
+ * him an empty roster and no way to push work down. For every other boss the
+ * two rules select exactly the same people, since their reports sit alongside
+ * them.
+ */
 function dispatchableWorkers(dept: Department): Map<string, Employee> {
   const map = new Map<string, Employee>();
-  for (const e of getEmployeesByDepartment(dept.id)) {
-    if (e.reportsTo === dept.managerId && e.staffed && e.enabled) {
+  if (!dept.managerId) return map;
+  for (const e of getDirectReports(dept.managerId)) {
+    if (e.id !== dept.managerId && e.staffed && e.enabled) {
       map.set(e.id, e);
     }
   }
@@ -102,7 +115,7 @@ export interface DispatchResult {
  */
 export async function runDepartmentDispatch(
   departmentId: string,
-  opts: { maxPieces?: number; run?: boolean } = {}
+  opts: { maxPieces?: number; run?: boolean; direction?: string } = {}
 ): Promise<DispatchResult> {
   const maxPieces = opts.maxPieces ?? 4;
   const run = opts.run ?? true;
@@ -144,7 +157,14 @@ ${policy}
 ${context}`;
 
   const extra = DISPATCH_INSTRUCTIONS[departmentId];
-  const userMessage = `Plan this period's ${dept.name} work and dispatch it to your team as work orders.
+  // Direction from above (the Chief of Staff relaying the founders, or a human
+  // note on the dispatch button). It outranks the department's own read of the
+  // period, so it goes first and says so.
+  const directionBlock = opts.direction?.trim()
+    ? `## DIRECTION FROM THE FOUNDERS (via the Chief of Staff) — this takes priority over your own read of the period\n${opts.direction.trim()}\n\n`
+    : "";
+
+  const userMessage = `${directionBlock}Plan this period's ${dept.name} work and dispatch it to your team as work orders.
 
 YOUR TEAM (assign each piece to one of these ids):
 ${roster}

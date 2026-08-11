@@ -28,6 +28,12 @@ export default function OwnerNav() {
         Review
       </Link>
       <Link
+        href="/work"
+        className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+      >
+        Work
+      </Link>
+      <Link
         href="/publish"
         className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
       >

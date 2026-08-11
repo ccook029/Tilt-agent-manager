@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ReportRenderer from "@/components/report-renderer";
-import { getEmployeeById } from "@/lib/org/directory";
+import { getDepartmentById, getEmployeeById } from "@/lib/org/directory";
 import CarVoiceMode from "@/components/voice/car-voice-mode";
 import { streamVoiceReply } from "@/lib/voice/voice-client";
 
@@ -86,6 +86,7 @@ const SPEECH_RATE = 1.0;
 function speakableText(text: string): string {
   return text
     .replace(/```assign[\s\S]*?```/g, " I've drafted the work order — hit Assign and run when you're ready. ")
+    .replace(/```dispatch[\s\S]*?```/g, " I've lined that department up — confirm it when you're ready. ")
     .replace(/```[\s\S]*?```/g, " — details on screen — ")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/^#+\s*/gm, "")
@@ -125,11 +126,22 @@ interface WebChangeSpec {
   request: string;
 }
 
-type Part = string | AssignSpec | WebChangeSpec;
+// ```dispatch blocks — the Chief of Staff sets a whole department in motion:
+// that department's head plans the period and hands work to their own team.
+interface DispatchSpec {
+  department: string;
+  direction: string;
+}
+
+type Part = string | AssignSpec | WebChangeSpec | DispatchSpec;
+
+function isDispatchSpec(p: Part): p is DispatchSpec {
+  return typeof p !== "string" && "department" in p;
+}
 
 function parseAssistant(content: string): Part[] {
   const parts: Part[] = [];
-  const re = /```(assign|webchange)\s*([\s\S]*?)```/g;
+  const re = /```(assign|webchange|dispatch)\s*([\s\S]*?)```/g;
   let last = 0;
   for (let m = re.exec(content); m; m = re.exec(content)) {
     if (m.index > last) parts.push(content.slice(last, m.index));
@@ -139,6 +151,8 @@ function parseAssistant(content: string): Part[] {
         parts.push({ assignee: raw.assignee, title: raw.title, brief: raw.brief });
       } else if (m[1] === "webchange" && raw.path && raw.title && raw.request) {
         parts.push({ path: raw.path, title: raw.title, request: raw.request });
+      } else if (m[1] === "dispatch" && raw.department) {
+        parts.push({ department: raw.department, direction: raw.direction ?? "" });
       } else {
         parts.push(m[0]);
       }
@@ -211,6 +225,80 @@ function AssignCard({ spec }: { spec: AssignSpec }) {
               className="rounded-md bg-[#0094b8] px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#00a8d1] disabled:opacity-50"
             >
               {state === "busy" ? "Working (takes a minute)…" : "Assign & run"}
+            </button>
+            {note && <span className="text-[11px] text-red-400">{note}</span>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DispatchCard({ spec }: { spec: DispatchSpec }) {
+  const dept = getDepartmentById(spec.department);
+  const head = dept?.managerId ? getEmployeeById(dept.managerId) : undefined;
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [note, setNote] = useState<string | null>(null);
+
+  const run = async () => {
+    setState("busy");
+    setNote(null);
+    try {
+      const res = await fetch(
+        `/api/org/departments/${encodeURIComponent(spec.department)}/dispatch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ direction: spec.direction, run: true }),
+        }
+      );
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setState("done");
+        const n = d.dispatched ?? 0;
+        setNote(
+          n === 0
+            ? "Ran, but nothing was dispatched — check the department has a staffed team."
+            : `${n} work order${n === 1 ? "" : "s"} dispatched.`
+        );
+      } else {
+        setState("error");
+        setNote(d.error ?? "Dispatch failed.");
+      }
+    } catch {
+      setState("error");
+      setNote("Network error — try again.");
+    }
+  };
+
+  return (
+    <div className="my-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-300">
+        Set a department in motion → {dept?.name ?? spec.department}
+        {head && (
+          <span className="ml-1 font-normal normal-case text-gray-500">({head.name})</span>
+        )}
+      </p>
+      {spec.direction && (
+        <p className="mt-1 text-xs leading-relaxed text-gray-300">{spec.direction}</p>
+      )}
+      <p className="mt-1.5 text-[11px] text-gray-500">
+        {head?.name ?? "The department head"} will plan the period against this and hand work
+        to their own team.
+      </p>
+      <div className="mt-2.5 flex items-center gap-2">
+        {state === "done" ? (
+          <Link href="/work" className="text-xs font-semibold text-emerald-400 hover:underline">
+            ✓ {note} See where it sits →
+          </Link>
+        ) : (
+          <>
+            <button
+              onClick={run}
+              disabled={state === "busy"}
+              className="rounded-md bg-amber-500 px-3.5 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
+            >
+              {state === "busy" ? "Planning (takes a minute)…" : "Dispatch department"}
             </button>
             {note && <span className="text-[11px] text-red-400">{note}</span>}
           </>
@@ -567,6 +655,8 @@ export default function GenericAgentChat({
                   ) : null
                 ) : "path" in part ? (
                   <WebChangeCard key={j} spec={part} />
+                ) : isDispatchSpec(part) ? (
+                  <DispatchCard key={j} spec={part} />
                 ) : (
                   <AssignCard key={j} spec={part} />
                 )
