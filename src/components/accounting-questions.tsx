@@ -35,6 +35,8 @@ interface Question {
   dollarAmount?: number;
   raisedAt: string;
   context?: EscalationContext;
+  /** What the e-Transfer register says about amounts this question mentions. */
+  registerEvidence?: string[];
 }
 
 export default function AccountingQuestions({
@@ -99,6 +101,37 @@ export default function AccountingQuestions({
       setSweepNote(parts.join(" "));
     } catch {
       setSweepNote("Network error — nothing was closed. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const dismissAll = async () => {
+    if (
+      !window.confirm(
+        `Close all ${questions.length} open questions without recording rules?\n\nThe bank transactions themselves stay in the backlog — Penny will categorize them properly on her next run, now that she has the transfer register.`
+      )
+    )
+      return;
+    setBusy("all");
+    setSweepNote(null);
+    try {
+      const res = await fetch("/api/accounting/questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "dismiss-all" }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSweepNote(d.error ?? "Couldn't clear the queue.");
+        return;
+      }
+      setQuestions(d.open ?? []);
+      setSweepNote(
+        `Cleared ${d.dismissed} question${d.dismissed === 1 ? "" : "s"}. The transactions are still in the backlog — run auto-categorize and she'll work them with the register.`
+      );
+    } catch {
+      setSweepNote("Network error — nothing was cleared.");
     } finally {
       setBusy(null);
     }
@@ -179,6 +212,16 @@ export default function AccountingQuestions({
               {busy === "sweep" ? "Checking…" : "Clear answered"}
             </button>
           )}
+          {questions.length > 0 && (
+            <button
+              onClick={dismissAll}
+              disabled={busy === "all"}
+              title="Close every open question without recording rules. The underlying bank lines stay in the backlog and get categorized properly on the next run."
+              className="rounded-md border border-gray-800 px-2.5 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:border-red-800/60 hover:text-red-400 disabled:opacity-50"
+            >
+              {busy === "all" ? "Clearing…" : "Clear all"}
+            </button>
+          )}
           <button
             onClick={load}
             className="text-[11px] text-gray-500 transition-colors hover:text-gray-300"
@@ -238,6 +281,20 @@ export default function AccountingQuestions({
                 )}
 
                 <p className="text-sm leading-snug text-gray-200">{q.question}</p>
+                {(q.registerEvidence?.length ?? 0) > 0 && (
+                  <div className="mt-1.5 rounded-md border border-[#0094b8]/30 bg-[#0094b8]/5 px-2 py-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[#00d6ff]">
+                      Bank transfer register says
+                    </p>
+                    <ul className="mt-0.5 space-y-0.5">
+                      {q.registerEvidence!.slice(0, 6).map((line, i) => (
+                        <li key={i} className="text-[11px] leading-snug text-gray-300">
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {q.recommendation && (
                   <p className="mt-1 text-xs text-gray-500">
                     <span className="text-gray-600">Her rec:</span> {q.recommendation}

@@ -1167,7 +1167,9 @@ Many of these were raised BEFORE you had the bank's e-Transfer register. The reg
 For each question decide: does the REGISTER EVIDENCE and/or an ESTABLISHED POLICY below already answer it?
 - CLOSE it when the register identifies the counterparty AND either a policy covers the treatment or the memo makes the treatment unambiguous (e.g. "Fuel - Feb.28th" to Jeremy Elliott, a named invoice to a known vendor). You will handle the actual posting in your next categorization batch — closing here just means Chris no longer needs to answer it.
 - CLOSE it when a standing policy plainly settles it, register or not.
-- KEEP it open only when a real decision is still missing: the register doesn't name it, the treatment is a genuine judgment call (owner draw vs expense, a materiality call), or the money's purpose is still unknown. When in doubt, KEEP IT OPEN.
+- CLOSE stale ANALYSIS questions: some questions are leftovers from an old review that merely LISTS unidentified amounts ("remaining debit memos not covered by patterns: $X, $Y..."). When the register now names those amounts, that list is obsolete — close it. The underlying bank lines are still in your queue and you will categorize them properly next batch with the register in hand.
+- KEEP it open only when a real decision is still missing: the register doesn't name it, OR the treatment is a genuine judgment call you have no policy for AND the memo doesn't settle it (e.g. an unexplained round-number transfer to an individual that could be an owner draw). When in doubt, KEEP IT OPEN.
+- A memo naming the purpose ("Fuel - Feb.28th", "On Ice", an invoice number to a named vendor) DOES settle the treatment for a normal operating cost — close those.
 
 State the answer you're closing on in a few words (the payee + treatment, or the policy).
 
@@ -1182,7 +1184,7 @@ Ids must come from the list given. Omit anything you're keeping open.`;
  * older questions reference amounts/dates in prose rather than carrying a
  * transaction id, so pull the dollar figures out of the text and look each up.
  */
-function registerEvidenceFor(text: string): string[] {
+export function registerEvidenceFor(text: string): string[] {
   const amounts = [...text.matchAll(/\$([0-9][0-9,]*(?:\.[0-9]{1,2})?)/g)]
     .map((m) => Number(m[1].replace(/,/g, "")))
     .filter((n) => Number.isFinite(n) && n > 0);

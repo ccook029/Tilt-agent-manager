@@ -12,14 +12,29 @@ import {
   resolveEscalation,
   dismissEscalation,
 } from "@/lib/policy-ledger";
-import { executeProposedAction, sweepAnsweredQuestions } from "@/lib/accounting-execute";
+import {
+  executeProposedAction,
+  sweepAnsweredQuestions,
+  registerEvidenceFor,
+} from "@/lib/accounting-execute";
 import { getCurrentStaff } from "@/lib/os-identity";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+/** Open questions, each annotated with what the e-Transfer register says about
+ * the amounts it mentions — so the desk can show WHO a payment was to/from
+ * without Chris going to look it up. */
+async function openWithEvidence() {
+  const open = await getOpenEscalations();
+  return open.map((e) => ({
+    ...e,
+    registerEvidence: registerEvidenceFor(`${e.question} ${e.recommendation ?? ""}`),
+  }));
+}
+
 export async function GET() {
-  return NextResponse.json({ open: await getOpenEscalations() });
+  return NextResponse.json({ open: await openWithEvidence() });
 }
 
 export async function POST(request: NextRequest) {
@@ -28,7 +43,7 @@ export async function POST(request: NextRequest) {
     escalationId?: string;
     approve?: boolean;
     answer?: string;
-    action?: "sweep" | "dismiss";
+    action?: "sweep" | "dismiss" | "dismiss-all";
   };
 
   // Penny re-reads the whole queue against standing policy and closes what's
@@ -37,13 +52,23 @@ export async function POST(request: NextRequest) {
   if (action === "sweep") {
     try {
       const result = await sweepAnsweredQuestions();
-      return NextResponse.json({ ok: true, ...result, open: await getOpenEscalations() });
+      return NextResponse.json({ ok: true, ...result, open: await openWithEvidence() });
     } catch (err) {
       // Never 500 silently — the desk shows whatever went wrong verbatim.
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[api] questions sweep failed:", msg);
       return NextResponse.json({ error: `Sweep failed: ${msg}` }, { status: 500 });
     }
+  }
+
+  if (action === "dismiss-all") {
+    const staffNow = await getCurrentStaff().catch(() => null);
+    const all = await getOpenEscalations();
+    let n = 0;
+    for (const e of all) {
+      if (await dismissEscalation(e.id, "Cleared in bulk by Chris", staffNow?.name ?? "Chris Cook")) n++;
+    }
+    return NextResponse.json({ ok: true, dismissed: n, open: await openWithEvidence() });
   }
 
   if (!escalationId) {
@@ -57,11 +82,7 @@ export async function POST(request: NextRequest) {
       "Dismissed by Chris — no rule needed",
       staffNow?.name ?? "Chris Cook"
     );
-    return NextResponse.json({
-      ok,
-      dismissed: ok,
-      open: await getOpenEscalations(),
-    });
+    return NextResponse.json({ ok, dismissed: ok, open: await openWithEvidence() });
   }
 
   const open = await getOpenEscalations();
@@ -98,6 +119,6 @@ export async function POST(request: NextRequest) {
     ok: true,
     actionSummary,
     rule: policy?.rule ?? null,
-    open: await getOpenEscalations(),
+    open: await openWithEvidence(),
   });
 }
