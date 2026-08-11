@@ -1156,54 +1156,76 @@ export async function sweepAnsweredQuestions(): Promise<{
   closed: number;
   remaining: number;
   details: string[];
+  errors: string[];
 }> {
   const [open, policies] = await Promise.all([getOpenEscalations(), getPolicies()]);
-  if (open.length === 0) return { closed: 0, remaining: 0, details: [] };
+  if (open.length === 0) return { closed: 0, remaining: 0, details: [], errors: [] };
   if (policies.length === 0) {
-    return { closed: 0, remaining: open.length, details: ["No standing policies yet — nothing to close against."] };
+    return {
+      closed: 0,
+      remaining: open.length,
+      details: [],
+      errors: ["No standing policies on file yet — there's nothing to close questions against."],
+    };
   }
 
-  const questionBlock = open
-    .map(
-      (e) =>
-        `- id=${e.id} | ${e.dollarAmount != null ? `$${e.dollarAmount.toFixed(2)} | ` : ""}${e.question.slice(0, 300)}`
-    )
-    .join("\n");
-
-  const res = await callClaude({
-    systemPrompt: SWEEP_SYSTEM,
-    userMessage: [
-      await renderPolicyBlock(),
-      "",
-      `## Open questions (${open.length})`,
-      questionBlock,
-    ].join("\n"),
-    model: CLAUDE_MODEL,
-    maxTokens: 8000,
-    temperature: 0,
-  });
-
-  const { data } = parseResultObject(res.text) as unknown as {
-    data: { close?: Array<Record<string, unknown>> };
-  };
-  const toClose = Array.isArray(data.close) ? data.close : [];
-  const validIds = new Set(open.map((e) => e.id));
-  const items = toClose
-    .map((c) => ({
-      id: String(c.id ?? ""),
-      note: `Already covered by standing policy: ${String(c.policy ?? "an existing rule")}`,
-    }))
-    .filter((c) => validIds.has(c.id));
-
-  const closed = await closeEscalations(items, "Penny Quill");
+  const policyBlock = await renderPolicyBlock();
   const byId = new Map(open.map((e) => [e.id, e]));
-  return {
-    closed,
-    remaining: open.length - closed,
-    details: items.map((i) => {
-      const q = byId.get(i.id);
-      const amt = q?.dollarAmount != null ? `$${q.dollarAmount.toFixed(2)} — ` : "";
-      return `${amt}${(q?.question ?? "").slice(0, 90)} → ${i.note}`;
-    }),
-  };
+  const details: string[] = [];
+  const errors: string[] = [];
+  let closed = 0;
+
+  // Chunk the queue: one call over 70+ questions is slow enough to blow the
+  // serverless time limit, and a single failure would lose the whole sweep.
+  // Small batches finish fast, and a bad batch only costs itself.
+  const CHUNK = 20;
+  for (let i = 0; i < open.length; i += CHUNK) {
+    const batch = open.slice(i, i + CHUNK);
+    const questionBlock = batch
+      .map(
+        (e) =>
+          `- id=${e.id} | ${e.dollarAmount != null ? `$${e.dollarAmount.toFixed(2)} | ` : ""}${e.question.slice(0, 260)}`
+      )
+      .join("\n");
+    try {
+      const res = await callClaude({
+        systemPrompt: SWEEP_SYSTEM,
+        userMessage: [
+          policyBlock,
+          "",
+          `## Open questions (${batch.length})`,
+          questionBlock,
+        ].join("\n"),
+        model: CLAUDE_MODEL,
+        maxTokens: 3000,
+        temperature: 0,
+      });
+      const parsed = parseResultObject(res.text) as unknown as {
+        data: { close?: Array<Record<string, unknown>> };
+        ok: boolean;
+      };
+      const toClose = Array.isArray(parsed.data.close) ? parsed.data.close : [];
+      const validIds = new Set(batch.map((e) => e.id));
+      const items = toClose
+        .map((c) => ({
+          id: String(c.id ?? ""),
+          note: `Already covered by standing policy: ${String(c.policy ?? "an existing rule")}`,
+        }))
+        .filter((c) => validIds.has(c.id));
+      if (items.length > 0) {
+        closed += await closeEscalations(items, "Penny Quill");
+        for (const it of items) {
+          const q = byId.get(it.id);
+          const amt = q?.dollarAmount != null ? `$${q.dollarAmount.toFixed(2)} — ` : "";
+          details.push(`${amt}${(q?.question ?? "").slice(0, 90)} → ${it.note}`);
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[sweep] batch ${i / CHUNK + 1} failed:`, msg);
+      errors.push(`Batch ${Math.floor(i / CHUNK) + 1} of ${Math.ceil(open.length / CHUNK)} couldn't be checked (${msg.slice(0, 120)})`);
+    }
+  }
+
+  return { closed, remaining: open.length - closed, details, errors };
 }
