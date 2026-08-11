@@ -7,8 +7,12 @@
 // This is what makes the desk work: an answer here DOES the thing, so Chris
 // never has to re-read a report, switch to chat, and re-run a batch.
 import { NextRequest, NextResponse } from "next/server";
-import { getOpenEscalations, resolveEscalation } from "@/lib/policy-ledger";
-import { executeProposedAction } from "@/lib/accounting-execute";
+import {
+  getOpenEscalations,
+  resolveEscalation,
+  dismissEscalation,
+} from "@/lib/policy-ledger";
+import { executeProposedAction, sweepAnsweredQuestions } from "@/lib/accounting-execute";
 import { getCurrentStaff } from "@/lib/os-identity";
 
 export const dynamic = "force-dynamic";
@@ -20,13 +24,37 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
-  const { escalationId, approve, answer } = body as {
+  const { escalationId, approve, answer, action } = body as {
     escalationId?: string;
     approve?: boolean;
     answer?: string;
+    action?: "sweep" | "dismiss";
   };
+
+  // Penny re-reads the whole queue against standing policy and closes what's
+  // already been decided — the fix for questions piling up after the answer
+  // was already given.
+  if (action === "sweep") {
+    const result = await sweepAnsweredQuestions();
+    return NextResponse.json({ ok: true, ...result, open: await getOpenEscalations() });
+  }
+
   if (!escalationId) {
     return NextResponse.json({ error: "escalationId is required" }, { status: 400 });
+  }
+
+  if (action === "dismiss") {
+    const staffNow = await getCurrentStaff().catch(() => null);
+    const ok = await dismissEscalation(
+      escalationId,
+      "Dismissed by Chris — no rule needed",
+      staffNow?.name ?? "Chris Cook"
+    );
+    return NextResponse.json({
+      ok,
+      dismissed: ok,
+      open: await getOpenEscalations(),
+    });
   }
 
   const open = await getOpenEscalations();
