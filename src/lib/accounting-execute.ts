@@ -50,7 +50,12 @@ import {
 import { getActions, logActions, makeAction, markActionReversed } from "./action-log";
 import { recordProgress } from "./progress";
 import { WORKER_EXPERTISE } from "./accounting-knowledge";
-import { findTransfer, renderRecurringPatterns } from "./etransfer-register";
+import {
+  findTransfer,
+  renderRecurringPatterns,
+  TRANSFER_REGISTER,
+  type TransferEntry,
+} from "./etransfer-register";
 import {
   isInboxConfigured,
   fetchInteracNotifications,
@@ -1157,15 +1162,53 @@ async function applyHeldToInvoice(txnId: string, invoiceNumber: string): Promise
 // ---------------------------------------------------------------------------
 const SWEEP_SYSTEM = `You are Penny Quill, Staff Accountant at Tilt Hockey Inc., reviewing your own queue of open questions for Chris.
 
-For each question, decide ONE thing: does an ESTABLISHED POLICY below already answer it?
-- CLOSE it only when a policy genuinely covers this exact situation (same payee/pattern/treatment) so that you could act without asking Chris anything further. Cite the policy in one short clause.
-- KEEP it open when the policy doesn't actually settle it — a missing payee name, an unmatched invoice, an amount no rule covers, or a judgment Chris still has to make. When in doubt, KEEP IT OPEN. Wrongly closing a question loses a real decision; leaving one open costs Chris ten seconds.
+Many of these were raised BEFORE you had the bank's e-Transfer register. The register names the counterparty and carries their memo for transfers the bank feed stripped — so questions that only ask "who is this payee?" are now ANSWERED and must be closed.
+
+For each question decide: does the REGISTER EVIDENCE and/or an ESTABLISHED POLICY below already answer it?
+- CLOSE it when the register identifies the counterparty AND either a policy covers the treatment or the memo makes the treatment unambiguous (e.g. "Fuel - Feb.28th" to Jeremy Elliott, a named invoice to a known vendor). You will handle the actual posting in your next categorization batch — closing here just means Chris no longer needs to answer it.
+- CLOSE it when a standing policy plainly settles it, register or not.
+- KEEP it open only when a real decision is still missing: the register doesn't name it, the treatment is a genuine judgment call (owner draw vs expense, a materiality call), or the money's purpose is still unknown. When in doubt, KEEP IT OPEN.
+
+State the answer you're closing on in a few words (the payee + treatment, or the policy).
 
 Return ONLY a fenced json object:
 \`\`\`json
-{ "close": [ { "id": "esc-...", "policy": "the rule that answers it, in a few words" } ] }
+{ "close": [ { "id": "esc-...", "policy": "what answers it, in a few words" } ] }
 \`\`\`
 Ids must come from the list given. Omit anything you're keeping open.`;
+
+/**
+ * Register evidence for a question raised before the register existed. These
+ * older questions reference amounts/dates in prose rather than carrying a
+ * transaction id, so pull the dollar figures out of the text and look each up.
+ */
+function registerEvidenceFor(text: string): string[] {
+  const amounts = [...text.matchAll(/\$([0-9][0-9,]*(?:\.[0-9]{1,2})?)/g)]
+    .map((m) => Number(m[1].replace(/,/g, "")))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  const dates = [...text.matchAll(/(20\d{2}-\d{2}-\d{2})/g)].map((m) => m[1]);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const amt of amounts) {
+    let hits: TransferEntry[] = [];
+    for (const d of dates) {
+      const hit = findTransfer(amt, d, 6);
+      if (hit) hits.push(hit);
+    }
+    if (hits.length === 0) {
+      hits = TRANSFER_REGISTER.filter((e) => Math.abs(e.amount - amt) < 0.005).slice(0, 3);
+    }
+    for (const h of hits) {
+      const key = `${h.date}|${h.amount}|${h.counterparty}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(
+        `$${h.amount.toFixed(2)} on ${h.date} = ${h.direction === "in" ? "from" : "to"} "${h.counterparty}"${h.memo ? ` — memo: "${h.memo}"` : " — no memo"}`
+      );
+    }
+  }
+  return out.slice(0, 10);
+}
 
 export async function sweepAnsweredQuestions(): Promise<{
   closed: number;
@@ -1197,10 +1240,13 @@ export async function sweepAnsweredQuestions(): Promise<{
   for (let i = 0; i < open.length; i += CHUNK) {
     const batch = open.slice(i, i + CHUNK);
     const questionBlock = batch
-      .map(
-        (e) =>
-          `- id=${e.id} | ${e.dollarAmount != null ? `$${e.dollarAmount.toFixed(2)} | ` : ""}${e.question.slice(0, 260)}`
-      )
+      .map((e) => {
+        const head = `- id=${e.id} | ${e.dollarAmount != null ? `$${e.dollarAmount.toFixed(2)} | ` : ""}${e.question.slice(0, 260)}`;
+        const evidence = registerEvidenceFor(`${e.question} ${e.recommendation ?? ""}`);
+        return evidence.length > 0
+          ? `${head}\n    REGISTER EVIDENCE: ${evidence.join(" ; ")}`
+          : head;
+      })
       .join("\n");
     try {
       const res = await callClaude({
