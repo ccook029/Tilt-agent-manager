@@ -211,15 +211,31 @@ export async function addEscalations(
   }>
 ): Promise<Escalation[]> {
   const existing = await getEscalations();
-  const openQuestions = new Set(
-    existing.filter((e) => e.status === "open").map((e) => e.question.trim().toLowerCase())
+  const open = existing.filter((e) => e.status === "open");
+  // Fuzzy key: punctuation/whitespace/number-formatting differences shouldn't
+  // create a "new" question. Without this, every re-run re-raised near-identical
+  // questions and the queue ballooned.
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160);
+  const openQuestions = new Set(open.map((e) => norm(e.question)));
+  // One open question per bank line, ever — the strongest dedup we have.
+  const openTxnIds = new Set(
+    open.map((e) => e.context?.transactionId).filter((id): id is string => Boolean(id))
   );
 
   const created: Escalation[] = [];
   for (const item of items) {
-    const key = item.question.trim().toLowerCase();
+    const key = norm(item.question);
     if (openQuestions.has(key)) continue; // already pending — don't ask twice
+    const txnId = item.context?.transactionId;
+    if (txnId && openTxnIds.has(txnId)) continue; // this line is already queued
     openQuestions.add(key);
+    if (txnId) openTxnIds.add(txnId);
     const esc: Escalation = {
       id: `esc-${Date.now()}-${created.length + 1}`,
       question: item.question.trim(),
@@ -278,4 +294,53 @@ export async function resolveEscalation(
     context: escalations[idx].reason,
     decidedBy: answeredBy,
   });
+}
+
+/**
+ * Close a question WITHOUT distilling a policy — for ones that are noise, a
+ * duplicate of another, or already handled elsewhere. Keeps the queue honest:
+ * "resolved" shouldn't require inventing a rule.
+ */
+export async function dismissEscalation(
+  escalationId: string,
+  note = "Dismissed — no longer needs an answer",
+  by = "Chris Cook"
+): Promise<boolean> {
+  const escalations = await getEscalations();
+  const idx = escalations.findIndex((e) => e.id === escalationId);
+  if (idx === -1) return false;
+  escalations[idx] = {
+    ...escalations[idx],
+    status: "resolved",
+    resolvedAt: new Date().toISOString(),
+    answer: note,
+    answeredBy: by,
+  };
+  await kv.set(ESCALATION_KEY, escalations);
+  return true;
+}
+
+/** Close several questions at once (used by the "already answered" sweep). */
+export async function closeEscalations(
+  items: Array<{ id: string; note: string }>,
+  by = "Penny Quill"
+): Promise<number> {
+  if (items.length === 0) return 0;
+  const escalations = await getEscalations();
+  const byId = new Map(items.map((i) => [i.id, i.note]));
+  let closed = 0;
+  for (let i = 0; i < escalations.length; i++) {
+    const note = byId.get(escalations[i].id);
+    if (!note || escalations[i].status !== "open") continue;
+    escalations[i] = {
+      ...escalations[i],
+      status: "resolved",
+      resolvedAt: new Date().toISOString(),
+      answer: note,
+      answeredBy: by,
+    };
+    closed++;
+  }
+  if (closed > 0) await kv.set(ESCALATION_KEY, escalations);
+  return closed;
 }

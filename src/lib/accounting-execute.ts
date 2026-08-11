@@ -41,6 +41,9 @@ import {
 import {
   renderPolicyBlock,
   addEscalations,
+  getOpenEscalations,
+  getPolicies,
+  closeEscalations,
   type Escalation,
   type EscalationContext,
 } from "./policy-ledger";
@@ -1128,4 +1131,79 @@ async function applyHeldToInvoice(txnId: string, invoiceNumber: string): Promise
     }),
   ]);
   return summary;
+}
+
+// ---------------------------------------------------------------------------
+// Sweep: close open questions that STANDING POLICY already answers.
+//
+// Questions used to pile up even after Chris had decided the rule — nothing
+// ever re-checked the queue against the ledger, so answered items sat "open"
+// forever. This is Penny doing that pass herself.
+// ---------------------------------------------------------------------------
+const SWEEP_SYSTEM = `You are Penny Quill, Staff Accountant at Tilt Hockey Inc., reviewing your own queue of open questions for Chris.
+
+For each question, decide ONE thing: does an ESTABLISHED POLICY below already answer it?
+- CLOSE it only when a policy genuinely covers this exact situation (same payee/pattern/treatment) so that you could act without asking Chris anything further. Cite the policy in one short clause.
+- KEEP it open when the policy doesn't actually settle it — a missing payee name, an unmatched invoice, an amount no rule covers, or a judgment Chris still has to make. When in doubt, KEEP IT OPEN. Wrongly closing a question loses a real decision; leaving one open costs Chris ten seconds.
+
+Return ONLY a fenced json object:
+\`\`\`json
+{ "close": [ { "id": "esc-...", "policy": "the rule that answers it, in a few words" } ] }
+\`\`\`
+Ids must come from the list given. Omit anything you're keeping open.`;
+
+export async function sweepAnsweredQuestions(): Promise<{
+  closed: number;
+  remaining: number;
+  details: string[];
+}> {
+  const [open, policies] = await Promise.all([getOpenEscalations(), getPolicies()]);
+  if (open.length === 0) return { closed: 0, remaining: 0, details: [] };
+  if (policies.length === 0) {
+    return { closed: 0, remaining: open.length, details: ["No standing policies yet — nothing to close against."] };
+  }
+
+  const questionBlock = open
+    .map(
+      (e) =>
+        `- id=${e.id} | ${e.dollarAmount != null ? `$${e.dollarAmount.toFixed(2)} | ` : ""}${e.question.slice(0, 300)}`
+    )
+    .join("\n");
+
+  const res = await callClaude({
+    systemPrompt: SWEEP_SYSTEM,
+    userMessage: [
+      await renderPolicyBlock(),
+      "",
+      `## Open questions (${open.length})`,
+      questionBlock,
+    ].join("\n"),
+    model: CLAUDE_MODEL,
+    maxTokens: 8000,
+    temperature: 0,
+  });
+
+  const { data } = parseResultObject(res.text) as unknown as {
+    data: { close?: Array<Record<string, unknown>> };
+  };
+  const toClose = Array.isArray(data.close) ? data.close : [];
+  const validIds = new Set(open.map((e) => e.id));
+  const items = toClose
+    .map((c) => ({
+      id: String(c.id ?? ""),
+      note: `Already covered by standing policy: ${String(c.policy ?? "an existing rule")}`,
+    }))
+    .filter((c) => validIds.has(c.id));
+
+  const closed = await closeEscalations(items, "Penny Quill");
+  const byId = new Map(open.map((e) => [e.id, e]));
+  return {
+    closed,
+    remaining: open.length - closed,
+    details: items.map((i) => {
+      const q = byId.get(i.id);
+      const amt = q?.dollarAmount != null ? `$${q.dollarAmount.toFixed(2)} — ` : "";
+      return `${amt}${(q?.question ?? "").slice(0, 90)} → ${i.note}`;
+    }),
+  };
 }

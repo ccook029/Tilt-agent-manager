@@ -51,6 +51,7 @@ export default function AccountingQuestions({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [sweepNote, setSweepNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -66,6 +67,49 @@ export default function AccountingQuestions({
   useEffect(() => {
     load();
   }, [load]);
+
+  const sweep = async () => {
+    setBusy("sweep");
+    setSweepNote(null);
+    try {
+      const res = await fetch("/api/accounting/questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sweep" }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSweepNote(d.error ?? "Couldn't run the check.");
+        return;
+      }
+      setQuestions(d.open ?? []);
+      setSweepNote(
+        d.closed > 0
+          ? `Closed ${d.closed} question${d.closed === 1 ? "" : "s"} already covered by your standing policies — ${d.remaining} still need you.`
+          : "Nothing to close — every open question still needs a real decision."
+      );
+    } catch {
+      setSweepNote("Network error — try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const dismiss = async (q: Question) => {
+    setBusy(q.id);
+    try {
+      await fetch("/api/accounting/questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ escalationId: q.id, action: "dismiss" }),
+      });
+      setQuestions((qs) => qs.filter((x) => x.id !== q.id));
+    } catch {
+      setErrors((e) => ({ ...e, [q.id]: "Couldn't dismiss that." }));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const submit = async (q: Question, approve: boolean) => {
     const answer = drafts[q.id]?.trim();
@@ -115,13 +159,27 @@ export default function AccountingQuestions({
             Answer here and she acts on it — no need to re-run anything.
           </p>
         </div>
-        <button
-          onClick={load}
-          className="shrink-0 text-[11px] text-gray-500 transition-colors hover:text-gray-300"
-        >
-          refresh
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {questions.length > 0 && (
+            <button
+              onClick={sweep}
+              disabled={busy === "sweep"}
+              title="Penny re-reads every open question against your standing policies and closes the ones you've already answered."
+              className="rounded-md border border-gray-700 px-2.5 py-1 text-[11px] font-medium text-gray-300 transition-colors hover:border-gray-500 disabled:opacity-50"
+            >
+              {busy === "sweep" ? "Checking…" : "Clear answered"}
+            </button>
+          )}
+          <button
+            onClick={load}
+            className="text-[11px] text-gray-500 transition-colors hover:text-gray-300"
+          >
+            refresh
+          </button>
+        </div>
       </div>
+
+      {sweepNote && <p className="mb-2 text-xs text-emerald-400/90">{sweepNote}</p>}
 
       {doneList.length > 0 && (
         <ul className="mb-3 space-y-1">
@@ -186,6 +244,14 @@ export default function AccountingQuestions({
                     className="text-[11px] text-gray-500 transition-colors hover:text-gray-300"
                   >
                     {isOpen ? "cancel" : canAct ? "No — something else ▾" : "Answer ▾"}
+                  </button>
+                  <button
+                    onClick={() => dismiss(q)}
+                    disabled={busy === q.id}
+                    title="Close this without recording a rule (noise, duplicate, or handled elsewhere)"
+                    className="ml-auto text-[11px] text-gray-600 transition-colors hover:text-gray-400 disabled:opacity-50"
+                  >
+                    dismiss
                   </button>
                 </div>
 
