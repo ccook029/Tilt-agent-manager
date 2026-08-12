@@ -31,6 +31,7 @@ import {
 import {
   addEscalations,
   renderPolicyBlock,
+  resolveEscalation,
 } from "./ledger";
 import {
   getWorkOrder,
@@ -505,6 +506,21 @@ export async function shipWorkOrder(
 ): Promise<WorkOrder> {
   const order = await getWorkOrder(id);
   if (!order) throw new Error(`Work order not found: ${id}`);
+
+  // Approving an escalated order IS the answer to its question, so close the
+  // open questions too — otherwise they sit in the decision queue forever,
+  // already settled, and the owner has to dismiss each one by hand.
+  if (order.status === "escalated" && order.escalationIds.length > 0) {
+    const answer = notes?.trim()
+      ? `Approved by ${shippedBy}: ${notes.trim()}`
+      : `Approved by ${shippedBy} — go ahead as drafted.`;
+    for (const escalationId of order.escalationIds) {
+      await resolveEscalation(escalationId, answer, shippedBy).catch((err) =>
+        console.error(`[ship] couldn't resolve escalation ${escalationId}:`, err)
+      );
+    }
+  }
+
   const shipNote = await executeShip(order);
   const updated = await updateWorkOrder(id, {
     status: "shipped",

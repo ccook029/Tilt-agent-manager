@@ -232,8 +232,10 @@ export default function ReviewPage() {
                 Escalated work orders — {escalatedOrders.length}
               </h2>
               <p className="text-xs text-gray-600">
-                These are blocked on a question above. Answer the question, then
-                send the work order back so the team can finish it.
+                These are blocked on a question only you can answer. If the answer
+                is &ldquo;yes, do it&rdquo;, approve it here — that IS the
+                decision, and for a website change it publishes. Send back
+                instead when the work itself needs to change.
               </p>
               {escalatedOrders.map((o) => (
                 <WorkOrderCard
@@ -242,6 +244,7 @@ export default function ReviewPage() {
                   employees={employees}
                   departments={departments}
                   busy={busy === o.id}
+                  onShip={(n) => act(o.id, "ship", n)}
                   onSendBack={(n) => act(o.id, "send_back", n)}
                   onReject={(n) => act(o.id, "reject", n)}
                 />
