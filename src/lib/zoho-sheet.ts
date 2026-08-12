@@ -200,6 +200,59 @@ const COLUMN_MAP: Record<string, keyof StickRecord> = {
   "graphic color": "decal_color",   // Goalie tab: graphic color → decal_color
 };
 
+/**
+ * Prove whether the current refresh token can WRITE to the sheet, without
+ * writing anything.
+ *
+ * Read and write are separate Zoho scopes (dataAPI.READ / dataAPI.UPDATE), so
+ * a token can list every stick and still be unable to mark one Sold — which is
+ * exactly the state that left sold sticks looking buyable. Reading proves
+ * nothing about writing, so this issues a real records.update aimed at a serial
+ * that cannot exist: the scope is checked before the filter is applied, so a
+ * token with UPDATE comes back "0 rows changed" and one without comes back
+ * 2403. Nothing on the sheet is touched either way.
+ */
+export async function checkSheetWriteScope(): Promise<{
+  canWrite: boolean;
+  detail: string;
+}> {
+  const resourceId = getEnvOrThrow("ZOHO_SHEET_RESOURCE_ID");
+  const token = await getAccessToken();
+
+  const res = await fetch(`${getSheetApiBase()}/${resourceId}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Zoho-oauthtoken ${token}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      method: "worksheet.records.update",
+      worksheet_name: "Player",
+      header_row: "1",
+      // No stick carries this serial, so the update matches zero rows.
+      criteria: '"Serial Number" = "__TILT_SCOPE_PROBE__"',
+      data: JSON.stringify({ Status: "Available" }),
+    }).toString(),
+  });
+
+  const body = await res.text();
+  if (body.includes("2403") || body.includes("OAuth scope is not valid")) {
+    return {
+      canWrite: false,
+      detail:
+        "Zoho rejected the write: the refresh token is missing ZohoSheet.dataAPI.UPDATE. " +
+        "Re-generate the grant code with that scope included — sold sticks cannot be marked until then.",
+    };
+  }
+  if (!res.ok) {
+    return { canWrite: false, detail: `Zoho Sheet write probe failed (${res.status}): ${body.slice(0, 300)}` };
+  }
+  return {
+    canWrite: true,
+    detail: "Write scope confirmed — the token can mark sticks Sold (probe matched 0 rows, nothing changed).",
+  };
+}
+
 function normalizeColumn(col: string): keyof StickRecord | null {
   const lower = col.toLowerCase().trim();
   return COLUMN_MAP[lower] ?? null;
