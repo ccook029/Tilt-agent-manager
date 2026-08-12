@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendErrorNotification } from "@/lib/email";
 import { resumeStalledWorkOrders } from "@/lib/org/resume-stalled";
+import { sweepNovaPrs } from "@/lib/web/auto-merge";
 import { runDailyReport } from "@/lib/pipelines/analytics";
 import { runCompetitorReport } from "@/lib/pipelines/competitors";
 import { runSocialIntelReport } from "@/lib/pipelines/competitor-social";
@@ -159,6 +160,17 @@ export async function GET(request: NextRequest) {
   // "revision" (or never-started in "queued") with nothing to resume it. It
   // would otherwise wait forever, which is how work quietly stops existing.
   const resumed = await resumeStalledWorkOrders();
+
+  // Merge any of Nova's PRs that went eligible after their live merge window
+  // closed (build outlasted the wait, or the tab closed). Gates re-derived per
+  // PR — this can only merge what the policy + green CI would merge anyway.
+  const novaSweep = await sweepNovaPrs().catch((err) => {
+    console.error("[cron] Nova PR sweep failed:", err);
+    return { checked: 0, merged: 0 };
+  });
+  if (novaSweep.merged > 0) {
+    console.log(`[cron] Nova PR sweep merged ${novaSweep.merged} of ${novaSweep.checked}`);
+  }
 
   const tasks = await getScheduledTasks(now);
 

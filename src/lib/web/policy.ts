@@ -114,6 +114,46 @@ function isCatalogueFile(path: string): boolean {
   return /^src\/data\/.+\.ts$/.test(path);
 }
 
+/**
+ * Is this diff the removal of one whole product, and nothing else?
+ *
+ * Deleting a discontinued product necessarily deletes its price lines, which
+ * tripped the money rule and held every removal for a founder — but a removal
+ * can't charge anyone a wrong amount, because there's nothing left to buy.
+ * Chris's call: whole-product removals ship themselves.
+ *
+ * The shape is checked strictly, because "deletions with numbers in them" is
+ * NOT safe in general — deleting a single priceModifiers line while leaving
+ * its option in place silently changes what the customer pays. So all three
+ * must hold:
+ *   1. the diff ADDS nothing (a changed number is a delete+add pair);
+ *   2. the deletions are ONE contiguous block (a product is one object;
+ *      a second deletion elsewhere is a second change);
+ *   3. that block contains a product identity line (id: "…"), i.e. an entire
+ *      catalogue entry left, not lines plucked from inside one.
+ * Anything that fails a condition falls back to the money rule and holds.
+ */
+export function isWholeProductRemoval(patch: string): boolean {
+  let deletionRuns = 0;
+  let inRun = false;
+  let sawId = false;
+
+  for (const line of patch.split("\n")) {
+    if (/^(\+\+\+|---)/.test(line)) continue; // file headers, not changes
+    if (line.startsWith("+")) return false; // condition 1
+    if (line.startsWith("-")) {
+      if (!inRun) {
+        inRun = true;
+        deletionRuns++;
+      }
+      if (/^\s*id:\s*["']/.test(line.slice(1))) sawId = true;
+    } else {
+      inRun = false; // context line or hunk header ends the run
+    }
+  }
+  return deletionRuns === 1 && sawId; // conditions 2 and 3
+}
+
 export interface ChangeVerdict {
   autoMergeable: boolean;
   /** Every file the PR touches, each with its own verdict. */
@@ -170,7 +210,7 @@ export function classifyPr(
         reason: `${path}'s diff couldn't be read, so it wasn't cleared for auto-merge`,
       };
     }
-    if (touchesMoney(file.patch)) {
+    if (touchesMoney(file.patch) && !isWholeProductRemoval(file.patch)) {
       return {
         autoMergeable: false,
         files: byPath.files,
