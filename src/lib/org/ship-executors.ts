@@ -12,7 +12,7 @@
 //
 // Web & Digital works the same way with a ```webchange block: Nova drafts the
 // exact edit, it goes through her review, and Chris's approve is what actually
-// opens the pull request and — for content and merchandising, never prices —
+// opens the pull request and — for catalogue, content and merchandising —
 // merges it to the live store. Before this, approving one of her work orders
 // did nothing at all: the block was inert text outside the chat UI, so "assign
 // it to Nova" produced a document while "ask Nova in chat" produced a change.

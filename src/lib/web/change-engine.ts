@@ -18,7 +18,7 @@ import {
   websiteRepo,
   websiteRepoConfigured,
 } from "./github";
-import { classifyPr } from "./policy";
+import { changesPrices, classifyPr } from "./policy";
 
 export interface WebChangeResult {
   ok: boolean;
@@ -221,12 +221,13 @@ Return ONLY JSON:
       )
       .join("\n");
     const verdict = classifyPr([{ filename: path, patch: pseudoPatch }]);
+    const priced = changesPrices([{ filename: path, patch: pseudoPatch }]);
     const pr = await openPr(
       input.title,
       branch,
       `${parsed?.summary ?? input.request}\n\n---\nRequested via the Website Manager (Nova) in Tilt HQ:\n\n> ${input.request}\n\nFile: \`${path}\` in \`${websiteRepo()}\`.\n\n${
         verdict.autoMergeable
-          ? "Content/merchandising change — Nova merges this herself once CI is green."
+          ? `Nova merges this herself once CI is green.${priced ? " **Includes a price change** — shipped on founder approval, labelled in the HQ signal." : ""}`
           : `Held for review — ${verdict.reason}.`
       }`
     );
