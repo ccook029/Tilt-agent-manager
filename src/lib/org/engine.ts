@@ -17,7 +17,7 @@
 // the owner's queue, same as today's solo agents, but now as reviewable
 // work orders instead of fire-and-forget emails.
 // ---------------------------------------------------------------------------
-import { callClaude } from "../anthropic";
+import { callClaudeToCompletion } from "../anthropic";
 import { CLAUDE_MODEL, CLAUDE_MANAGER_MODEL } from "../models";
 import { renderOrgKnowledge } from "../org-knowledge";
 import { renderCrossAgentSignals } from "../cross-agent";
@@ -324,7 +324,9 @@ export async function runWorkOrder(id: string): Promise<RunWorkOrderResult> {
       // ---- Worker pass ----
       order = (await updateWorkOrder(order.id, { status: "in_progress" }))!;
       const lastReview = order.reviews[order.reviews.length - 1];
-      const workerRes = await callClaude({
+      // ToCompletion: a deliverable that outgrows the cap continues instead of
+      // stopping mid-sentence and flowing downstream looking finished.
+      const workerRes = await callClaudeToCompletion({
         systemPrompt: workerSystem,
         userMessage: buildWorkerUserMessage(
           order,
@@ -376,7 +378,7 @@ export async function runWorkOrder(id: string): Promise<RunWorkOrderResult> {
         rounds: [...order.rounds, round],
         status: "in_review",
       }))!;
-      const reviewRes = await callClaude({
+      const reviewRes = await callClaudeToCompletion({
         systemPrompt: await buildManagerSystemPrompt(reviewer, department),
         userMessage: buildManagerUserMessage(
           order,
@@ -386,6 +388,8 @@ export async function runWorkOrder(id: string): Promise<RunWorkOrderResult> {
           roundNumber
         ),
         model: reviewer.model ?? CLAUDE_MANAGER_MODEL,
+        // ToCompletion matters doubly here: a truncated review can lose its
+        // fenced verdict block, and an unparseable verdict reads as a bug.
         maxTokens: 2048,
         temperature: 0.2,
       });

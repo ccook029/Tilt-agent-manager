@@ -169,6 +169,64 @@ export async function callClaude(
 }
 
 /**
+ * callClaude, but immune to the max_tokens cliff.
+ *
+ * Every deliverable in the org engine is generated under a token cap, and a
+ * report that outgrows its cap doesn't fail — it just STOPS, mid-sentence,
+ * and flows downstream looking finished. Boss reviews were finding drafts
+ * ending in "2. If a clean no-name cut ex—" and having to reconstruct the
+ * tail by hand. Worse, a truncated fenced block (a dispatch plan, a decision
+ * request) silently parses as empty, so plans dispatched zero pieces with no
+ * error anywhere.
+ *
+ * The stop reason has been on ClaudeResponse since the empty-reply fix —
+ * nothing read it. This reads it: while generation stopped at the cap, feed
+ * the partial back and ask for the rest, stitching the pieces. The cap
+ * becomes a page size instead of a cliff.
+ *
+ * If it STILL isn't done after `maxContinuations`, the truncation is made
+ * visible with a marker instead of masquerading as a finished deliverable —
+ * a reviewer can see it, name it, and send it back.
+ */
+export async function callClaudeToCompletion(
+  opts: CallClaudeOptions,
+  maxContinuations = 2
+): Promise<ClaudeResponse> {
+  let res = await callClaude(opts);
+  let text = res.text;
+  let inputTokens = res.inputTokens;
+  let outputTokens = res.outputTokens;
+
+  let continuations = 0;
+  while (res.stopReason === "max_tokens" && continuations < maxContinuations) {
+    continuations++;
+    res = await callClaude({
+      ...opts,
+      userMessage: `${opts.userMessage}
+
+---
+You already wrote the following, but generation was CUT OFF by a length limit before you finished. Continue from EXACTLY where it stops: begin with the very next word (finish the interrupted word or sentence if there is one), repeat nothing you already wrote, and add no preamble and no commentary about continuing. Output only the remainder.
+
+<already-written>
+${text}
+</already-written>`,
+    });
+    text += res.text;
+    inputTokens += res.inputTokens;
+    outputTokens += res.outputTokens;
+  }
+
+  if (res.stopReason === "max_tokens") {
+    console.warn(
+      `[callClaudeToCompletion] still truncated after ${maxContinuations} continuations (${outputTokens} output tokens)`
+    );
+    text += "\n\n[Cut off at the length limit — this deliverable is incomplete past this point.]";
+  }
+
+  return { ...res, text, inputTokens, outputTokens };
+}
+
+/**
  * Streaming variant — emits text deltas as they arrive (for real-time voice).
  * Plain text only (no media/MCP/web-search); those callers use callClaude.
  * `onText` fires per token chunk; the resolved value is the full message +
