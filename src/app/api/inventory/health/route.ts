@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 import { NextResponse } from "next/server";
 import { getAccessToken } from "@/lib/zoho";
-import { fetchAllStickRecords, fetchSheetRows } from "@/lib/zoho-sheet";
+import { fetchAllStickRecords, fetchSheetRows, checkSheetWriteScope } from "@/lib/zoho-sheet";
 import { fetchAllItems } from "@/lib/zoho";
 import { compareSheetToInventory } from "@/lib/zoho-sync";
 
@@ -132,6 +132,22 @@ export async function GET() {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     checks.sheet = { status: "error", message: msg, durationMs: Date.now() - sheetStart };
+  }
+
+  // 3b. Sheet WRITE scope. Reading the sheet proves nothing about writing to
+  // it — they're separate Zoho scopes, and a read-only token is what leaves
+  // sold sticks looking buyable. Probes without changing a row.
+  const writeStart = Date.now();
+  try {
+    const probe = await checkSheetWriteScope();
+    checks.sheetWrite = {
+      status: probe.canWrite ? "ok" : "error",
+      message: probe.detail,
+      durationMs: Date.now() - writeStart,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    checks.sheetWrite = { status: "error", message: msg, durationMs: Date.now() - writeStart };
   }
 
   // 4. Sync comparison debug — run the actual comparison logic
