@@ -119,7 +119,7 @@ const inventoryFeed = (): WiringFeed => ({
 const sheetFeed = (): WiringFeed => ({
   id: "master-sheet",
   label: "Master Zoho Sheet",
-  description: "The stick-count source of truth (per-serial rows, custom tabs included).",
+  description: "The on-hand stick inventory (one row per serial). Custom sticks not yet built live on the admin factory queue, not here.",
   kind: "data",
   check: async () => textProof(await fetchSheetSnapshot()),
 });

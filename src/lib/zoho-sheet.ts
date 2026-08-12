@@ -93,11 +93,11 @@ function getSheetApiBase(): string {
   return "https://sheet.zoho.com/api/v2";
 }
 
-/** Tabs to read for inventory counts. */
+/** Tabs to read for inventory counts. The workbook's retired "Custom Player /
+ *  Goalie Sticks" tabs are deliberately not read: this sheet is the inventory
+ *  of actual on-hand sticks, and custom sticks still to be built live on the
+ *  admin factory queue (see lib/custom-queue.ts). */
 const INVENTORY_TABS = ["Player", "Goalie"];
-
-/** Tabs that hold custom/special-order sticks. */
-const CUSTOM_TABS = ["Custom Player Sticks", "Custom Goalie Sticks"];
 
 /**
  * Fetch all rows from a specific worksheet tab.
@@ -208,16 +208,11 @@ function normalizeColumn(col: string): keyof StickRecord | null {
 // ---- Parse sheet rows into stick records ----------------------------------
 
 /**
- * Parse raw sheet rows into typed StickRecord objects.
- * Inventory tabs skip rows without a serial number (blank/header rows);
- * custom-order tabs have no serial column, so they pass requireSerial=false
- * and skip only rows with neither a level nor a size.
+ * Parse raw sheet rows into typed StickRecord objects. Rows without a serial
+ * number are blank or header rows and get skipped — every real stick on an
+ * inventory tab carries one.
  */
-function parseStickRecords(
-  rows: SheetRow[],
-  tab: string,
-  requireSerial = true
-): StickRecord[] {
+function parseStickRecords(rows: SheetRow[], tab: string): StickRecord[] {
   const sticks: StickRecord[] = [];
 
   for (const row of rows) {
@@ -252,13 +247,8 @@ function parseStickRecords(
       }
     }
 
-    if (requireSerial) {
-      // Skip rows without a serial number — blank or header rows.
-      if (!stick.serial_number) continue;
-    } else if (!stick.level && !stick.size) {
-      // No serial column on this tab — skip only genuinely blank rows.
-      continue;
-    }
+    // Skip rows without a serial number — blank or header rows.
+    if (!stick.serial_number) continue;
 
     sticks.push(stick);
   }
@@ -283,29 +273,6 @@ export async function fetchAllStickRecords(): Promise<StickRecord[]> {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[zoho-sheet] Failed to read tab "${tab}":`, msg);
       throw new Error(`Failed to read "${tab}" tab: ${msg}`);
-    }
-  }
-
-  return allSticks;
-}
-
-/**
- * Fetch and parse stick records from the Custom Player Sticks and Custom Goalie Sticks tabs.
- * These represent custom/special orders that need to be included in factory orders.
- */
-export async function fetchCustomStickRecords(): Promise<StickRecord[]> {
-  const allSticks: StickRecord[] = [];
-
-  for (const tab of CUSTOM_TABS) {
-    try {
-      const rows = await fetchSheetRows(tab);
-      // Custom tabs have no Serial column — don't require one.
-      const sticks = parseStickRecords(rows, tab, false);
-      allSticks.push(...sticks);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      // Custom tabs may not exist yet — warn but don't throw
-      console.warn(`[zoho-sheet] Could not read tab "${tab}":`, msg);
     }
   }
 
