@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 import { callClaudeToCompletion } from "../anthropic";
 import { CLAUDE_MANAGER_MODEL } from "../models";
+import { getEmployeeById } from "../org/directory";
 import {
   getFile,
   getBaseSha,
@@ -49,12 +50,16 @@ If the change doesn't belong in this file or can't be done safely, return no edi
 // a sentence they just cut a clause out of.
 const POLISH_SYSTEM = `You are proofreading the Tilt Hockey storefront file AFTER a change was applied. Check ONLY the parts affected by that change: does every affected sentence, list, and description still read as correct, natural English for a customer? Is anything left referring to something the change removed? Ignore everything unrelated to the change. Reply in the same JSON find/replace format, with the same rules (each "find" a VERBATIM, UNIQUE substring of the file as given; smallest correct fix; never touch unrelated code). If it all reads clean, return { "edits": [], "summary": "reads clean" }.`;
 
-/** Model for storefront edits and the read-back pass. These words go in front
- * of customers, so the strongest tier is justified — override with
- * WEB_EDIT_MODEL (e.g. "claude-fable-5") in Vercel; defaults to the manager
- * model so an unset env changes nothing. */
+/** Model for storefront edits and the read-back pass. This IS Nova working, so
+ * it follows her directory entry (claude-opus-5 — one line in directory.ts
+ * changes her brain everywhere). WEB_EDIT_MODEL in Vercel still wins as an
+ * emergency override; the manager model is the last-resort fallback. */
 function webEditModel(): string {
-  return process.env.WEB_EDIT_MODEL || CLAUDE_MANAGER_MODEL;
+  return (
+    process.env.WEB_EDIT_MODEL ||
+    getEmployeeById("web-manager")?.model ||
+    CLAUDE_MANAGER_MODEL
+  );
 }
 
 function editPrompt(path: string, content: string, request: string): string {

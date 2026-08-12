@@ -482,6 +482,10 @@ const employees: Employee[] = [
     name: "Nova Vale",
     title: "Website Manager",
     departmentId: "web",
+    // Nova runs on Opus 5 everywhere — drafting, chat, and the storefront edit
+    // engine all read this entry (Chris's call: she owns customer-facing words,
+    // so she gets the strongest mainline tier). One line to change her brain.
+    model: "claude-opus-5",
     role: "manager",
     reportsTo: "chief-of-staff", // Nova rolls up to the Chief of Staff
     skills: ["site-content", "merchandising", "product-copy", "web-change-request"],

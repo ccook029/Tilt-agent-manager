@@ -31,6 +31,6 @@ export function samplingParams(
   temperature: number | undefined
 ): { temperature?: number } {
   if (temperature === undefined) return {};
-  const rejectsSampling = /opus-4-[78]|sonnet-5|fable|mythos/.test(model);
+  const rejectsSampling = /opus-4-[78]|opus-5|sonnet-5|fable|mythos/.test(model);
   return rejectsSampling ? {} : { temperature };
 }

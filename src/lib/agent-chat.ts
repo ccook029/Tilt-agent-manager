@@ -204,7 +204,13 @@ ${historyBlock}
 ## Their message
 ${message}`;
 
-  const model = config?.model ?? (isManager ? CLAUDE_MANAGER_MODEL : CLAUDE_MODEL);
+  // Chat honors the same per-employee model override the engine does — an
+  // employee pinned to a tier in the directory (Nova on Opus 5) chats on it
+  // too, instead of silently dropping to the worker default.
+  const model =
+    config?.model ??
+    employee?.model ??
+    (isManager ? CLAUDE_MANAGER_MODEL : CLAUDE_MODEL);
   let res = await callClaude({
     systemPrompt,
     userMessage,
