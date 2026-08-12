@@ -18,7 +18,11 @@ const ALLOWED: Record<WorkOrderStatus, WorkOrderStatus[]> = {
   in_review: ["revision", "approved", "escalated", "error"],
   revision: ["in_progress", "rejected"],
   approved: ["shipped", "revision", "rejected"],
-  escalated: ["revision", "approved", "rejected"],
+  // An escalation asks the owner a question. "Approve it" is a legitimate
+  // ANSWER, so escalated work can ship directly — previously the only ways out
+  // were send-back or reject, and sending back re-ran the whole worker → boss
+  // loop, which could simply escalate again. That's a loop with no exit.
+  escalated: ["revision", "approved", "rejected", "shipped"],
   shipped: [],
   rejected: [],
   error: ["in_progress", "rejected"],
