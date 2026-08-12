@@ -27,8 +27,7 @@ and the org-wide signals feed. Deployed on Vercel.
   is `https://www.tilthockey.com`); tiltweb → hub: `TILT_HQ_URL` on tiltweb.
 - **Gotcha:** `fetch()` strips the Authorization header on cross-origin
   redirects (apex → www). Use the manual-redirect pattern in
-  `src/lib/order-builder/data.ts` (`fetchWithKey`) for any authed call to
-  tiltweb.
+  `src/lib/custom-queue.ts` (`fetchWithKey`) for any authed call to tiltweb.
 - tiltweb feeds the hub: pending custom orders
   (`GET {tiltweb}/api/modules/custom-orders`), signals
   (`POST /api/signals` here), staff-tools calls. Deploy order matters when a
@@ -44,8 +43,13 @@ and the org-wide signals feed. Deployed on Vercel.
   `src/lib/order-builder/allocator.ts`; live dataset (Zoho sheet + tiltweb
   custom queue) in `data.ts`; explainability in `logic.ts` — keep
   `ALLOCATOR_METHODOLOGY` in sync with allocator changes.
-- Zoho stick sheet parsing: custom tabs have no serial column — pass
-  `requireSerial: false` or rows silently drop to zero.
+- **Two sources, one rule:** the Zoho stick sheet is the inventory of actual
+  on-hand sticks (Player + Goalie tabs, one row per serial). Custom sticks
+  not yet built live on the tiltweb admin factory queue, read via
+  `src/lib/custom-queue.ts` — both the Order Builder and Stockton's
+  `factory-reorder.ts` get committed custom demand from there. The workbook's
+  old "Custom Player/Goalie Sticks" tabs are retired (Aug 2026); don't add
+  readers or writers for them.
 - Announcement graphics: partner graphic is 100% code-composited
   (`src/lib/social/announce/compose.ts`, sharp); ambassador graphic is a
   Gemini image steered by the brief in `generate.ts` with code-stamped marks.
