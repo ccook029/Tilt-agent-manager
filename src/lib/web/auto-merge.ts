@@ -8,8 +8,9 @@
 // typed and voice chats drifted.
 //
 // Two gates, both required, both re-derived from GitHub every call:
-//   1. every file the PR touches is content/merchandising, and no diff in a
-//      catalogue file moves a number (see ./policy)
+//   1. every file the PR touches is content/merchandising/catalogue (path
+//      rules in ./policy — the diff-level price rule is retired; a merged
+//      price change is labelled in the signal instead of held)
 //   2. CI on the PR head is green — "nothing reported yet" counts as not-ready
 // ---------------------------------------------------------------------------
 import {
@@ -21,7 +22,7 @@ import {
   websiteRepo,
   websiteRepoConfigured,
 } from "./github";
-import { classifyPr } from "./policy";
+import { changesPrices, classifyPr } from "./policy";
 import { postSignal } from "../signals";
 
 export type MergeOutcome =
@@ -85,13 +86,19 @@ export async function tryAutoMerge(
       };
     }
 
+    // A price change merges like anything else now, but it never merges
+    // quietly — the label is what's left of the retired price rule.
+    const priced = changesPrices(files);
     await postSignal({
       source: "website",
-      headline: `Nova shipped a website change — PR #${prNumber}`,
+      headline: `Nova shipped a website change — PR #${prNumber}${priced ? " — INCLUDES A PRICE CHANGE" : ""}`,
       detail:
         `${title}\n` +
         `Files: ${verdict.files.map((f) => f.path).join(", ")}\n` +
-        `Repo: ${websiteRepo()}. Content/merchandising only, CI green.`,
+        `Repo: ${websiteRepo()}. CI green.` +
+        (priced
+          ? `\nThis change moves a number in the catalogue. You approved it before the exact edit was generated — glance at the diff if that's unexpected: check PR #${prNumber}.`
+          : ""),
     }).catch(() => {});
 
     return { status: "merged", note: "Live on the site." };
