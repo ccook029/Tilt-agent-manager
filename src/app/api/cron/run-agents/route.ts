@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
 import { sendErrorNotification } from "@/lib/email";
+import { resumeStalledWorkOrders } from "@/lib/org/resume-stalled";
 import { runDailyReport } from "@/lib/pipelines/analytics";
 import { runCompetitorReport } from "@/lib/pipelines/competitors";
 import { runSocialIntelReport } from "@/lib/pipelines/competitor-social";
@@ -152,12 +153,20 @@ export async function GET(request: NextRequest) {
 
   const now = new Date();
   const day = now.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+
+  // Before anything scheduled: pick up work that stopped mid-flight. The engine
+  // runs its rounds inside one request, so a timeout leaves an order parked in
+  // "revision" (or never-started in "queued") with nothing to resume it. It
+  // would otherwise wait forever, which is how work quietly stops existing.
+  const resumed = await resumeStalledWorkOrders();
+
   const tasks = await getScheduledTasks(now);
 
   if (tasks.length === 0) {
     return NextResponse.json({
       ok: true,
       message: "No agents scheduled for this run",
+      resumed,
       day,
     });
   }

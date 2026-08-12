@@ -16,6 +16,7 @@ import {
   whoHolds,
 } from "@/lib/org/work-status";
 import type { WorkOrder } from "@/lib/org/types";
+import ResumeButton from "./resume-button";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,21 @@ function Card({ order }: { order: WorkOrder }) {
       </div>
 
       <p className="mt-1.5 text-xs text-gray-400">{holder.what}</p>
+
+      {/* The engine runs its rounds inside one request; if that request died
+          partway the order is parked here with nothing to restart it. These are
+          the two states it can legitimately be picked back up from. */}
+      {(order.status === "revision" || order.status === "queued") && (
+        <div className="mt-2.5">
+          <ResumeButton orderId={order.id} />
+          {stalled && (
+            <p className="mt-1.5 text-[11px] text-amber-400/90">
+              It hasn&apos;t moved in {ageLabel(order.updatedAt)} — the run probably
+              stopped partway. Resume picks it up where it left off.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500">
         <span>{dept?.name ?? order.departmentId}</span>
