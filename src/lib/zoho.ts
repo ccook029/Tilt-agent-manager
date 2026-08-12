@@ -429,6 +429,10 @@ export interface ZohoSalesOrder {
     sku: string;
     quantity: number;
     rate: number;
+    /** Carries the "[S/N: …]" marker when the sale was an on-hand serialized
+     *  stick. Absent on build-to-order customs — that's how the factory
+     *  reorder tells replenishment demand from demand already on the queue. */
+    description?: string;
   }[];
 }
 
