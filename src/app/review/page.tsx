@@ -464,8 +464,9 @@ function WorkOrderCard({
       {onShip && shipsToSite && (
         <p className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200">
           Approving this publishes to tilthockey.com — it opens the pull request
-          and merges it if the change is content only and the build passes.
-          Anything touching a price waits for you on GitHub.
+          and merges it if the change is content-only (or removes a whole
+          product) and the build passes. Changes that alter a price wait for
+          you on GitHub.
         </p>
       )}
 

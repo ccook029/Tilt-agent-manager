@@ -138,6 +138,18 @@ export async function getPr(prNumber: number): Promise<PrState> {
   };
 }
 
+/** Open PRs on Nova's branches — the sweep's worklist. */
+export async function listOpenNovaPrs(): Promise<
+  { number: number; title: string }[]
+> {
+  const data = (await gh(
+    `/repos/${websiteRepo()}/pulls?state=open&per_page=50`
+  )) as { number: number; title: string; head: { ref: string } }[];
+  return data
+    .filter((pr) => pr.head.ref.startsWith("nova/"))
+    .map((pr) => ({ number: pr.number, title: pr.title }));
+}
+
 export type ChecksVerdict = "passing" | "pending" | "failing" | "none";
 
 /**

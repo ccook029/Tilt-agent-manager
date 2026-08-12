@@ -12,7 +12,15 @@
 //      catalogue file moves a number (see ./policy)
 //   2. CI on the PR head is green — "nothing reported yet" counts as not-ready
 // ---------------------------------------------------------------------------
-import { getChecks, getPr, listPrFiles, mergePr, websiteRepo } from "./github";
+import {
+  getChecks,
+  getPr,
+  listOpenNovaPrs,
+  listPrFiles,
+  mergePr,
+  websiteRepo,
+  websiteRepoConfigured,
+} from "./github";
 import { classifyPr } from "./policy";
 import { postSignal } from "../signals";
 
@@ -93,6 +101,30 @@ export async function tryAutoMerge(
       reason: err instanceof Error ? err.message : "Unknown error",
     };
   }
+}
+
+/**
+ * Sweep Nova's open PRs and merge any that now pass the gates.
+ *
+ * The live merge attempt only exists inside one HTTP request or one open
+ * browser tab: if the build outlasts the wait, or the tab closes, the PR is
+ * abandoned — eligible, green, and unmerged forever. The Koozies removal sat
+ * exactly like that. This runs from the cron, so an eligible PR gets merged
+ * even when nobody is watching anymore. Held and failing PRs are left alone;
+ * the gates are re-derived per PR by tryAutoMerge, never assumed.
+ */
+export async function sweepNovaPrs(): Promise<{
+  checked: number;
+  merged: number;
+}> {
+  if (!websiteRepoConfigured()) return { checked: 0, merged: 0 };
+  const open = await listOpenNovaPrs().catch(() => []);
+  let merged = 0;
+  for (const pr of open) {
+    const outcome = await tryAutoMerge(pr.number, pr.title);
+    if (outcome.status === "merged") merged++;
+  }
+  return { checked: open.length, merged };
 }
 
 /**
