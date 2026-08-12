@@ -9,7 +9,7 @@
 //
 // Marketing keeps its richer planning guidance via DISPATCH_INSTRUCTIONS.
 // ---------------------------------------------------------------------------
-import { callClaude } from "../anthropic";
+import { callClaudeToCompletion } from "../anthropic";
 import { CLAUDE_MANAGER_MODEL } from "../models";
 import {
   getDepartmentById,
@@ -181,7 +181,10 @@ ${extra ? `${extra}\n\n` : ""}First, a short paragraph of your direction for the
 ]
 \`\`\``;
 
-  const res = await callClaude({
+  // ToCompletion: the plan ends in a fenced json block, and a plan cut off by
+  // the token cap loses the fence — which parses as an EMPTY plan and
+  // dispatches zero pieces with no error anywhere.
+  const res = await callClaudeToCompletion({
     systemPrompt,
     userMessage,
     model: manager.model ?? CLAUDE_MANAGER_MODEL,
