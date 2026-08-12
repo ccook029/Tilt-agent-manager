@@ -264,6 +264,8 @@ The data below contains current stock levels, sales velocity (14-day and 30-day)
 
 The Zoho sheet is the inventory of actual on-hand sticks and nothing else. Custom sticks that haven't been built yet live on the admin factory queue (/admin/custom-orders on the website) — that queue is the only source of committed custom demand. If the report says the queue was unreachable, say so in your summary and do not treat the custom counts as zero.
 
+DEMAND IS COUNTED ONCE. "Sold from stock" is a stick that left the shelf and needs replacing — that is your replenishment signal. "Sold as custom" is a build-to-order stick that is ALREADY in the Custom Orders column and already on this order. Never size replenishment off the two added together, and never add a stick to the order for a custom sale that the custom column already covers.
+
 {{context}}
 
 ORDERING RULES:
@@ -272,7 +274,7 @@ ORDERING RULES:
 - Pending custom orders MUST be included — these are committed orders for specific customers
 - After accounting for custom orders, fill the remaining slots with replenishment stock
 - Replenishment priorities:
-  1. SKUs that sold the most in the last 14 days (replace what was sold)
+  1. SKUs that sold the most FROM STOCK in the last 14 days (replace what left the shelf)
   2. SKUs with low available stock relative to their velocity
   3. Maintain reasonable distribution across SKUs — don't let any popular SKU go to zero
 - Subtract open PO quantities (sticks already ordered but not yet received) from replenishment needs
@@ -297,6 +299,13 @@ Produce:
    Quick overview: total available stock, burn rate, estimated weeks of supply
 
 NOTE: This is a RECOMMENDATION only. All factory orders require Jeremy Elliott's approval.
+
+FINALLY, after the report, append the order's headline numbers as a fenced block so HQ can put an approve button on it. Totals must match your table exactly. Nothing after this block:
+
+\`\`\`reorder
+{"totalSticks": 25, "totalCost": 2150.00, "customSticks": 6, "headline": "one sentence — what this order is and the one thing worth knowing about it"}
+\`\`\`
+
 Today's date: {{date}}`,
 
     "sheet-sync": `Analyze the Sheet ↔ Inventory stock reconciliation data below. The Sheet tracks individual sticks by serial number, grouped by Level + Carbon.

@@ -134,17 +134,40 @@ interface SkuReorderData {
   name: string;
   available: number;        // Available sticks in the Zoho inventory sheet
   customOrders: number;     // Pending sticks on the admin factory queue
-  sold30d: number;          // Units sold in last 30 days (from sales orders)
-  sold14d: number;          // Units sold in last 14 days (one order cycle)
+  soldStock30d: number;     // On-hand (serialized) sticks sold in last 30 days
+  soldStock14d: number;     // On-hand (serialized) sticks sold in last 14 days
+  soldCustom14d: number;    // Build-to-order sticks sold in last 14 days
   openPoQty: number;        // Units on open/partial POs not yet received
   purchaseRate: number;     // Cost per unit
 }
 
+/** Headline numbers the pipeline needs to raise an approval decision. */
+export interface ReorderSummary {
+  totalAvailable: number;
+  totalCustomPending: number;
+  unmatchedCustoms: number;
+  queueError: string | null;
+  burnRate14d: number;
+}
+
+/**
+ * A sales line is an on-hand stick leaving the building only if it carries a
+ * serial. Build-to-order customs have no serial — they're already counted on
+ * the factory queue, so counting them as velocity too would order the same
+ * stick twice.
+ */
+function lineHasSerial(description?: string): boolean {
+  return !!description && description.includes("[S/N:");
+}
+
 /**
  * Compile all data needed for a factory reorder recommendation.
- * Returns a formatted text report for Claude.
+ * Returns a formatted text report for Claude plus the headline numbers.
  */
-export async function fetchFactoryReorderData(): Promise<string> {
+export async function fetchFactoryReorderData(): Promise<{
+  report: string;
+  summary: ReorderSummary;
+}> {
   const [allSticks, customQueue, items, salesOrders30d, salesOrders14d, openPOs] = await Promise.all([
     fetchAllStickRecords(),
     // Committed customs come from the tiltweb admin factory queue — the Zoho
@@ -166,18 +189,46 @@ export async function fetchFactoryReorderData(): Promise<string> {
     if (item.sku) itemBySku.set(item.sku.toUpperCase(), item);
   }
 
-  // Calculate sales velocity by SKU (30-day and 14-day)
-  const velocity30d = new Map<string, number>();
-  for (const order of salesOrders30d) {
-    for (const li of order.line_items ?? []) {
-      if (li.sku) velocity30d.set(li.sku.toUpperCase(), (velocity30d.get(li.sku.toUpperCase()) ?? 0) + li.quantity);
+  // Sales velocity by SKU, split by whether the stick came off the shelf or
+  // was built to order. Only shelf sales create replenishment demand; a custom
+  // sale is already represented on the factory queue, and counting it in both
+  // places orders the same stick twice.
+  let linesSeen = 0;
+  let linesWithDescription = 0;
+  const tally = (
+    orders: typeof salesOrders30d,
+    stock: Map<string, number>,
+    custom: Map<string, number>
+  ) => {
+    for (const order of orders) {
+      for (const li of order.line_items ?? []) {
+        if (!li.sku) continue;
+        linesSeen++;
+        if (li.description) linesWithDescription++;
+        const key = li.sku.toUpperCase();
+        const bucket = lineHasSerial(li.description) ? stock : custom;
+        bucket.set(key, (bucket.get(key) ?? 0) + li.quantity);
+      }
     }
-  }
-  const velocity14d = new Map<string, number>();
-  for (const order of salesOrders14d) {
-    for (const li of order.line_items ?? []) {
-      if (li.sku) velocity14d.set(li.sku.toUpperCase(), (velocity14d.get(li.sku.toUpperCase()) ?? 0) + li.quantity);
-    }
+  };
+
+  const stock30d = new Map<string, number>();
+  const custom30d = new Map<string, number>();
+  tally(salesOrders30d, stock30d, custom30d);
+
+  const stock14d = new Map<string, number>();
+  const custom14d = new Map<string, number>();
+  tally(salesOrders14d, stock14d, custom14d);
+
+  // Zoho's list endpoint doesn't always return line descriptions. Without them
+  // every sale looks custom, which would zero out replenishment — so fall back
+  // to the old single-column behaviour and say why.
+  const canSplitVelocity = linesSeen === 0 || linesWithDescription > 0;
+  if (!canSplitVelocity) {
+    for (const [k, v] of custom30d) stock30d.set(k, (stock30d.get(k) ?? 0) + v);
+    for (const [k, v] of custom14d) stock14d.set(k, (stock14d.get(k) ?? 0) + v);
+    custom30d.clear();
+    custom14d.clear();
   }
 
   // Calculate open PO quantities by SKU (not yet received)
@@ -223,8 +274,9 @@ export async function fetchFactoryReorderData(): Promise<string> {
       name: item?.name ?? sku,
       available,
       customOrders: customCountBySku.get(sku) ?? 0,
-      sold30d: velocity30d.get(sku.toUpperCase()) ?? 0,
-      sold14d: velocity14d.get(sku.toUpperCase()) ?? 0,
+      soldStock30d: stock30d.get(sku.toUpperCase()) ?? 0,
+      soldStock14d: stock14d.get(sku.toUpperCase()) ?? 0,
+      soldCustom14d: custom14d.get(sku.toUpperCase()) ?? 0,
       openPoQty: openPoQty.get(sku.toUpperCase()) ?? 0,
       purchaseRate: item?.purchase_rate ?? 0,
     });
@@ -244,22 +296,29 @@ export async function fetchFactoryReorderData(): Promise<string> {
       ? `Custom Orders Pending: UNKNOWN — the factory queue is unreachable (${queueError}). Every custom count below reads 0 because of that, NOT because there is no custom demand. Do not place an order off this report until the queue is readable.`
       : `Custom Orders Pending: ${totalCustomOrders}`,
     "",
+    canSplitVelocity
+      ? "'Sold from stock' counts sticks that left the shelf (their sales line carries a serial) — that is the replenishment signal. 'Sold as custom' counts build-to-order sticks, which are ALREADY counted in the Custom Orders column. Never add the two together when sizing a reorder: that orders the same stick twice."
+      : "NOTE: Zoho did not return line descriptions on these sales orders, so stock sales and custom builds could not be separated. The Sold column below mixes both. Sticks that appear in the Custom Orders column may also be counted there — treat the replenishment numbers as an upper bound and say so in your summary.",
+    "",
     "### Per-SKU Inventory & Velocity",
     "",
-    "| SKU | Product | Available | Custom Orders | Sold (14d) | Sold (30d) | Open PO | Unit Cost |",
-    "|-----|---------|-----------|---------------|------------|------------|---------|-----------|",
+    canSplitVelocity
+      ? "| SKU | Product | Available | Custom Orders | Sold from stock (14d) | Sold from stock (30d) | Sold as custom (14d) | Open PO | Unit Cost |"
+      : "| SKU | Product | Available | Custom Orders | Sold (14d, mixed) | Sold (30d, mixed) | — | Open PO | Unit Cost |",
+    "|-----|---------|-----------|---------------|------------|------------|------|---------|-----------|",
   ];
 
   for (const d of skuData) {
     sections.push(
-      `| ${d.sku} | ${d.name} | ${d.available} | ${d.customOrders} | ${d.sold14d} | ${d.sold30d} | ${d.openPoQty} | $${d.purchaseRate.toFixed(2)} |`
+      `| ${d.sku} | ${d.name} | ${d.available} | ${d.customOrders} | ${d.soldStock14d} | ${d.soldStock30d} | ${canSplitVelocity ? d.soldCustom14d : "—"} | ${d.openPoQty} | $${d.purchaseRate.toFixed(2)} |`
     );
   }
 
   // Summary stats
   const totalAvailable = skuData.reduce((sum, d) => sum + d.available, 0);
-  const totalSold30d = skuData.reduce((sum, d) => sum + d.sold30d, 0);
-  const totalSold14d = skuData.reduce((sum, d) => sum + d.sold14d, 0);
+  const totalStock30d = skuData.reduce((sum, d) => sum + d.soldStock30d, 0);
+  const totalStock14d = skuData.reduce((sum, d) => sum + d.soldStock14d, 0);
+  const totalCustom14d = skuData.reduce((sum, d) => sum + d.soldCustom14d, 0);
   const totalOpenPo = skuData.reduce((sum, d) => sum + d.openPoQty, 0);
   const totalCustom = skuData.reduce((sum, d) => sum + d.customOrders, 0);
 
@@ -271,10 +330,19 @@ export async function fetchFactoryReorderData(): Promise<string> {
       (unattributed.length > 0
         ? `, plus ${unattributed.length} that couldn't be matched to one (listed below) — ${totalCustomOrders} on the queue in total`
         : ""),
-    `- Total Sold (last 14 days): ${totalSold14d} sticks`,
-    `- Total Sold (last 30 days): ${totalSold30d} sticks`,
+    canSplitVelocity
+      ? `- Sold from stock (last 14 days): ${totalStock14d} sticks — this is the replenishment burn rate`
+      : `- Sold (last 14 days, stock + custom mixed): ${totalStock14d} sticks`,
+    canSplitVelocity
+      ? `- Sold from stock (last 30 days): ${totalStock30d} sticks`
+      : `- Sold (last 30 days, stock + custom mixed): ${totalStock30d} sticks`,
+    ...(canSplitVelocity
+      ? [
+          `- Sold as custom builds (last 14 days): ${totalCustom14d} sticks — already on the queue, do NOT reorder these on top of the custom column`,
+        ]
+      : []),
     `- Total Open PO (awaiting delivery): ${totalOpenPo} sticks`,
-    `- Avg Biweekly Burn Rate: ${totalSold14d} sticks per 2-week cycle`,
+    `- Avg Biweekly Burn Rate: ${totalStock14d} sticks per 2-week cycle`,
   );
 
   // Pending custom orders — the sticks that must ride this factory order
@@ -337,5 +405,14 @@ export async function fetchFactoryReorderData(): Promise<string> {
     }
   }
 
-  return sections.join("\n");
+  return {
+    report: sections.join("\n"),
+    summary: {
+      totalAvailable,
+      totalCustomPending: totalCustomOrders,
+      unmatchedCustoms: unattributed.length,
+      queueError,
+      burnRate14d: totalStock14d,
+    },
+  };
 }

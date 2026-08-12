@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     if (task === "factory-reorder") {
       // Compile reorder data from Sheet, Inventory, sales orders, and open POs
-      const reorderData = await fetchFactoryReorderData();
+      const { report: reorderData } = await fetchFactoryReorderData();
       fullContext = [
         reorderData,
         context ? `\n## Additional Context\n${context}` : "",
