@@ -395,6 +395,9 @@ function WorkOrderCard({
   const who = employees[order.assigneeId];
   const dept = departments[order.departmentId];
   const preview = contentPreview(order);
+  // A Web & Digital order carrying a webchange block publishes on approve.
+  const shipsToSite =
+    order.departmentId === "web" && draft.includes("```webchange");
 
   return (
     <div className="space-y-3 rounded-xl border border-emerald-900/40 bg-emerald-950/10 p-4">
@@ -447,6 +450,17 @@ function WorkOrderCard({
         </div>
       )}
 
+      {/* Approving a web change isn't a status flip — it opens the PR and, for
+          content/merchandising, puts it on the live store. Say so before the
+          click, not after. */}
+      {onShip && shipsToSite && (
+        <p className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200">
+          Approving this publishes to tilthockey.com — it opens the pull request
+          and merges it if the change is content only and the build passes.
+          Anything touching a price waits for you on GitHub.
+        </p>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <input
           value={notes}
@@ -461,7 +475,7 @@ function WorkOrderCard({
             disabled={busy}
             className="rounded-md bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-40"
           >
-            {busy ? "…" : "Approve & ship"}
+            {busy ? "…" : shipsToSite ? "Approve & publish" : "Approve & ship"}
           </button>
         )}
         {onSendBack && (

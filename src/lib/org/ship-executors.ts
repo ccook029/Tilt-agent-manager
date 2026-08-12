@@ -10,6 +10,13 @@
 // publish queue. This closes the work-order ↔ Studio seam: /review "ship"
 // and /publish are now one pipeline instead of two surfaces.
 //
+// Web & Digital works the same way with a ```webchange block: Nova drafts the
+// exact edit, it goes through her review, and Chris's approve is what actually
+// opens the pull request and — for content and merchandising, never prices —
+// merges it to the live store. Before this, approving one of her work orders
+// did nothing at all: the block was inert text outside the chat UI, so "assign
+// it to Nova" produced a document while "ask Nova in chat" produced a change.
+//
 // Departments without an executor ship as a plain status change (the
 // deliverable itself — a report, an audit — IS the product).
 // ---------------------------------------------------------------------------
@@ -22,6 +29,8 @@ import { rankCandidates, coerceRenderKind } from "../social/planner/assetMatch";
 import { renderStaticPost } from "../social/render/pipeline";
 import type { PostSlot } from "../social/planner/schedule";
 import { normalizePlatform } from "../publish/types";
+import { executeWebChange } from "../web/change-engine";
+import { waitAndMerge } from "../web/auto-merge";
 import type { WorkOrder } from "./types";
 
 interface PostPackageItem {
@@ -154,10 +163,79 @@ async function shipMarketingOrder(order: WorkOrder): Promise<string | null> {
  * what shipping did, or null when shipping is just the status change.
  * Executors must never throw — a failed side effect shouldn't undo the ship.
  */
+export interface WebChangeSpec {
+  path: string;
+  title: string;
+  request: string;
+}
+
+/** Pull the ```webchange blocks out of a deliverable. */
+export function parseWebChanges(text: string): WebChangeSpec[] {
+  const out: WebChangeSpec[] = [];
+  const re = /```webchange\s*([\s\S]*?)```/g;
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    try {
+      const raw = JSON.parse(m[1].trim()) as Record<string, string>;
+      if (raw.path?.trim() && raw.title?.trim() && raw.request?.trim()) {
+        out.push({
+          path: raw.path.trim(),
+          title: raw.title.trim(),
+          request: raw.request.trim(),
+        });
+      }
+    } catch {
+      // Malformed block — skip it rather than guess at a website edit.
+    }
+  }
+  return out;
+}
+
+/**
+ * Chris approved a Web & Digital work order: turn Nova's agreed change into a
+ * pull request and, when the policy allows it, put it live.
+ *
+ * His approve IS the authorization. Nothing in the brief can substitute for it,
+ * which is why Nova is told to draft rather than act — the gate is here, at the
+ * one point a founder actually clicks.
+ */
+async function shipWebOrder(order: WorkOrder): Promise<string | null> {
+  const draft = order.rounds[order.rounds.length - 1]?.draft ?? "";
+  const changes = parseWebChanges(draft);
+  if (changes.length === 0) {
+    // A research or advice work order — the document is the product.
+    return null;
+  }
+
+  const notes: string[] = [];
+  for (const change of changes) {
+    const result = await executeWebChange(change);
+    if (!result.ok || !result.prNumber) {
+      notes.push(`"${change.title}" — couldn't open a PR: ${result.error ?? "unknown error"}`);
+      continue;
+    }
+    if (!result.autoMergeable) {
+      notes.push(
+        `"${change.title}" — PR #${result.prNumber} opened, held for you: ${result.holdReason ?? "outside auto-merge policy"}.`
+      );
+      continue;
+    }
+    const merged = await waitAndMerge(result.prNumber, change.title);
+    notes.push(
+      merged.status === "merged"
+        ? `"${change.title}" — live on the site (PR #${result.prNumber}).`
+        : `"${change.title}" — PR #${result.prNumber}: ${merged.reason}`
+    );
+  }
+  return notes.join(" ");
+}
+
 export async function executeShip(order: WorkOrder): Promise<string | null> {
   try {
     if (order.departmentId === "marketing") {
       return await shipMarketingOrder(order);
+    }
+    if (order.departmentId === "web") {
+      return await shipWebOrder(order);
     }
     return null;
   } catch (err) {
