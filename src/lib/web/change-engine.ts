@@ -6,7 +6,7 @@
 // correct edit as verbatim find/replace ops, applies them, and opens a PR for
 // review. A human merges — nothing hits the live store unreviewed.
 // ---------------------------------------------------------------------------
-import { callClaude } from "../anthropic";
+import { callClaudeToCompletion } from "../anthropic";
 import { CLAUDE_MANAGER_MODEL } from "../models";
 import {
   getFile,
@@ -36,7 +36,26 @@ export interface WebChangeResult {
   holdReason?: string;
 }
 
-const EDIT_SYSTEM = `You are a senior web engineer editing the Tilt Hockey storefront (a Next.js/TypeScript app). Make the SMALLEST correct change that satisfies the request, expressed as exact find/replace operations on the given file. Rules: each "find" must be a VERBATIM, UNIQUE substring copied from the file (include enough surrounding text to be unique); never reformat or touch unrelated code; preserve types and syntax. If the change doesn't belong in this file or can't be done safely, return no edits and say why.`;
+const EDIT_SYSTEM = `You are a senior web engineer editing the Tilt Hockey storefront (a Next.js/TypeScript app). Make the SMALLEST correct change that satisfies the request, expressed as exact find/replace operations on the given file. Rules: each "find" must be a VERBATIM, UNIQUE substring copied from the file (include enough surrounding text to be unique); never reformat or touch unrelated code; preserve types and syntax.
+
+CUSTOMER-FACING PROSE IS DIFFERENT FROM CODE. When an edit removes or changes part of a sentence, list, or product description, "smallest" means the smallest change that leaves what REMAINS reading as clean, natural English — widen the find/replace to cover the whole affected sentence if that's what it takes. Removing ", or the striking Lazer edition" from "Choose from 18K Carbon, 24K Carbon, or the striking Lazer edition." must yield "Choose from 18K Carbon or 24K Carbon." — not a dangling "18K Carbon, 24K Carbon." A removal that leaves broken grammar, an orphaned comma, or a reference to something no longer offered is a WRONG edit even though it satisfies the letter of the request: real customers read this text.
+
+If the change doesn't belong in this file or can't be done safely, return no edits and say why.`;
+
+// The proofread that runs AFTER edits are applied, on the result. The minimal-
+// edit rule above is a safety property for code, but it also means the engine
+// faithfully reproduces whatever grammar the requester's instruction implies —
+// so the result gets read back before it ships, the way a human would re-read
+// a sentence they just cut a clause out of.
+const POLISH_SYSTEM = `You are proofreading the Tilt Hockey storefront file AFTER a change was applied. Check ONLY the parts affected by that change: does every affected sentence, list, and description still read as correct, natural English for a customer? Is anything left referring to something the change removed? Ignore everything unrelated to the change. Reply in the same JSON find/replace format, with the same rules (each "find" a VERBATIM, UNIQUE substring of the file as given; smallest correct fix; never touch unrelated code). If it all reads clean, return { "edits": [], "summary": "reads clean" }.`;
+
+/** Model for storefront edits and the read-back pass. These words go in front
+ * of customers, so the strongest tier is justified — override with
+ * WEB_EDIT_MODEL (e.g. "claude-fable-5") in Vercel; defaults to the manager
+ * model so an unset env changes nothing. */
+function webEditModel(): string {
+  return process.env.WEB_EDIT_MODEL || CLAUDE_MANAGER_MODEL;
+}
 
 function editPrompt(path: string, content: string, request: string): string {
   const shown = content.length > 60000 ? content.slice(0, 60000) : content;
@@ -97,11 +116,12 @@ export async function executeWebChange(input: {
     // 1) Read the real file.
     const { content, sha } = await getFile(path);
 
-    // 2) Ask Claude for the smallest correct edit.
-    const res = await callClaude({
+    // 2) Ask Claude for the smallest correct edit. ToCompletion: a truncated
+    // edits block would otherwise parse as "no edits" and fail confusingly.
+    const res = await callClaudeToCompletion({
       systemPrompt: EDIT_SYSTEM,
       userMessage: editPrompt(path, content, input.request),
-      model: CLAUDE_MANAGER_MODEL,
+      model: webEditModel(),
       maxTokens: 4000,
       temperature: 0,
     });
@@ -132,6 +152,46 @@ export async function executeWebChange(input: {
       next = next.replace(find, replace);
     }
     if (next === content) return { ok: false, error: "The edit didn't change anything." };
+
+    // 3b) Read the result back before it ships. Best-effort: a polish fix that
+    // can't anchor verbatim-and-unique is dropped rather than failing the
+    // change — the primary edit is already correct, this pass only tidies what
+    // the cut left behind.
+    let polishNote = "";
+    try {
+      const polishRes = await callClaudeToCompletion({
+        systemPrompt: POLISH_SYSTEM,
+        userMessage: `File: ${path} (AFTER the change was applied)
+${next.length > 60000 ? "(showing the first part of a large file)\n" : ""}
+\`\`\`
+${next.length > 60000 ? next.slice(0, 60000) : next}
+\`\`\`
+
+The change that was just applied: ${input.request}
+
+Return ONLY JSON:
+\`\`\`json
+{ "edits": [ { "find": "<verbatim unique substring>", "replace": "<replacement>" } ], "summary": "one line" }
+\`\`\``,
+        model: webEditModel(),
+        maxTokens: 2000,
+        temperature: 0,
+      });
+      const polish = parseJson(polishRes.text);
+      for (const e of polish?.edits ?? []) {
+        const find = String(e.find ?? "");
+        const replace = String(e.replace ?? "");
+        if (!find || !next.includes(find)) continue;
+        if (next.indexOf(find) !== next.lastIndexOf(find)) continue;
+        next = next.replace(find, replace);
+        polishNote = " Read-back pass tidied the surrounding copy.";
+      }
+    } catch (err) {
+      console.warn(
+        "[change-engine] read-back pass failed (primary edit stands):",
+        err instanceof Error ? err.message : err
+      );
+    }
 
     // 4) Branch, commit, open the PR.
     const baseSha = await getBaseSha();
