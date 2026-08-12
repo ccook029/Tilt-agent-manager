@@ -605,6 +605,27 @@ function EscalationCard({
           {busy ? "Saving…" : "Decide"}
         </button>
       </div>
+      {/* Most questions are really "may I?", and the agent has already said what
+          it would do. Typing out a yes for those is friction with no upside —
+          and if the recommendation is the answer, one click should be enough. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() =>
+            onAnswer(
+              esc.recommendation?.trim()
+                ? `Approved — go ahead: ${esc.recommendation.trim()}`
+                : "Approved — go ahead as you proposed."
+            )
+          }
+          disabled={busy}
+          className="rounded-md bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-40"
+        >
+          {busy ? "…" : esc.recommendation ? "Approve the recommendation" : "Approve — go ahead"}
+        </button>
+        <span className="text-[11px] text-gray-500">
+          Answering restarts whatever this was blocking.
+        </span>
+      </div>
     </div>
   );
 }
