@@ -101,8 +101,10 @@ export function planApparelGroups(
     return {
       productId: def.productId,
       groupName: def.groupName,
+      // "Color" to match the storefront's own option key. Zoho can't rename
+      // an attribute after the group exists, so this is fixed from here.
       attributes: [
-        { name: "Colour", options: def.colours },
+        { name: "Color", options: def.colours },
         { name: "Size", options: def.sizes },
       ],
       variants,
