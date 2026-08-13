@@ -38,6 +38,7 @@ interface ApplyResult {
   inactiveCleared?: number;
   inactiveSkipped?: number;
   inactiveError?: string;
+  leftActive?: string[];
   note?: string;
   results?: { sku: string; deactivated: boolean; error?: string }[];
 }
@@ -205,6 +206,12 @@ export default function ZohoActionsPage() {
                         {result.inactiveError && (
                           <span className="mt-1 block text-xs">
                             Inactive items not cleared: {result.inactiveError}
+                          </span>
+                        )}
+                        {!!result.leftActive?.length && (
+                          <span className="mt-1 block text-xs text-red-300">
+                            Left ACTIVE in Zoho (re-retire failed):{" "}
+                            {result.leftActive.join(", ")}
                           </span>
                         )}
                         {!!result.inactiveSkipped && (

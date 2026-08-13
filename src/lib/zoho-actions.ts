@@ -11,7 +11,7 @@
 // is resolved against live Zoho every time it's viewed — what the page shows
 // is what the button will act on, current as of that moment.
 // ---------------------------------------------------------------------------
-import { fetchAllItems, fetchItem, type ZohoItem } from "./zoho";
+import { fetchAllItems, type ZohoItem } from "./zoho";
 import { SKU_FILTERS } from "./zoho-sync";
 
 const LIVE_STICK_SKUS = new Set(Object.keys(SKU_FILTERS).map((s) => s.toUpperCase()));
@@ -170,32 +170,6 @@ export async function resolveBatches(
         .length,
     };
   });
-}
-
-/**
- * Ask Zoho for each item directly so every count is a real number.
- *
- * Needed because the list endpoint withholds stock_on_hand for inactive items.
- * Anything still unresolved after this is dropped by the caller rather than
- * guessed at — an adjustment built on a guess is how you turn a tidy-up into a
- * stock correction nobody asked for.
- */
-export async function hydrateStock(items: MatchedItem[]): Promise<MatchedItem[]> {
-  const out: MatchedItem[] = [];
-  for (const item of items) {
-    if (item.stockKnown) {
-      out.push(item);
-      continue;
-    }
-    try {
-      const full = await fetchItem(item.itemId);
-      const stock = readStock(full.stock_on_hand);
-      out.push({ ...item, stockOnHand: stock.value, stockKnown: stock.known });
-    } catch {
-      out.push(item); // still unknown; caller skips it
-    }
-  }
-  return out;
 }
 
 export async function resolveBatch(id: string): Promise<ResolvedBatch | null> {

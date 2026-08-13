@@ -15,8 +15,10 @@
 // ---------------------------------------------------------------------------
 import {
   fetchAllItems,
+  fetchItem,
   createInventoryAdjustment,
   markItemInactive,
+  markItemActive,
   type ZohoItem,
 } from "./zoho";
 import { SKU_FILTERS } from "./zoho-sync";
@@ -81,46 +83,88 @@ export async function listLegacyStickItems(): Promise<LegacyStickItem[]> {
 /**
  * Zero the stock of items that are already inactive.
  *
- * Deactivating doesn't clear a count, so a retired item can sit at -8 forever
- * and keep skewing every valuation and reorder. Separate from
- * retireLegacyItems because that function only handles active items by design.
+ * Deactivating never cleared a count, so a retired item can sit at -8 forever
+ * and keep skewing every valuation and reorder.
  *
- * Whether Zoho accepts an adjustment against an inactive item isn't something
- * this can assume, so the error comes back verbatim rather than being reported
- * as success.
+ * Zoho won't let that be fixed in place: it refuses adjustments against
+ * inactive items ("cannot be raised for item … marked as inactive", code
+ * 2007) and won't report their stock either. The only route is to bring each
+ * item back, correct it, and retire it again — so that is what this does, and
+ * the re-retire runs in a finally, because leaving an item visible in the
+ * catalog is the one outcome worse than leaving its count wrong.
  */
 export async function zeroInactiveStock(
-  items: { itemId: string; sku: string; stockOnHand: number; stockKnown?: boolean }[]
-): Promise<{ zeroed: number; unitsCleared: number; skipped: number; error?: string }> {
-  // A count Zoho never reported must not become an adjustment. Sending one
-  // produced NaN, which Zoho read as zero and rejected outright — better to
-  // skip the item and say so than to write a number nobody established.
-  const usable = items.filter((i) => i.stockKnown !== false);
-  const skipped = items.length - usable.length;
-  const withStock = usable.filter((i) => Number.isFinite(i.stockOnHand) && i.stockOnHand !== 0);
-  if (withStock.length === 0) return { zeroed: 0, unitsCleared: 0, skipped };
+  items: { itemId: string; sku: string }[]
+): Promise<{
+  zeroed: number;
+  unitsCleared: number;
+  skipped: number;
+  error?: string;
+  /** Items left ACTIVE because re-retiring them failed. Loud on purpose:
+   *  these are visible in the catalog until someone deactivates them. */
+  leftActive: string[];
+}> {
+  const reactivated: { itemId: string; sku: string }[] = [];
+  const leftActive: string[] = [];
+  let skipped = 0;
+
+  if (items.length === 0) {
+    return { zeroed: 0, unitsCleared: 0, skipped: 0, leftActive };
+  }
 
   try {
+    for (const item of items) {
+      try {
+        await markItemActive(item.itemId);
+        reactivated.push(item);
+      } catch {
+        skipped++; // couldn't bring it back; its count stays as-is
+      }
+    }
+
+    // Stock only became readable once the items were active again.
+    const lines: { item_id: string; quantity_adjusted: number }[] = [];
+    let unitsCleared = 0;
+    for (const item of reactivated) {
+      try {
+        const full = await fetchItem(item.itemId);
+        const stock = Number(full.stock_on_hand);
+        if (!Number.isFinite(stock) || stock === 0) continue;
+        lines.push({ item_id: item.itemId, quantity_adjusted: -stock });
+        unitsCleared += Math.abs(stock);
+      } catch {
+        skipped++;
+      }
+    }
+
+    if (lines.length === 0) {
+      return { zeroed: 0, unitsCleared: 0, skipped, leftActive };
+    }
+
     await createInventoryAdjustment({
       date: new Date().toISOString().slice(0, 10),
       reason: "Clear stock on retired items",
-      line_items: withStock.map((i) => ({
-        item_id: i.itemId,
-        quantity_adjusted: -i.stockOnHand,
-      })),
+      line_items: lines,
     });
-    return {
-      zeroed: withStock.length,
-      unitsCleared: withStock.reduce((s, i) => s + Math.abs(i.stockOnHand), 0),
-      skipped,
-    };
+
+    return { zeroed: lines.length, unitsCleared, skipped, leftActive };
   } catch (err) {
     return {
       zeroed: 0,
       unitsCleared: 0,
       skipped,
       error: err instanceof Error ? err.message : String(err),
+      leftActive,
     };
+  } finally {
+    // Put every item back the way it was found, success or failure.
+    for (const item of reactivated) {
+      try {
+        await markItemInactive(item.itemId);
+      } catch {
+        leftActive.push(item.sku);
+      }
+    }
   }
 }
 
