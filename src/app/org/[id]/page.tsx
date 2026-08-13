@@ -179,6 +179,17 @@ export default function EmployeePage() {
 
       {/* What you came here to do. First, because someone new needs to know
           what this person is FOR before anything else on the page matters. */}
+      {/* No jobs means no dedicated tooling — Sales, CX, BizDev and SEO are
+          chat-and-assign for now. Saying so is better than an empty section
+          that reads as something failing to load. */}
+      {employee.staffed && jobsFor(id).length === 0 && (
+        <p className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-3.5 text-sm text-gray-500">
+          {firstNameOf(employee.name)} has no dedicated workspace yet — you work
+          with {firstNameOf(employee.name)} by talking it through below, or
+          assigning a piece of work.
+        </p>
+      )}
+
       {jobsFor(id).length > 0 && (
         <section>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
