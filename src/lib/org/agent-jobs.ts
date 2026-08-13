@@ -63,12 +63,20 @@ export const AGENT_JOBS: Record<string, AgentJob[]> = {
     },
   ],
 
-  /* Penny Quill — Accounting */
+  /* Penny Quill — Staff Accountant.
+     Her thirteen task prompts are real accounting work, not dead weight — the
+     problem was a flat list with no signal which of them you need weekly. */
   accounting: [
     {
       label: "Bills to deal with",
       detail: "Everything waiting to be filed or approved",
       href: "/accounting/ap",
+      emphasis: "primary",
+    },
+    {
+      label: "Answer her questions",
+      detail: "Categorisations she couldn't call herself",
+      href: "/questions",
       emphasis: "primary",
     },
     {
@@ -78,9 +86,166 @@ export const AGENT_JOBS: Record<string, AgentJob[]> = {
       emphasis: "primary",
     },
     {
-      label: "Answer her questions",
-      detail: "Categorisations she couldn't call herself",
-      href: "/questions",
+      label: "Run a finance report",
+      detail: "Cash outlook, monthly close, A/R collections, bank rec",
+      href: "/dashboard/accounting",
+    },
+  ],
+
+  /* Sterling Vance — CFO */
+  "accounting-manager": [
+    {
+      label: "Where the money's going",
+      detail: "Projections, expected contracts and his analysis",
+      href: "/strategy",
+      emphasis: "primary",
+    },
+    {
+      label: "Decisions he's raised",
+      detail: "Finance calls waiting on you",
+      href: "/review",
+    },
+  ],
+
+  /* June Sable — Financial Analyst */
+  "cash-flow-analyst": [
+    {
+      label: "Cash outlook",
+      detail: "The rolling four-week view",
+      href: "/strategy",
+      emphasis: "primary",
+    },
+  ],
+
+  /* Piers Vale — Supply Chain & Production */
+  "supply-coordinator": [
+    {
+      label: "Track a shipment",
+      detail: "Tracking numbers and timelines from the factory",
+      href: "/shipments",
+      emphasis: "primary",
+    },
+    {
+      label: "What's in production",
+      detail: "Sticks being built and when they're due",
+      href: "/inventory/production",
+      emphasis: "primary",
+    },
+  ],
+
+  /* Remy Vector — Creative Director */
+  "tilt-design": [
+    {
+      label: "Make an announcement",
+      detail: "Partner and ambassador graphics",
+      href: "/studio/announcements",
+      emphasis: "primary",
+    },
+    {
+      label: "Team blanket render",
+      detail: "Fundraiser blankets in team colours",
+      href: "/studio/blanket",
+      emphasis: "primary",
+    },
+    {
+      label: "Product catalogue",
+      detail: "Catalogue imagery and assets",
+      href: "/studio/catalog",
+    },
+    {
+      label: "Design socks",
+      detail: "Sock and accessory renders",
+      href: "/studio/sox",
+    },
+  ],
+
+  /* Cutter Reel — Video */
+  "video-creator": [
+    {
+      label: "Build a promo video",
+      detail: "Branded motion graphics from real footage",
+      href: "/studio/promo",
+      emphasis: "primary",
+    },
+  ],
+
+  /* Piper Queue — Social Publisher */
+  "social-publisher": [
+    {
+      label: "Publish what's approved",
+      detail: "Send the approved queue to Instagram, TikTok and Facebook",
+      href: "/publish",
+      emphasis: "primary",
+    },
+    {
+      label: "Connect an account",
+      detail: "Set up or re-link a social account",
+      href: "/studio/social/setup",
+    },
+  ],
+
+  /* Indy Post — Content & Image */
+  "content-creator": [
+    {
+      label: "This week's posts",
+      detail: "The plan and the post library",
+      href: "/studio/social",
+      emphasis: "primary",
+    },
+    {
+      label: "Where the gaps are",
+      detail: "What the calendar is missing",
+      href: "/studio/social/gaps",
+    },
+  ],
+
+  /* Dana Metrics — Analytics */
+  "website-analytics": [
+    {
+      label: "How the site's doing",
+      detail: "Traffic, conversion and her read on it",
+      href: "/dashboard/website-analytics",
+      emphasis: "primary",
+    },
+  ],
+
+  /* Sloane Signal — Social Intelligence */
+  "competitor-social": [
+    {
+      label: "What competitors are posting",
+      detail: "Her latest read on rival social activity",
+      href: "/dashboard/competitor-social",
+      emphasis: "primary",
+    },
+  ],
+
+  /* Vince Recon — Competitive Intelligence */
+  "competitor-intel": [
+    {
+      label: "Competitor moves",
+      detail: "Pricing, products and positioning changes",
+      href: "/dashboard/competitor-intel",
+      emphasis: "primary",
+    },
+  ],
+
+  /* Maya Blueprint — Product Design */
+  "product-design": [
+    {
+      label: "Design work in flight",
+      detail: "What she's drafting and what's been delivered",
+      href: "/dashboard/product-design",
+      emphasis: "primary",
+    },
+  ],
+
+  /* Dr. Rex Polymer — Materials R&D */
+  "materials-rd": [
+    {
+      label: "Materials research",
+      detail: "Her findings on carbon layups and construction",
+      href: "/dashboard/materials-rd",
+      emphasis: "primary",
     },
   ],
 

@@ -186,6 +186,12 @@ export default function OrgPage() {
             <div className="h-5 w-px bg-gray-700" />
           </div>
 
+          {/* ---- Department index ----
+              Eleven expanded cards is a wall to scroll. This sits directly
+              under the founders and Reese: every department, its colour, and
+              who's in it, in one glance — then jump to the one you want. */}
+          <DeptIndex departments={ordered} employees={employees} />
+
           {/* ---- Departments ---- */}
           <div className="grid gap-4 md:grid-cols-2">
             {ordered.map((dept) => (
@@ -278,6 +284,88 @@ function RhythmCard() {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// ---- Department index -------------------------------------------------------
+
+/**
+ * The whole org on one screen. Colour is the through-line: the dot here is the
+ * same dot on the department's card and it's what makes eleven departments
+ * scannable rather than a list of headings.
+ */
+function DeptIndex({
+  departments,
+  employees,
+}: {
+  departments: Department[];
+  employees: Record<string, Employee>;
+}) {
+  if (departments.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-4">
+      <h2 className="font-display text-base font-bold uppercase tracking-wide text-gray-100">
+        Who&apos;s who
+      </h2>
+      <p className="mt-0.5 text-[11px] text-gray-500">
+        Every department and who&apos;s in it. Click a name to work with them.
+      </p>
+
+      <div className="mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+        {departments.map((dept) => {
+          const accent = DEPT_ACCENT[dept.id] ?? { dot: "bg-gray-500", border: "border-gray-800/60" };
+          const boss = dept.managerId ? employees[dept.managerId] : null;
+          const people = [
+            ...(boss ? [boss] : []),
+            ...dept.members
+              .map((id) => employees[id])
+              .filter((e): e is Employee => Boolean(e))
+              .filter((e) => e.id !== dept.managerId && e.enabled),
+          ].filter((e) => e.staffed);
+
+          if (people.length === 0) return null;
+
+          return (
+            <div key={dept.id} className="min-w-0">
+              <a
+                href={`#${dept.id}`}
+                className="flex items-center gap-2 hover:opacity-80"
+                title={dept.mission}
+              >
+                <span className={`h-2 w-2 shrink-0 rounded-full ${accent.dot}`} />
+                <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-gray-300">
+                  {dept.name}
+                </span>
+              </a>
+              <ul className="mt-1.5 space-y-1 border-l border-gray-800/70 pl-3">
+                {people.map((e) => (
+                  <li key={e.id} className="min-w-0">
+                    <Link
+                      href={`/org/${e.id}`}
+                      className="group block truncate"
+                      title={e.charter ?? e.title}
+                    >
+                      <span className="text-xs text-gray-200 group-hover:text-[#00d6ff]">
+                        {e.name}
+                      </span>
+                      {e.id === dept.managerId && (
+                        <span className="ml-1.5 text-[9px] uppercase tracking-wide text-[#00d6ff]/70">
+                          lead
+                        </span>
+                      )}
+                      <span className="block truncate text-[10px] leading-tight text-gray-600">
+                        {e.title}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
