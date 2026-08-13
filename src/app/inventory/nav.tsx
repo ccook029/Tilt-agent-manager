@@ -10,6 +10,7 @@ import { usePathname } from "next/navigation";
 const TABS: { href: string; label: string; exact?: boolean }[] = [
   { href: "/inventory", label: "Inventory", exact: true },
   { href: "/inventory/scan", label: "Scan & Sell" },
+  { href: "/inventory/intake", label: "Receive Stock" },
   { href: "/inventory/order-builder", label: "Order Builder" },
   { href: "/inventory/actions", label: "Staged Changes" },
   { href: "/inventory/cleanup", label: "Legacy Cleanup" },
