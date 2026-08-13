@@ -25,8 +25,14 @@ export interface ZohoActionBatch {
   /** Match on the start of the item name, case-insensitive. Model families
    *  are named consistently ("Canuck-Evolution", "Canuck-Prospect +"), so a
    *  family prefix catches every variant without listing them. */
-  namePrefixes: string[];
-  action: "zero-and-deactivate";
+  namePrefixes?: string[];
+  /** Match every item currently below zero, whatever it's called. Negative
+   *  stock is always wrong — you cannot hold minus eight of anything — so this
+   *  needs no name list. */
+  negativeStock?: boolean;
+  /** zero-only leaves the item active: a live product with a broken count
+   *  should be corrected, not retired. */
+  action: "zero-and-deactivate" | "zero-only";
 }
 
 /**
@@ -57,6 +63,14 @@ export const ZOHO_ACTION_BATCHES: ZohoActionBatch[] = [
       "Beast",
     ],
     action: "zero-and-deactivate",
+  },
+  {
+    id: "clear-negative-stock",
+    title: "Clear every negative stock count",
+    note:
+      "Anything sitting below zero, whatever it is. Negative stock is always wrong and it distorts valuations and reorder maths. Counts are brought up to zero and the items stay active — this is a correction, not a retirement, and a clean baseline before a physical count.",
+    negativeStock: true,
+    action: "zero-only",
   },
 ];
 
@@ -109,7 +123,12 @@ export interface ResolvedBatch extends ZohoActionBatch {
   stockUnknownCount: number;
 }
 
-function matchesPrefixes(item: ZohoItem, prefixes: string[]): boolean {
+function matchesBatch(item: ZohoItem, batch: ZohoActionBatch): boolean {
+  if (batch.negativeStock) {
+    const n = Number(item.stock_on_hand);
+    return Number.isFinite(n) && n < 0;
+  }
+  const prefixes = batch.namePrefixes ?? [];
   const name = (item.name || "").trim().toLowerCase();
   return prefixes.some((p) => name.startsWith(p.trim().toLowerCase()));
 }
@@ -129,7 +148,7 @@ export async function resolveBatches(
     // Match on name across every status first. Filtering by status up front is
     // what made a batch report "nothing matched" when the items were sitting
     // right there, already inactive and still holding negative stock.
-    const hits = items.filter((i) => matchesPrefixes(i, batch.namePrefixes));
+    const hits = items.filter((i) => matchesBatch(i, batch));
 
     const protectedFromMatch: string[] = [];
     const matched: MatchedItem[] = [];
