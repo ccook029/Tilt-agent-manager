@@ -818,6 +818,16 @@ export async function updateInventoryItem(
   return res.item;
 }
 
+/** Mark an item inactive — hides it from the active catalog without deleting
+ *  its transaction history. Zoho keeps the item; it can be reactivated from
+ *  the Zoho UI if a retirement turns out to be wrong. */
+export async function markItemInactive(itemId: string): Promise<void> {
+  await zohoPost<{ code: number; message: string }>(
+    `/items/${itemId}/inactive`,
+    {}
+  );
+}
+
 // ---- Inventory Adjustments ------------------------------------------------
 
 export interface AdjustmentLineItem {
