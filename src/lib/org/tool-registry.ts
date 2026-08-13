@@ -131,6 +131,15 @@ export const TOOLS: Tool[] = [
     tabLabel: "Receive Stock",
   },
   {
+    href: "/inventory/production",
+    label: "In Production",
+    description: "Sticks being built at the factory, and when they're due",
+    group: "daily",
+    ownerId: "inventory",
+    section: "inventory",
+    tabLabel: "In Production",
+  },
+  {
     href: "/inventory/order-builder",
     label: "Stick Order Builder",
     description: "Build the next factory order from live demand",
