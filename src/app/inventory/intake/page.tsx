@@ -39,7 +39,7 @@ export default function IntakePage() {
   const [dropped, setDropped] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ added: number; skipped: { serial: string; reason: string }[] } | null>(null);
+  const [result, setResult] = useState<{ added: number; filled: number; skipped: { serial: string; reason: string }[] } | null>(null);
   const [showExcluded, setShowExcluded] = useState(false);
   // The file is kept so Stockton can re-read it with instructions without
   // making the owner find and attach it again.
@@ -91,7 +91,7 @@ export default function IntakePage() {
       });
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "Write failed");
-      setResult({ added: j.added, skipped: j.skipped ?? [] });
+      setResult({ added: j.added, filled: j.filled ?? 0, skipped: j.skipped ?? [] });
       setPreview(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Write failed");
@@ -129,6 +129,14 @@ export default function IntakePage() {
         <div className="mb-6 rounded-xl border border-green-800/60 bg-green-950/30 p-4 text-sm text-green-200">
           <p className="font-semibold">
             {result.added} sticks added to the inventory sheet as Available.
+            {result.filled > 0 && (
+              <>
+                {" "}
+                {result.filled} more were already on the sheet as pre-orders —
+                those rows got their real serial numbers, and any that were
+                already sold stayed sold.
+              </>
+            )}
           </p>
           {result.skipped.length > 0 && (
             <p className="mt-1 text-xs text-green-200/80">

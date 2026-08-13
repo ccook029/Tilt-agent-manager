@@ -39,8 +39,12 @@ export async function POST(request: NextRequest) {
       // Draw down anything these sticks were waiting on. Matching is on spec,
       // not serial — a production line has no serial to match against — and a
       // stick that matches nothing is reported rather than assumed fine.
+      // A pre-ordered stick counts as received too: its row was FILLED rather
+      // than added, and gating on `added` alone would leave the batch showing
+      // 0 of 212 received after the shipment that delivered it.
+      const received = result.added + result.filled;
       let production: Awaited<ReturnType<typeof receiveAgainstProduction>> | null = null;
-      if (result.added > 0) {
+      if (received > 0) {
         production = await receiveAgainstProduction(
           rows
             .filter((r) => !r.excludeReason && r.serial)
@@ -59,11 +63,15 @@ export async function POST(request: NextRequest) {
         ).catch(() => null);
       }
 
-      if (result.added > 0) {
+      if (received > 0) {
+        const parts = [
+          result.added > 0 ? `${result.added} added` : "",
+          result.filled > 0 ? `${result.filled} matched to pre-order rows` : "",
+        ].filter(Boolean);
         await postSignal({
           source: "inventory",
-          headline: `${result.added} sticks received into inventory`,
-          detail: "Added to the Player tab as Available — live on the website.",
+          headline: `${received} sticks received into inventory`,
+          detail: `${parts.join(", ")} — live on the website.`,
         }).catch(() => {});
       }
       return NextResponse.json({

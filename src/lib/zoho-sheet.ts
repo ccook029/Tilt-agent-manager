@@ -512,3 +512,42 @@ function formatSheetTable(header: string[], rows: string[][]): string {
   );
   return [headerLine, separator, ...dataLines].join("\n");
 }
+
+/**
+ * Update the row matching `criteria` on `worksheetName`.
+ *
+ * Used to fill a pre-order row in: when a stick that was sold (or listed)
+ * before it existed finally lands, its row already exists and only needs the
+ * real serial written over the PROD- placeholder. Appending instead would put
+ * a second copy of the same physical stick on the sheet.
+ */
+export async function updateSheetRow(
+  worksheetName: string,
+  criteria: string,
+  data: Record<string, string>
+): Promise<void> {
+  const resourceId = getEnvOrThrow("ZOHO_SHEET_RESOURCE_ID");
+  const token = await getAccessToken();
+
+  const res = await fetch(`${getSheetApiBase()}/${resourceId}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Zoho-oauthtoken ${token}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      method: "worksheet.records.update",
+      worksheet_name: worksheetName,
+      header_row: "1",
+      criteria,
+      data: JSON.stringify(data),
+    }).toString(),
+  });
+
+  const body = await res.text();
+  if (!res.ok || body.includes('"status":"failure"')) {
+    throw new Error(
+      `Sheet update failed on ${worksheetName} (${res.status}): ${body.slice(0, 300)}`
+    );
+  }
+}

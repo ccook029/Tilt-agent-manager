@@ -20,7 +20,13 @@
 import * as XLSX from "xlsx";
 import { callClaudeToCompletion } from "./anthropic";
 import { CLAUDE_MANAGER_MODEL } from "./models";
-import { fetchAllStickRecords, appendSheetRows } from "./zoho-sheet";
+import { fetchAllStickRecords, appendSheetRows, updateSheetRow } from "./zoho-sheet";
+import { specKey } from "./production-batches";
+import {
+  listPreorderRows,
+  markPreorderReceived,
+  type PreorderRow,
+} from "./preorder-rows";
 
 /** Header text on the Player tab, in the sheet's own words. */
 export const PLAYER_COLUMNS = [
@@ -284,21 +290,37 @@ function extractJson(text: string): Record<string, unknown> {
 /* ── Writing ───────────────────────────────────────────────────────────── */
 
 /**
- * Append the included rows to the Player tab as Available stock.
+ * Put the included rows on the sheet as Available stock.
+ *
+ * A stick that was PRE-ORDERED already has a row: written when the batch was
+ * placed, carrying a `PROD-nnnn` placeholder in the Serial Number column and
+ * possibly already sold to somebody. Those are FILLED IN — the real serial
+ * replaces the placeholder — rather than appended, or the sheet would end up
+ * with two rows for one physical stick and the customer's order would point at
+ * a row that no longer describes anything.
+ *
+ * Only sticks with no matching pre-order row are appended.
  *
  * Re-checks the live sheet immediately before writing: a preview can sit on
  * screen for a while, and the sheet is the source of truth for the website.
  */
 export async function commitIntake(
   rows: IntakeRow[]
-): Promise<{ added: number; skipped: { serial: string; reason: string }[] }> {
+): Promise<{
+  added: number;
+  filled: number;
+  skipped: { serial: string; reason: string }[];
+}> {
   const usable = rows.filter((r) => !r.excludeReason && r.serial);
   const skipped: { serial: string; reason: string }[] = [];
 
   const existing = new Set<string>();
+  const statusBySerial = new Map<string, string>();
   try {
     for (const s of await fetchAllStickRecords()) {
-      existing.add(normalizeSerial(s.serial_number));
+      const sn = normalizeSerial(s.serial_number);
+      existing.add(sn);
+      statusBySerial.set(sn, String(s.status ?? "").trim().toLowerCase());
     }
   } catch (err) {
     throw new Error(
@@ -306,14 +328,34 @@ export async function commitIntake(
     );
   }
 
+  // Pre-order rows still waiting on a stick, grouped by spec — an arriving
+  // stick claims one of these before we consider appending anything.
+  const openPreorders = new Map<string, PreorderRow[]>();
+  for (const row of Object.values(await listPreorderRows())) {
+    if (row.serial) continue; // already filled by an earlier shipment
+    const list = openPreorders.get(row.specKey) ?? [];
+    list.push(row);
+    openPreorders.set(row.specKey, list);
+  }
+
   const records: Record<string, string>[] = [];
   const seen = new Set<string>();
+  const toFill: { row: PreorderRow; serial: string }[] = [];
   for (const r of usable) {
     if (existing.has(r.serial) || seen.has(r.serial)) {
       skipped.push({ serial: r.serial, reason: "already on the sheet" });
       continue;
     }
     seen.add(r.serial);
+
+    // Was this stick pre-ordered? Then its row exists — fill it, don't add one.
+    const waiting = openPreorders.get(specKey(r));
+    const claim = waiting?.shift();
+    if (claim) {
+      toFill.push({ row: claim, serial: r.serial });
+      continue;
+    }
+
     records.push({
       Level: r.level,
       "Size (inch)": r.size,
@@ -330,7 +372,33 @@ export async function commitIntake(
     });
   }
 
-  if (records.length === 0) return { added: 0, skipped };
+  // Fill the pre-order rows first. Status is deliberately NOT forced to
+  // Available: a stick sold while it was still being built must stay Sold, or
+  // the shipment that finally delivers it would put it back on the storefront
+  // and sell it to a second customer.
+  let filled = 0;
+  for (const { row, serial } of toFill) {
+    try {
+      // Only lift it out of "In Production" if it is still unsold. A stick
+      // bought while it was being built stays Sold — flipping it back to
+      // Available would relist a stick that already belongs to somebody.
+      const current = statusBySerial.get(normalizeSerial(row.preorderId)) ?? "";
+      const data: Record<string, string> = { "Serial Number": serial };
+      if (current !== "sold") data.Status = "Available";
+      await updateSheetRow(row.tab, `"Serial Number" = "${row.preorderId}"`, data);
+      await markPreorderReceived(row.preorderId, serial);
+      filled++;
+    } catch (err) {
+      skipped.push({
+        serial,
+        reason: `couldn't fill pre-order row ${row.preorderId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      });
+    }
+  }
+
+  if (records.length === 0) return { added: 0, filled, skipped };
   const { added } = await appendSheetRows("Player", records);
-  return { added, skipped };
+  return { added, filled, skipped };
 }
