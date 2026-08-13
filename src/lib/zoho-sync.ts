@@ -76,7 +76,7 @@ interface SkuFilter {
  * Goalie sticks: Level only (from the Goalie tab)
  * Tier 1: Level only
  */
-const SKU_FILTERS: Record<string, SkuFilter> = {
+export const SKU_FILTERS: Record<string, SkuFilter> = {
   // Player — Intermediate (all sizes)
   "TILT-NSD-18":     { tab: "Player", level: "INTERMEDIATE", carbon: "18K" },
   "TILT-NSD-24":     { tab: "Player", level: "INTERMEDIATE", carbon: "24K" },
