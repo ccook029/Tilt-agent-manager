@@ -857,6 +857,12 @@ export interface ZohoItemGroup {
 export async function createItemGroup(
   input: CreateItemGroupInput
 ): Promise<ZohoItemGroup> {
+  // No `attributes` array. Zoho stringifies nested fields and then applies a
+  // scalar length check to the result — sending the options here fails with
+  // "attributes has less than 100 characters", the same shape of error that
+  // an inline shipping_address produces on sales orders. The attribute names
+  // go in attribute_nameN and the option values ride on each variant, which
+  // is how Zoho derives the option list anyway.
   const body: Record<string, unknown> = {
     group_name: input.group_name,
     description: input.description ?? "",
@@ -864,13 +870,6 @@ export async function createItemGroup(
     item_type: "inventory",
     product_type: "goods",
     attribute_name1: input.attributes[0]?.name,
-    attributes: input.attributes.map((a, i) => ({
-      name: a.name,
-      // Zoho numbers attributes from 1 and matches options back by this id.
-      attribute_id: undefined,
-      options: a.options.map((o) => ({ name: o })),
-      index: i + 1,
-    })),
     items: input.variants.map((v) => ({
       name: v.name,
       sku: v.sku,
