@@ -17,6 +17,7 @@ import {
 } from "@/lib/org/work-status";
 import type { WorkOrder } from "@/lib/org/types";
 import ResumeButton from "./resume-button";
+import WorkPipeline from "@/components/work-pipeline";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +87,10 @@ function Card({ order }: { order: WorkOrder }) {
 }
 
 export default async function WorkBoardPage() {
+  // The live pipeline goes first: watching a piece move is the thing this page
+  // exists for, and it was the thing it couldn't do. The by-holder grouping
+  // below stays — "Harper has 3" is a different question, and a stage column
+  // can't answer it.
   const orders = await listWorkOrders({ status: LIVE_STATUSES, limit: 200 }).catch(
     () => [] as WorkOrder[]
   );
@@ -114,15 +119,20 @@ export default async function WorkBoardPage() {
   const stalledCount = orders.filter(isStalled).length;
 
   return (
-    <main className="mx-auto max-w-5xl px-5 py-10">
-      <div className="flex items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight text-white">Where work sits</h1>
+    <main className="mx-auto max-w-6xl px-5 py-10">
+      {/* The live board, first. Watching a piece move between stages is what
+          this page is for, and it's exactly what it couldn't do before. */}
+      <WorkPipeline />
+
+      <div className="mt-12 flex items-baseline justify-between gap-4 border-t border-gray-800/70 pt-8">
+        <h1 className="text-xl font-semibold tracking-tight text-white">By who&apos;s holding it</h1>
         <Link href="/review" className="text-xs font-semibold text-[#00d6ff] hover:underline">
           Review queue →
         </Link>
       </div>
       <p className="mt-1.5 text-sm text-gray-400">
-        Every live work order and who is holding it right now.
+        The same work, grouped by person — &ldquo;Harper has 3&rdquo; is a question a
+        stage column can&apos;t answer.
         {orders.length > 0 && (
           <>
             {" "}
