@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
 import { resolveBatch, resolveBatches } from "@/lib/zoho-actions";
-import { retireLegacyItems } from "@/lib/legacy-cleanup";
+import { retireLegacyItems, zeroInactiveStock } from "@/lib/legacy-cleanup";
 import { postSignal } from "@/lib/signals";
 
 export const dynamic = "force-dynamic";
@@ -37,24 +37,35 @@ export async function POST(request: NextRequest) {
     if (!batch) {
       return NextResponse.json({ ok: false, error: `No batch "${id}".` }, { status: 404 });
     }
-    if (batch.matched.length === 0) {
+    if (batch.matched.length === 0 && batch.inactiveWithStock.length === 0) {
       return NextResponse.json({
         ok: true,
         retired: 0,
         failed: 0,
         unitsZeroed: 0,
         results: [],
-        note: "Nothing matched — already done, or the rules no longer hit anything.",
+        note: `Nothing to do — scanned ${batch.itemsScanned} items, ${batch.alreadyDone} already retired and at zero.`,
       });
     }
 
-    const results = await retireLegacyItems(batch.matched.map((m) => m.itemId));
+    // Active items: zero the stock, then deactivate.
+    const results =
+      batch.matched.length > 0
+        ? await retireLegacyItems(batch.matched.map((m) => m.itemId))
+        : [];
     const retired = results.filter((r) => r.deactivated).length;
     const failed = results.length - retired;
 
+    // Already-inactive items: nothing to deactivate, but a retired item
+    // sitting at -8 keeps skewing valuations, so clear the count.
+    const inactive = await zeroInactiveStock(batch.inactiveWithStock);
+
+    const unitsZeroed =
+      results.reduce((s, r) => s + Math.abs(r.stockZeroed), 0) + inactive.unitsCleared;
+
     await postSignal({
       source: "inventory",
-      headline: `${batch.title} — ${retired} item${retired === 1 ? "" : "s"} retired${failed > 0 ? `, ${failed} failed` : ""}`,
+      headline: `${batch.title} — ${retired} retired, ${unitsZeroed} phantom units cleared${failed > 0 ? `, ${failed} failed` : ""}`,
       detail: batch.note,
     }).catch(() => {});
 
@@ -62,7 +73,9 @@ export async function POST(request: NextRequest) {
       ok: true,
       retired,
       failed,
-      unitsZeroed: results.reduce((s, r) => s + Math.abs(r.stockZeroed), 0),
+      unitsZeroed,
+      inactiveCleared: inactive.zeroed,
+      inactiveError: inactive.error,
       results,
     });
   } catch (err) {

@@ -67,11 +67,23 @@ export interface MatchedItem {
 }
 
 export interface ResolvedBatch extends ZohoActionBatch {
+  /** Active items the batch will zero and deactivate. */
   matched: MatchedItem[];
-  /** Live stick SKUs the rules would have caught. Always empty in practice —
-   *  reported rather than silently dropped, because a batch that quietly
-   *  skipped something is how the wrong thing gets retired next time. */
+  /** Already inactive but still carrying stock. Invisible to an "active only"
+   *  filter while their counts keep polluting every report, so they're listed
+   *  and their stock still gets zeroed — there's just nothing left to
+   *  deactivate. */
+  inactiveWithStock: MatchedItem[];
+  /** Already inactive and already at zero. Nothing to do; counted so the card
+   *  can say "these are done" instead of "nothing matched". */
+  alreadyDone: number;
+  /** Live stick SKUs the rules would have caught. Reported rather than
+   *  silently dropped, because a batch that quietly skips things is how the
+   *  wrong thing gets retired next time. */
   protectedFromMatch: string[];
+  /** How many items the rules were compared against — the difference between
+   *  "no such items" and "couldn't reach the catalog". */
+  itemsScanned: number;
   totalUnits: number;
 }
 
@@ -86,29 +98,48 @@ export async function resolveBatches(
 ): Promise<ResolvedBatch[]> {
   const items = await fetchAllItems();
   return batches.map((batch) => {
-    const hits = items.filter(
-      (i) => i.status === "active" && matchesPrefixes(i, batch.namePrefixes)
-    );
+    // Match on name across every status first. Filtering by status up front is
+    // what made a batch report "nothing matched" when the items were sitting
+    // right there, already inactive and still holding negative stock.
+    const hits = items.filter((i) => matchesPrefixes(i, batch.namePrefixes));
+
     const protectedFromMatch: string[] = [];
     const matched: MatchedItem[] = [];
+    const inactiveWithStock: MatchedItem[] = [];
+    let alreadyDone = 0;
+
     for (const i of hits) {
       if (i.sku && LIVE_STICK_SKUS.has(i.sku.toUpperCase())) {
         protectedFromMatch.push(i.sku);
         continue;
       }
-      matched.push({
+      const entry: MatchedItem = {
         itemId: i.item_id,
         sku: i.sku || "(no SKU)",
         name: i.name,
         stockOnHand: i.stock_on_hand,
-      });
+      };
+      if (i.status === "active") matched.push(entry);
+      else if (i.stock_on_hand !== 0) inactiveWithStock.push(entry);
+      else alreadyDone++;
     }
-    matched.sort((a, b) => Math.abs(b.stockOnHand) - Math.abs(a.stockOnHand));
+
+    const byDistance = (a: MatchedItem, b: MatchedItem) =>
+      Math.abs(b.stockOnHand) - Math.abs(a.stockOnHand);
+    matched.sort(byDistance);
+    inactiveWithStock.sort(byDistance);
+
     return {
       ...batch,
       matched,
+      inactiveWithStock,
+      alreadyDone,
       protectedFromMatch,
-      totalUnits: matched.reduce((s, m) => s + Math.abs(m.stockOnHand), 0),
+      itemsScanned: items.length,
+      totalUnits: [...matched, ...inactiveWithStock].reduce(
+        (s, m) => s + Math.abs(m.stockOnHand),
+        0
+      ),
     };
   });
 }

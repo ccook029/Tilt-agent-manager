@@ -22,7 +22,10 @@ interface Batch {
   note: string;
   namePrefixes: string[];
   matched: MatchedItem[];
+  inactiveWithStock: MatchedItem[];
+  alreadyDone: number;
   protectedFromMatch: string[];
+  itemsScanned: number;
   totalUnits: number;
 }
 
@@ -30,6 +33,8 @@ interface ApplyResult {
   retired: number;
   failed: number;
   unitsZeroed: number;
+  inactiveCleared?: number;
+  inactiveError?: string;
   note?: string;
   results?: { sku: string; deactivated: boolean; error?: string }[];
 }
@@ -120,7 +125,9 @@ export default function ZohoActionsPage() {
         <div className="space-y-4">
           {(batches ?? []).map((batch) => {
             const result = applied[batch.id];
-            const nothing = batch.matched.length === 0;
+            const actionable = batch.matched.length + batch.inactiveWithStock.length;
+            const nothing = actionable === 0;
+            const rows = [...batch.matched, ...batch.inactiveWithStock];
             return (
               <div
                 key={batch.id}
@@ -133,18 +140,40 @@ export default function ZohoActionsPage() {
                     <p className="mt-2 text-sm text-gray-400">
                       {nothing ? (
                         <span className="text-gray-600">
-                          Nothing matched — already done, or these models are gone.
+                          Nothing left to do
+                          {batch.alreadyDone > 0
+                            ? ` — ${batch.alreadyDone} already retired and sitting at zero.`
+                            : " — no items matched these names."}
                         </span>
                       ) : (
                         <>
-                          <span className="text-[#00d6ff]">{batch.matched.length} items</span>{" "}
-                          matched · {batch.totalUnits} units of stock to clear
+                          <span className="text-[#00d6ff]">{actionable} items</span> ·{" "}
+                          {batch.totalUnits} units of stock to clear
                         </>
                       )}
                     </p>
+                    {/* Say what was looked at. "Nothing matched" on its own
+                        can't tell a clean catalog from a failed fetch. */}
                     <p className="mt-1 text-xs text-gray-600">
-                      Matching: {batch.namePrefixes.join(", ")}
+                      Scanned {batch.itemsScanned} items · matching:{" "}
+                      {batch.namePrefixes.join(", ")}
                     </p>
+                    {batch.matched.length > 0 && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        {batch.matched.length} active → stock zeroed, then made inactive
+                      </p>
+                    )}
+                    {batch.inactiveWithStock.length > 0 && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        {batch.inactiveWithStock.length} already inactive but still
+                        holding stock → counts cleared
+                      </p>
+                    )}
+                    {batch.alreadyDone > 0 && actionable > 0 && (
+                      <p className="mt-1 text-xs text-gray-600">
+                        {batch.alreadyDone} already done
+                      </p>
+                    )}
                     {batch.protectedFromMatch.length > 0 && (
                       <p className="mt-2 text-xs text-amber-400">
                         Skipped {batch.protectedFromMatch.length} live stick SKUs:{" "}
@@ -155,14 +184,19 @@ export default function ZohoActionsPage() {
                   <div className="shrink-0 text-right">
                     {result ? (
                       <span
-                        className={`inline-block rounded-lg border px-3 py-2 text-sm ${
-                          result.failed === 0
+                        className={`inline-block max-w-[280px] rounded-lg border px-3 py-2 text-sm ${
+                          result.failed === 0 && !result.inactiveError
                             ? "border-green-800/60 bg-green-950/40 text-green-300"
                             : "border-amber-800/60 bg-amber-950/40 text-amber-200"
                         }`}
                       >
-                        {result.retired} retired
+                        {result.retired} retired · {result.unitsZeroed} units cleared
                         {result.failed > 0 && `, ${result.failed} failed`}
+                        {result.inactiveError && (
+                          <span className="mt-1 block text-xs">
+                            Inactive items not cleared: {result.inactiveError}
+                          </span>
+                        )}
                       </span>
                     ) : (
                       <button
@@ -182,13 +216,13 @@ export default function ZohoActionsPage() {
                       onClick={() => setOpen(open === batch.id ? null : batch.id)}
                       className="w-full border-t border-gray-800/80 px-5 py-2.5 text-left text-xs text-gray-500 hover:text-gray-300"
                     >
-                      {open === batch.id ? "Hide" : "Show"} the {batch.matched.length} items
+                      {open === batch.id ? "Hide" : "Show"} the {rows.length} items
                     </button>
                     {open === batch.id && (
                       <div className="max-h-96 overflow-y-auto border-t border-gray-900/60">
                         <table className="w-full text-sm">
                           <tbody>
-                            {batch.matched.map((m) => (
+                            {rows.map((m) => (
                               <tr key={m.itemId} className="border-b border-gray-900/60">
                                 <td className="px-5 py-2 text-gray-300">{m.name}</td>
                                 <td className="px-5 py-2 font-mono text-gray-600">{m.sku}</td>
