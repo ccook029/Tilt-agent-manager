@@ -15,6 +15,8 @@ import Link from "next/link";
 import { dispatchInBackground } from "@/lib/client/dispatch";
 import { getPersonaByAgentId } from "@/lib/personas";
 import GenericAgentChat from "@/components/generic-agent-chat";
+import { jobsFor } from "@/lib/org/agent-jobs";
+import { toolsForOwner, groupTools, GROUP_LABELS } from "@/lib/org/tool-registry";
 import ActivityFeed from "@/components/activity-feed";
 
 // These three have richer dedicated chats on their legacy console
@@ -145,7 +147,7 @@ export default function EmployeePage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold ${isBoss ? "bg-[#0094b8] text-white" : "bg-gray-800 text-gray-300"}`}>
@@ -175,8 +177,31 @@ export default function EmployeePage() {
         <p className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-4 text-sm text-gray-400">{employee.charter}</p>
       )}
 
-      {/* Wiring — every data pipe this person runs on, testable live. */}
-      <WiringPanel employeeId={id} firstName={firstNameOf(employee.name)} />
+      {/* What you came here to do. First, because someone new needs to know
+          what this person is FOR before anything else on the page matters. */}
+      {jobsFor(id).length > 0 && (
+        <section>
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            What do you need?
+          </h2>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {jobsFor(id).map((job) => (
+              <Link
+                key={job.href}
+                href={job.href}
+                className={`rounded-xl border p-3.5 transition-colors ${
+                  job.emphasis === "primary"
+                    ? "border-[#0094b8]/40 bg-[#0094b8]/[0.07] hover:border-[#00d6ff]/60"
+                    : "border-gray-800/70 bg-[#111]/40 hover:border-gray-700"
+                }`}
+              >
+                <p className="text-sm font-semibold text-gray-100">{job.label}</p>
+                <p className="mt-0.5 text-xs text-gray-500">{job.detail}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Chat is the primary way to work with an employee. Bosses come in
           already grounded in their team's recent output and can hand out
@@ -210,20 +235,31 @@ export default function EmployeePage() {
         <DispatchTeam deptId={dept.id} bossName={employee.name} onDone={load} />
       )}
 
-      {/* Tools */}
-      {(dept?.tools?.length ?? 0) > 0 && (
-        <div className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-4">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-600">Tools & workspaces</p>
-          <div className="flex flex-wrap gap-2">
-            {dept!.tools!.map((t) =>
-              t.external ? (
-                <a key={t.href} href={t.href} target="_blank" rel="noreferrer" title={t.description} className="rounded-full border border-gray-700 bg-gray-800/40 px-3 py-1 text-[11px] text-gray-300 hover:border-[#00d6ff]/50 hover:text-[#00d6ff]">{t.label} ↗</a>
-              ) : (
-                <Link key={t.href} href={t.href} title={t.description} className="rounded-full border border-gray-700 bg-gray-800/40 px-3 py-1 text-[11px] text-gray-300 hover:border-[#00d6ff]/50 hover:text-[#00d6ff]">{t.label}</Link>
-              )
-            )}
+      {/* Everything this person owns, from the registry rather than a
+          hand-kept department list — that list is how four tools ended up
+          unreachable. Collapsed: the jobs above cover the common cases. */}
+      {toolsForOwner(id).length > 0 && (
+        <details className="rounded-xl border border-gray-800/60 bg-[#111]/40 p-4">
+          <summary className="cursor-pointer select-none text-[10px] font-semibold uppercase tracking-wider text-gray-600 hover:text-gray-400">
+            All of {firstNameOf(employee.name)}&apos;s tools — {toolsForOwner(id).length}
+          </summary>
+          <div className="mt-3 space-y-3">
+            {groupTools(toolsForOwner(id)).map(({ group, tools }) => (
+              <div key={group}>
+                <p className="mb-1.5 text-[10px] uppercase tracking-wider text-gray-700">{GROUP_LABELS[group]}</p>
+                <div className="flex flex-wrap gap-2">
+                  {tools.map((t) =>
+                    t.external ? (
+                      <a key={t.href} href={t.href} target="_blank" rel="noreferrer" title={t.description} className="rounded-full border border-gray-700 bg-gray-800/40 px-3 py-1 text-[11px] text-gray-300 hover:border-[#00d6ff]/50 hover:text-[#00d6ff]">{t.label} ↗</a>
+                    ) : (
+                      <Link key={t.href} href={t.href} title={t.description} className="rounded-full border border-gray-700 bg-gray-800/40 px-3 py-1 text-[11px] text-gray-300 hover:border-[#00d6ff]/50 hover:text-[#00d6ff]">{t.label}</Link>
+                    )
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+        </details>
       )}
 
       {/* Work history */}
@@ -235,6 +271,17 @@ export default function EmployeePage() {
           orders.map((o) => <OrderCard key={o.id} order={o} />)
         )}
       </section>
+
+      {/* Wiring — the data pipes, testable live. Diagnostics belong at the
+          bottom: you look here when something is wrong, not on arrival. */}
+      <details className="group">
+        <summary className="cursor-pointer select-none text-xs font-medium text-gray-500 transition-colors hover:text-gray-300">
+          Check {firstNameOf(employee.name)}&apos;s connections ▾
+        </summary>
+        <div className="mt-2">
+          <WiringPanel employeeId={id} firstName={firstNameOf(employee.name)} />
+        </div>
+      </details>
 
       {/* Live activity — what they're working on and everything they've done. */}
       <section>
