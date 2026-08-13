@@ -1022,6 +1022,19 @@ export interface AdjustmentSummary {
 }
 
 /**
+ * One adjustment in full. The list response carries no account, so the only
+ * way to answer "where did this post?" is to ask for the document itself.
+ */
+export async function fetchInventoryAdjustment(
+  id: string
+): Promise<Record<string, unknown>> {
+  const res = await zohoGet<{ inventory_adjustment: Record<string, unknown> }>(
+    `/inventoryadjustments/${id}`
+  );
+  return res.inventory_adjustment;
+}
+
+/**
  * Recent inventory adjustments — the audit trail for anything this app wrote.
  * Use it to check what a cleanup actually posted, and to which account.
  */
