@@ -60,6 +60,9 @@ export interface IntakeRow {
 
 export interface IntakeResult {
   rows: IntakeRow[];
+  /** Serials that needed tidying, as "before → after". Shown so the fix is
+   *  visible rather than silent. */
+  serialsCleaned: string[];
   /** What Stockton concluded about the file's shape — shown so the mapping
    *  can be sanity-checked rather than taken on trust. */
   interpretation: string;
@@ -129,6 +132,10 @@ Rules that decide it:
 
 Level is often left blank. Infer it from the size using the level/size pairs already on the live sheet, which are given to you. If a size falls outside every observed range, leave level empty and say so in the row's note rather than guessing.
 
+Serial numbers, sizes and hands are normalised automatically AFTER you hand them back — stray spaces, missing dashes, casing and inch marks are all handled in code. Do not warn about them; they are already fixed by the time the owner sees your preview. Pass the values through as they appear and say nothing about their formatting.
+
+If the owner has given you instructions, they override your own judgement. Apply them exactly and say in your interpretation how you applied them.
+
 Return ONLY a JSON object, no prose around it:
 {
   "interpretation": "one paragraph: which columns map to what, where each section starts and ends, and how you inferred level",
@@ -158,7 +165,10 @@ Include EVERY row you judged to be a stick — stock and custom alike — and us
  * Ask Stockton to interpret the grid, then apply the cleanup and dedupe that
  * shouldn't depend on a model getting it right.
  */
-export async function interpretIntake(grid: string[][]): Promise<IntakeResult> {
+export async function interpretIntake(
+  grid: string[][],
+  instructions?: string
+): Promise<IntakeResult> {
   // Level/size pairs already on the sheet, so level inference follows Tilt's
   // real brackets instead of a guess about hockey sizing.
   let observed = "";
@@ -187,9 +197,13 @@ export async function interpretIntake(grid: string[][]): Promise<IntakeResult> {
     .filter((line) => line.split("\t").slice(1).some((c) => c !== ""))
     .join("\n");
 
+  const ownerNote = instructions?.trim()
+    ? `\n\nINSTRUCTIONS FROM CHRIS — these override your own judgement:\n${instructions.trim()}\n`
+    : "";
+
   const res = await callClaudeToCompletion({
     systemPrompt: SYSTEM,
-    userMessage: `Level and size pairs already on the live sheet:\n${observed || "(none)"}\n\nThe uploaded file, one row per line, tab-separated, prefixed by its row number:\n\n${body}`,
+    userMessage: `Level and size pairs already on the live sheet:\n${observed || "(none)"}${ownerNote}\n\nThe uploaded file, one row per line, tab-separated, prefixed by its row number:\n\n${body}`,
     model: CLAUDE_MANAGER_MODEL,
     maxTokens: 16000,
     temperature: 0,
@@ -199,8 +213,13 @@ export async function interpretIntake(grid: string[][]): Promise<IntakeResult> {
   const raw = Array.isArray(parsed.rows) ? (parsed.rows as Record<string, unknown>[]) : [];
 
   const seen = new Set<string>();
+  const cleaned: string[] = [];
   const rows: IntakeRow[] = raw.map((r) => {
-    const serial = normalizeSerial(String(r.serial ?? ""));
+    const rawSerial = String(r.serial ?? "").trim();
+    const serial = normalizeSerial(rawSerial);
+    if (rawSerial && serial && rawSerial.toUpperCase() !== serial) {
+      cleaned.push(`${rawSerial} → ${serial}`);
+    }
     let excludeReason = String(r.excludeReason ?? "").trim();
 
     // Code owns these, not the model: a wrong call here writes a duplicate
@@ -232,6 +251,10 @@ export async function interpretIntake(grid: string[][]): Promise<IntakeResult> {
   });
 
   const warnings = Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [];
+  // Say what was fixed rather than what looked wrong — the values below are
+  // the cleaned ones, and a warning about spaces that are already gone reads
+  // as work still to do.
+  const serialsCleaned = cleaned;
   const missingLevel = rows.filter((r) => !r.excludeReason && !r.level).length;
   if (missingLevel > 0) {
     warnings.push(
@@ -243,6 +266,7 @@ export async function interpretIntake(grid: string[][]): Promise<IntakeResult> {
     rows,
     interpretation: String(parsed.interpretation ?? "").trim(),
     warnings,
+    serialsCleaned,
   };
 }
 

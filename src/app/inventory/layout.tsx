@@ -2,10 +2,11 @@
 // Stick Inventory module layout — the absorbed tiltinventory app running
 // natively at /inventory. The hub's root layout provides the global chrome
 // (header, aurora backdrop, max-w-6xl main); this layout adds the module's
-// title row and its Inventory / Scan & Sell tabs.
+// title row. The tabs come from the shared tool registry, so a tool can't be
+// present here and missing from Stockton's page.
 // ---------------------------------------------------------------------------
 import type { Metadata } from "next";
-import InventoryNav from "./nav";
+import SectionNav from "@/components/section-nav";
 
 export const metadata: Metadata = {
   title: { default: "Stick Inventory", template: "%s · Stick Inventory · Tilt HQ" },
@@ -24,11 +25,11 @@ export default function StickInventoryLayout({
         </p>
         <h1 className="text-3xl font-semibold">Stick Inventory</h1>
         <p className="text-gray-500 mt-1 max-w-2xl">
-          Player stick stock straight from the Zoho Sheet — browse what&apos;s
-          on hand, or scan a serial number to sell a stick on the spot.
+          Everything Stockton runs: what&apos;s on hand, receiving new stock,
+          building the next factory order, and keeping the Zoho catalog clean.
         </p>
       </div>
-      <InventoryNav />
+      <SectionNav section="inventory" ariaLabel="Stick Inventory" />
       {children}
     </div>
   );
