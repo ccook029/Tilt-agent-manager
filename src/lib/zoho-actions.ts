@@ -11,7 +11,7 @@
 // is resolved against live Zoho every time it's viewed — what the page shows
 // is what the button will act on, current as of that moment.
 // ---------------------------------------------------------------------------
-import { fetchAllItems, type ZohoItem } from "./zoho";
+import { fetchAllItems, fetchItem, type ZohoItem } from "./zoho";
 import { SKU_FILTERS } from "./zoho-sync";
 
 const LIVE_STICK_SKUS = new Set(Object.keys(SKU_FILTERS).map((s) => s.toUpperCase()));
@@ -64,6 +64,24 @@ export interface MatchedItem {
   sku: string;
   name: string;
   stockOnHand: number;
+  /** False when Zoho never gave us a number for this item. An unknown count
+   *  must never be treated as zero (nothing to do) or as non-zero (adjust by
+   *  NaN) — both have already gone wrong once. */
+  stockKnown: boolean;
+}
+
+/** Zoho omits stock_on_hand on inactive items in the list response, so it
+ *  arrives as undefined. Arithmetic on that yields NaN, which serializes into
+ *  an adjustment Zoho rejects as "quantity should not be zero". */
+function readStock(raw: unknown): { value: number; known: boolean } {
+  // null and "" both coerce to 0, which would file a phantom count as
+  // "already at zero" and skip it. Absence has to be rejected before the
+  // number conversion, not after.
+  if (raw === null || raw === undefined || raw === "") {
+    return { value: 0, known: false };
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) ? { value: n, known: true } : { value: 0, known: false };
 }
 
 export interface ResolvedBatch extends ZohoActionBatch {
@@ -85,6 +103,9 @@ export interface ResolvedBatch extends ZohoActionBatch {
    *  "no such items" and "couldn't reach the catalog". */
   itemsScanned: number;
   totalUnits: number;
+  /** Items whose stock the list endpoint wouldn't report. Their real counts
+   *  are fetched per-item before anything is written. */
+  stockUnknownCount: number;
 }
 
 function matchesPrefixes(item: ZohoItem, prefixes: string[]): boolean {
@@ -113,14 +134,19 @@ export async function resolveBatches(
         protectedFromMatch.push(i.sku);
         continue;
       }
+      const stock = readStock(i.stock_on_hand);
       const entry: MatchedItem = {
         itemId: i.item_id,
         sku: i.sku || "(no SKU)",
         name: i.name,
-        stockOnHand: i.stock_on_hand,
+        stockOnHand: stock.value,
+        stockKnown: stock.known,
       };
       if (i.status === "active") matched.push(entry);
-      else if (i.stock_on_hand !== 0) inactiveWithStock.push(entry);
+      // Unknown counts go in the actionable pile too — they get resolved
+      // properly before anything is written, and quietly filing them as
+      // "done" would leave real phantom stock behind.
+      else if (!stock.known || stock.value !== 0) inactiveWithStock.push(entry);
       else alreadyDone++;
     }
 
@@ -137,11 +163,39 @@ export async function resolveBatches(
       protectedFromMatch,
       itemsScanned: items.length,
       totalUnits: [...matched, ...inactiveWithStock].reduce(
-        (s, m) => s + Math.abs(m.stockOnHand),
+        (s, m) => s + (m.stockKnown ? Math.abs(m.stockOnHand) : 0),
         0
       ),
+      stockUnknownCount: [...matched, ...inactiveWithStock].filter((m) => !m.stockKnown)
+        .length,
     };
   });
+}
+
+/**
+ * Ask Zoho for each item directly so every count is a real number.
+ *
+ * Needed because the list endpoint withholds stock_on_hand for inactive items.
+ * Anything still unresolved after this is dropped by the caller rather than
+ * guessed at — an adjustment built on a guess is how you turn a tidy-up into a
+ * stock correction nobody asked for.
+ */
+export async function hydrateStock(items: MatchedItem[]): Promise<MatchedItem[]> {
+  const out: MatchedItem[] = [];
+  for (const item of items) {
+    if (item.stockKnown) {
+      out.push(item);
+      continue;
+    }
+    try {
+      const full = await fetchItem(item.itemId);
+      const stock = readStock(full.stock_on_hand);
+      out.push({ ...item, stockOnHand: stock.value, stockKnown: stock.known });
+    } catch {
+      out.push(item); // still unknown; caller skips it
+    }
+  }
+  return out;
 }
 
 export async function resolveBatch(id: string): Promise<ResolvedBatch | null> {

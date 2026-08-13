@@ -90,10 +90,15 @@ export async function listLegacyStickItems(): Promise<LegacyStickItem[]> {
  * as success.
  */
 export async function zeroInactiveStock(
-  items: { itemId: string; sku: string; stockOnHand: number }[]
-): Promise<{ zeroed: number; unitsCleared: number; error?: string }> {
-  const withStock = items.filter((i) => i.stockOnHand !== 0);
-  if (withStock.length === 0) return { zeroed: 0, unitsCleared: 0 };
+  items: { itemId: string; sku: string; stockOnHand: number; stockKnown?: boolean }[]
+): Promise<{ zeroed: number; unitsCleared: number; skipped: number; error?: string }> {
+  // A count Zoho never reported must not become an adjustment. Sending one
+  // produced NaN, which Zoho read as zero and rejected outright — better to
+  // skip the item and say so than to write a number nobody established.
+  const usable = items.filter((i) => i.stockKnown !== false);
+  const skipped = items.length - usable.length;
+  const withStock = usable.filter((i) => Number.isFinite(i.stockOnHand) && i.stockOnHand !== 0);
+  if (withStock.length === 0) return { zeroed: 0, unitsCleared: 0, skipped };
 
   try {
     await createInventoryAdjustment({
@@ -107,11 +112,13 @@ export async function zeroInactiveStock(
     return {
       zeroed: withStock.length,
       unitsCleared: withStock.reduce((s, i) => s + Math.abs(i.stockOnHand), 0),
+      skipped,
     };
   } catch (err) {
     return {
       zeroed: 0,
       unitsCleared: 0,
+      skipped,
       error: err instanceof Error ? err.message : String(err),
     };
   }
