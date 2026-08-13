@@ -296,9 +296,9 @@ const orderBuilderFeed = (): WiringFeed => ({
 const webContextFeed = (): WiringFeed => ({
   id: "web-context",
   label: "Storefront file map",
-  description: "The map of tilthockey.com's code so changes target the right file.",
+  description: "The storefront's real source tree, read live so changes target a file that exists.",
   kind: "data",
-  check: async () => textProof(renderWebContext()),
+  check: async () => textProof(await renderWebContext()),
 });
 
 const webPrFeed = (): WiringFeed => ({

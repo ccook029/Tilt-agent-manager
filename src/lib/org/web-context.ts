@@ -4,11 +4,62 @@
 // Grounds the Website Manager in the real site: the store, the product lines,
 // the key pages, where each kind of content lives, and how a change actually
 // ships (content/merchandising can go live; code/design goes out as a PR for
-// review). Kept as a curated map so the agent gives concrete, correct answers
-// without a live crawl; a live tiltweb content feed is the next slice.
+// review).
+//
+// The prose below is curated — what the site IS, and how a change ships. The
+// FILE MAP is not: it's read from the storefront repo every few minutes.
+//
+// It used to be hand-written, and that was the bug behind Nova's changes dying
+// on a 404. The map named the page routes and `src/data/products.ts` correctly,
+// but for anything under `src/components` it said "ask if unsure of the exact
+// file" — which, to an agent that has to emit a path before it can do anything,
+// just means guess. Asked to add a banner she reached for a plausible
+// `src/components/Banner.tsx`; the real files are `AnnouncementBar.tsx` and
+// `ActionBanner.tsx`. A curated map is a promise to keep it in sync with
+// another repo by hand, and that promise silently expires.
 // ---------------------------------------------------------------------------
+import { cachedRepoFiles, websiteRepoConfigured } from "../web/github";
 
-export function renderWebContext(): string {
+/** The real source tree, grouped so it reads as a map rather than a dump. */
+async function renderFileMap(): Promise<string> {
+  if (!websiteRepoConfigured()) {
+    return `## FILE MAP
+Unavailable — GITHUB_TOKEN isn't set on the hub, so the storefront repo can't be
+read. Don't guess a path: say the repo isn't connected.`;
+  }
+  try {
+    const files = await cachedRepoFiles();
+    if (files.length === 0) throw new Error("empty tree");
+    const pages = files.filter((f) => /^src\/app\/.*\/page\.tsx$/.test(f) || f === "src/app/page.tsx");
+    const components = files.filter((f) => f.startsWith("src/components/"));
+    const data = files.filter((f) => f.startsWith("src/data/"));
+    const rest = files.filter(
+      (f) => !pages.includes(f) && !components.includes(f) && !data.includes(f)
+    );
+    return `## FILE MAP — the storefront's real source tree, read from the repo just now
+Use these paths VERBATIM in a webchange block. Every path here exists; any path
+NOT here does not. If nothing listed fits the change, say so and ask — do not
+invent a filename, it will fail before the edit is even attempted.
+
+### Pages (${pages.length})
+${pages.join("\n")}
+
+### Components (${components.length})
+${components.join("\n")}
+
+### Data — catalog, pricing, inventory (${data.length})
+${data.join("\n")}
+
+### Everything else (${rest.length})
+${rest.join("\n")}`;
+  } catch (err) {
+    return `## FILE MAP
+Couldn't read the storefront repo (${err instanceof Error ? err.message : String(err)}).
+Don't guess a path — say the file map is unavailable and ask which file to edit.`;
+  }
+}
+
+export async function renderWebContext(): Promise<string> {
   return `
 
 === THE WEBSITE YOU MANAGE: tilthockey.com (the "tiltweb" storefront) ===
@@ -40,17 +91,7 @@ Warranty (/warranty), Stick Registration (/register), Ambassadors
 - The "Under Production" badge on stick pages is fed live from HQ (Piers'
   factory-order dates) — you don't hand-edit that.
 
-## FILE MAP (which file a change lives in — use these paths in a webchange block)
-- Product catalog — names, prices, compare-at prices, copy, badges, in-stock,
-  options, images: src/data/products.ts
-- Homepage: src/app/page.tsx
-- Store landing + category pages: src/app/store/page.tsx and
-  src/app/store/{sticks,accessories,gear,apparel,headwear,drinkware}/page.tsx
-- Product detail template: src/app/store/[slug]/page.tsx
-- Technology / About / Warranty / Contact pages: src/app/{technology,about,warranty,contact}/page.tsx
-- Global nav + footer live in src/components (ask if unsure of the exact file).
-If you're not certain which file holds something, say so and propose your best
-guess rather than inventing a path.
+${await renderFileMap()}
 
 === HOW YOU SHIP CHANGES (your operating model) ===
 - CONTENT / MERCHANDISING (a price, product copy, a badge, in-stock, homepage
