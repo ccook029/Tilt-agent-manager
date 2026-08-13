@@ -948,6 +948,18 @@ export async function markItemInactive(itemId: string): Promise<void> {
   );
 }
 
+/**
+ * Mark an item active again.
+ *
+ * Needed to fix an inactive item's stock at all: Zoho refuses adjustments
+ * against inactive items ("cannot be raised for item … marked as inactive",
+ * code 2007) and won't report their counts either. So a stuck count can only
+ * be cleared by bringing the item back, correcting it, and retiring it again.
+ */
+export async function markItemActive(itemId: string): Promise<void> {
+  await zohoPost<{ code: number; message: string }>(`/items/${itemId}/active`, {});
+}
+
 // ---- Inventory Adjustments ------------------------------------------------
 
 export interface AdjustmentLineItem {
