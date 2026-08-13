@@ -14,6 +14,7 @@ import {
   prepareAgentSpeech,
   type PreparedSpeech,
   type SpeechHandle,
+  type SpeechSource,
 } from "./tts-playback";
 
 /**
@@ -127,13 +128,26 @@ export class SpeechQueue {
   private current: SpeechHandle | null = null;
   private firstAudio = false;
   private waiters: Array<() => void> = [];
-  /** Latched once the server voice fails, so the rest of the reply stays in
-   *  one voice instead of flipping between the agent and the browser. */
+  /**
+   * Latched only when the server says it has no voice at all, so the rest of
+   * the reply doesn't spend a round-trip per sentence rediscovering that.
+   *
+   * It used to latch on ANY failure, which was the bug behind "the first line
+   * is good, then it goes choppy": the opener synthesised fine, the clips
+   * prepared behind it hit the provider's concurrent-request cap, and one 429
+   * dropped every remaining sentence into the phone's robot voice.
+   */
   private browserOnly = false;
 
   constructor(
     private agentId: string,
-    private opts: { rate?: number; onFirstAudio?: () => void } = {}
+    private opts: {
+      rate?: number;
+      onFirstAudio?: () => void;
+      /** Which voice is actually coming out — so a fallback is visible on
+       *  screen rather than something you have to diagnose by ear. */
+      onSource?: (source: SpeechSource) => void;
+    } = {}
   ) {}
 
   enqueue(sentence: string) {
@@ -152,9 +166,10 @@ export class SpeechQueue {
         prepareAgentSpeech(this.agentId, text, {
           rate: this.opts.rate,
           preferBrowser: this.browserOnly,
-          onFallback: () => {
-            this.browserOnly = true;
+          onFallback: (permanent) => {
+            if (permanent) this.browserOnly = true;
           },
+          onSource: (s) => this.opts.onSource?.(s),
         })
       );
     }
