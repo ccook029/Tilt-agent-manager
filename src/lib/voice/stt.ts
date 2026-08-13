@@ -36,6 +36,13 @@ export interface SpeechToText {
   abort(): void;
   /** Whether this engine can run in the current browser. */
   readonly supported: boolean;
+  /**
+   * Whether a recognition is live right now. The loop reads this to keep an
+   * existing mic session alive without constructing a new one — building a new
+   * recognizer grabs the microphone, and a mic grab stutters audio that's
+   * already playing out of the speaker.
+   */
+  readonly running: boolean;
 }
 
 // --- Minimal Web Speech typings (not in the standard DOM lib) --------------
@@ -100,6 +107,9 @@ function createBrowserStt(opts: { lang?: string; continuous?: boolean }): Speech
 
   const impl: SpeechToText & { _bind(h: SttHandlers): void } = {
     supported: Boolean(Ctor),
+    get running() {
+      return running;
+    },
     _bind(h: SttHandlers) {
       handlers = h;
     },
@@ -110,6 +120,25 @@ function createBrowserStt(opts: { lang?: string; continuous?: boolean }): Speech
       }
       if (running) return; // already listening — don't stack a second recognition
       aborted = false;
+      // Cut the previous recognizer loose before replacing it. Without this,
+      // a start() that threw (or a recognizer that reported `onend` but hadn't
+      // actually released the mic) left a live object nobody held a reference
+      // to any more — abort() and stop() only ever reach the newest one. Each
+      // orphan keeps its grip on the microphone, and on a phone every extra
+      // mic grab re-negotiates the audio session and audibly chops whatever is
+      // playing through the speaker.
+      if (rec) {
+        const orphan = rec;
+        orphan.onresult = null;
+        orphan.onerror = null;
+        orphan.onend = null;
+        orphan.onstart = null;
+        try {
+          orphan.abort();
+        } catch {
+          /* already dead */
+        }
+      }
       // One long-lived recognition (continuous) is far more reliable than
       // stop/restart per phrase: Chrome's start() throws if the prior session
       // hasn't released yet, which used to strand us on "Listening…" with a dead
@@ -193,6 +222,7 @@ function createBrowserStt(opts: { lang?: string; continuous?: boolean }): Speech
 function createDeepgramStt(_opts: { lang?: string }): SpeechToText {
   return {
     supported: false,
+    running: false,
     start() {
       throw new Error("Deepgram STT is not wired yet — see the swap point in stt.ts.");
     },

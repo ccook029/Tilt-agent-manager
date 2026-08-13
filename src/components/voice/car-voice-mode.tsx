@@ -30,7 +30,11 @@ import {
   type SpeechToText,
 } from "@/lib/voice/stt";
 import { SpeechQueue, createSentenceChunker } from "@/lib/voice/speech-queue";
-import { playAgentSpeech, type SpeechHandle } from "@/lib/voice/tts-playback";
+import {
+  playAgentSpeech,
+  type SpeechHandle,
+  type SpeechSource,
+} from "@/lib/voice/tts-playback";
 import { streamVoiceReply } from "@/lib/voice/voice-client";
 
 /**
@@ -157,6 +161,12 @@ export default function CarVoiceMode({
   const [lastTranscript, setLastTranscript] = useState("");
   const [lastReply, setLastReply] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  // Which voice is actually coming out. When the real voice can't be reached
+  // the browser's built-in synthesiser takes over, and that swap is the single
+  // biggest quality drop in this screen — but by ear it just sounds like "it
+  // went choppy", which is impossible to report and was impossible to diagnose.
+  // So it says so on screen.
+  const [voiceSource, setVoiceSource] = useState<SpeechSource | null>(null);
 
   const activeRef = useRef(true);
   const phaseRef = useRef<Phase>("listening");
@@ -198,12 +208,29 @@ export default function CarVoiceMode({
     setPhaseState(p);
   }, []);
 
-  // Keep the mic live. Unlike before, this runs in EVERY active phase (not just
-  // "listening") so we can hear you interrupt while the agent is speaking. The
-  // STT layer no-ops if a recognition is already running, so calling it is safe.
-  const startMic = useCallback(() => {
+  // Keep the mic live. This runs in every active phase (not just "listening")
+  // so we can hear you interrupt while the agent is speaking. The STT layer
+  // no-ops if a recognition is already running, so calling it is safe.
+  //
+  // `allowNew` is the exception, and it matters more than it looks. When the
+  // recognizer is already alive, keeping it alive costs nothing and barge-in
+  // works. But CONSTRUCTING a new one grabs the microphone, and on a phone
+  // grabbing the mic re-negotiates the OS audio session — which ducks and
+  // stutters whatever is coming out of the speaker at that moment. The
+  // recognizer dies fairly often mid-reply (the agent's own voice feeding the
+  // mic ends a continuous session), and between `onEnd`'s restart and the
+  // 1-second watchdog we were rebuilding it over and over WHILE the agent was
+  // talking, chopping his own audio to pieces.
+  //
+  // So during playback we decline to build a new one. If the recognizer
+  // survives, barge-in still works; if it died, barge-in is off for the rest of
+  // that reply and comes straight back when the turn ends. Losing barge-in on
+  // one reply beats shredding every reply.
+  const startMic = useCallback((allowNew = true) => {
     if (!activeRef.current) return;
-    if (phaseRef.current === "paused" || phaseRef.current === "error") return;
+    const p = phaseRef.current;
+    if (p === "paused" || p === "error") return;
+    if (!allowNew && !sttRef.current?.running) return;
     sttRef.current?.start();
   }, []);
 
@@ -243,6 +270,9 @@ export default function CarVoiceMode({
         onFirstAudio: () => {
           if (activeRef.current && turnRef.current === myTurn && phaseRef.current !== "paused")
             setPhase("speaking");
+        },
+        onSource: (s) => {
+          if (activeRef.current && turnRef.current === myTurn) setVoiceSource(s);
         },
       });
       queueRef.current = queue;
@@ -384,8 +414,10 @@ export default function CarVoiceMode({
         if (!activeRef.current) return;
         if (phaseRef.current === "paused" || phaseRef.current === "error") return;
         // Recognizer stopped (a pause hit its limit, or a transient blip). Bring
-        // it right back — the mic must stay live in every active phase. The
-        // watchdog below is the backstop if this restart itself throws.
+        // it right back — unless the agent is mid-sentence, because rebuilding
+        // it now would chop his audio (see startMic). The turn's own startMic
+        // at the end, plus the watchdog, revive it the moment he stops.
+        if (phaseRef.current === "speaking") return;
         setTimeout(() => startMic(), 200);
       },
       onError: (e) => {
@@ -415,7 +447,10 @@ export default function CarVoiceMode({
     const watchdog = setInterval(() => {
       if (!activeRef.current) return;
       const p = phaseRef.current;
-      if (p === "listening" || p === "thinking" || p === "speaking") startMic();
+      // While he's speaking, only keep an EXISTING recognizer alive — never
+      // build a new one, or the mic grab stutters the audio once a second.
+      if (p === "speaking") startMic(false);
+      else if (p === "listening" || p === "thinking") startMic();
     }, 1000);
 
     // Keep the phone screen awake for the whole conversation (Android/Chrome)
@@ -587,6 +622,12 @@ export default function CarVoiceMode({
             ? `Just start talking to cut in · saved to your ${active.agentName} chat`
             : `Tap the circle to ${phase === "listening" ? "pause" : "listen"} · saved to your ${active.agentName} chat`}
         </p>
+        {voiceSource === "browser" && (
+          <p className="text-xs text-amber-500/80">
+            Using your phone&apos;s built-in voice — {active.agentName}&apos;s real
+            voice couldn&apos;t be reached.
+          </p>
+        )}
       </div>
     </div>
   );
