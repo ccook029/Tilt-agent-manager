@@ -990,17 +990,47 @@ export async function createInventoryAdjustment(opts: {
   date: string;
   reason: string;
   line_items: AdjustmentLineItem[];
+  /** The offset account for the journal entry. A quantity adjustment is NOT
+   *  purely operational — Zoho posts it, moving Inventory Asset against this
+   *  account. Left unset, Zoho picks its own default (typically Cost of Goods
+   *  Sold), which is how a tidy-up quietly lands in your P&L. Set
+   *  ZOHO_ADJUSTMENT_ACCOUNT_ID to send it somewhere deliberate. */
+  account_id?: string;
 }): Promise<InventoryAdjustmentResult> {
+  const accountId = opts.account_id ?? process.env.ZOHO_ADJUSTMENT_ACCOUNT_ID;
   const res = await zohoPost<{ inventory_adjustment: InventoryAdjustmentResult }>(
     "/inventoryadjustments",
     {
       date: opts.date,
       reason: opts.reason,
       adjustment_type: "quantity",
+      ...(accountId ? { account_id: accountId } : {}),
       line_items: opts.line_items,
     }
   );
   return res.inventory_adjustment;
+}
+
+export interface AdjustmentSummary {
+  inventory_adjustment_id: string;
+  date: string;
+  reason: string;
+  description?: string;
+  adjustment_type?: string;
+  status?: string;
+  total?: number;
+}
+
+/**
+ * Recent inventory adjustments — the audit trail for anything this app wrote.
+ * Use it to check what a cleanup actually posted, and to which account.
+ */
+export async function fetchInventoryAdjustments(): Promise<AdjustmentSummary[]> {
+  const res = await zohoGet<{ inventory_adjustments: AdjustmentSummary[] }>(
+    "/inventoryadjustments",
+    { per_page: "50", sort_column: "date", sort_order: "D" }
+  );
+  return res.inventory_adjustments ?? [];
 }
 
 // ---- Helpers --------------------------------------------------------------

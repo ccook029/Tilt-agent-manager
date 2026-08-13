@@ -110,6 +110,46 @@ export async function listLegacyStickItems(): Promise<LegacyStickItem[]> {
 }
 
 /**
+ * Correct an ACTIVE item's count without retiring it. Used when the problem is
+ * the number, not the product — a live item at minus eight needs fixing, not
+ * hiding.
+ *
+ * Note this posts a journal entry like any adjustment: Inventory Asset moves
+ * against the offset account (ZOHO_ADJUSTMENT_ACCOUNT_ID, or Zoho's default).
+ */
+export async function zeroActiveStock(
+  items: { itemId: string; stockOnHand: number; stockKnown?: boolean }[]
+): Promise<{ zeroed: number; unitsCleared: number; skipped: number; error?: string }> {
+  const usable = items.filter(
+    (i) => i.stockKnown !== false && Number.isFinite(i.stockOnHand) && i.stockOnHand !== 0
+  );
+  const skipped = items.length - usable.length;
+  if (usable.length === 0) return { zeroed: 0, unitsCleared: 0, skipped };
+  try {
+    await createInventoryAdjustment({
+      date: new Date().toISOString().slice(0, 10),
+      reason: "Correct negative stock",
+      line_items: usable.map((i) => ({
+        item_id: i.itemId,
+        quantity_adjusted: -i.stockOnHand,
+      })),
+    });
+    return {
+      zeroed: usable.length,
+      unitsCleared: usable.reduce((s, i) => s + Math.abs(i.stockOnHand), 0),
+      skipped,
+    };
+  } catch (err) {
+    return {
+      zeroed: 0,
+      unitsCleared: 0,
+      skipped,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
  * Zero the stock of items that are already inactive.
  *
  * Deactivating never cleared a count, so a retired item can sit at -8 forever

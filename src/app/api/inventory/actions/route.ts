@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
 import { resolveBatch, resolveBatches } from "@/lib/zoho-actions";
-import { retireLegacyItems, zeroInactiveStock } from "@/lib/legacy-cleanup";
+import { retireLegacyItems, zeroInactiveStock, zeroActiveStock } from "@/lib/legacy-cleanup";
 import { postSignal } from "@/lib/signals";
 
 export const dynamic = "force-dynamic";
@@ -48,11 +48,16 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Active items: zero the stock, then deactivate.
+    // Active items. "zero-only" corrects the count and leaves the item live —
+    // a sellable product with a broken number needs fixing, not retiring.
+    const correctOnly = batch.action === "zero-only";
     const results =
-      batch.matched.length > 0
+      !correctOnly && batch.matched.length > 0
         ? await retireLegacyItems(batch.matched.map((m) => m.itemId))
         : [];
+    const corrected = correctOnly
+      ? await zeroActiveStock(batch.matched)
+      : { zeroed: 0, unitsCleared: 0, skipped: 0, error: undefined as string | undefined };
     const retired = results.filter((r) => r.deactivated).length;
     const failed = results.length - retired;
 
@@ -66,7 +71,9 @@ export async function POST(request: NextRequest) {
     const inactive = await zeroInactiveStock(batch.inactiveWithStock);
 
     const unitsZeroed =
-      results.reduce((s, r) => s + Math.abs(r.stockZeroed), 0) + inactive.unitsCleared;
+      results.reduce((s, r) => s + Math.abs(r.stockZeroed), 0) +
+      inactive.unitsCleared +
+      corrected.unitsCleared;
 
     await postSignal({
       source: "inventory",
@@ -81,8 +88,9 @@ export async function POST(request: NextRequest) {
       unitsZeroed,
       inactiveCleared: inactive.zeroed,
       inactiveSkipped: inactive.skipped,
-      inactiveError: inactive.error,
+      inactiveError: inactive.error || corrected.error,
       leftActive: inactive.leftActive,
+      corrected: corrected.zeroed,
       results,
     });
   } catch (err) {
