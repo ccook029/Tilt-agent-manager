@@ -890,6 +890,43 @@ export async function createItemGroup(
   return res.item_group;
 }
 
+/**
+ * Read an item group back, so we can see what Zoho actually built rather than
+ * what we asked for. Worth having: the create payload had to drop the
+ * attributes array to get past a validator, and this is how we confirm the
+ * variants still hang off real attributes instead of landing as loose items.
+ */
+export async function fetchItemGroup(groupId: string): Promise<{
+  group_id: string;
+  group_name: string;
+  attribute_name1?: string;
+  attribute_name2?: string;
+  items?: {
+    item_id: string;
+    sku: string;
+    name: string;
+    status?: string;
+    stock_on_hand?: number;
+    attribute_option_name1?: string;
+    attribute_option_name2?: string;
+  }[];
+}> {
+  const res = await zohoGet<{ item_group: Record<string, unknown> }>(
+    `/itemgroups/${groupId}`
+  );
+  return res.item_group as never;
+}
+
+/** All item groups in the org — group-level view, not the flattened item list. */
+export async function fetchItemGroups(): Promise<
+  { group_id: string; group_name: string; status?: string }[]
+> {
+  const res = await zohoGet<{
+    itemgroups: { group_id: string; group_name: string; status?: string }[];
+  }>("/itemgroups", { per_page: "200" });
+  return res.itemgroups ?? [];
+}
+
 /** Mark an item inactive — hides it from the active catalog without deleting
  *  its transaction history. Zoho keeps the item; it can be reactivated from
  *  the Zoho UI if a retirement turns out to be wrong. */
