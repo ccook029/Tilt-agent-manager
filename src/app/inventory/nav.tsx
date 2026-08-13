@@ -12,6 +12,7 @@ const TABS: { href: string; label: string; exact?: boolean }[] = [
   { href: "/inventory/scan", label: "Scan & Sell" },
   { href: "/inventory/order-builder", label: "Order Builder" },
   { href: "/inventory/cleanup", label: "Legacy Cleanup" },
+  { href: "/inventory/apparel", label: "Apparel Groups" },
 ];
 
 export default function InventoryNav() {
