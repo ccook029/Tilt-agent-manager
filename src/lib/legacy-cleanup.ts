@@ -72,7 +72,10 @@ export async function listLegacyStickItems(): Promise<LegacyStickItem[]> {
       category: i.category_name || i.group_name || "—",
       tiltSku: !!i.sku && i.sku.toUpperCase().startsWith("TILT-"),
     }))
-    .sort((a, b) => b.stockOnHand - a.stockOnHand);
+    // By distance from zero, so negative stock — the loudest sign an item is
+    // dead — surfaces alongside the big positive counts instead of sinking to
+    // the bottom of the list.
+    .sort((a, b) => Math.abs(b.stockOnHand) - Math.abs(a.stockOnHand));
 }
 
 export interface RetireResult {
