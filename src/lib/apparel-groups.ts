@@ -39,8 +39,8 @@ export const APPAREL_PILOT: ApparelProductDef[] = [
   },
   {
     productId: "tilt-custom-hoodie",
-    groupName: "Tilt Custom Cotton/Poly Blend Hoodie",
-    description: "Customizable cotton/poly blend hoodie for teams and individuals.",
+    groupName: "Tilt Performance Tech Hoodie",
+    description: "Performance cotton/poly blend hoodie with a modern athletic fit.",
     price: 74.99,
     colours: ["Black", "Grey", "Navy"],
     sizes: ["S", "M", "L", "XL", "XXL"],
