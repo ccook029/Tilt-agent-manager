@@ -818,6 +818,79 @@ export async function updateInventoryItem(
   return res.item;
 }
 
+// ---- Item Groups (variants) -----------------------------------------------
+
+export interface ItemGroupVariant {
+  name: string;
+  sku: string;
+  rate: number;
+  purchase_rate?: number;
+  /** Value for attribute 1 (e.g. a colour). */
+  attribute_option_name1: string;
+  /** Value for attribute 2 (e.g. a size). */
+  attribute_option_name2?: string;
+  initial_stock?: number;
+}
+
+export interface CreateItemGroupInput {
+  group_name: string;
+  description?: string;
+  unit?: string;
+  /** Zoho allows up to 3 attributes per group; we use at most 2. */
+  attributes: { name: string; options: string[] }[];
+  variants: ItemGroupVariant[];
+}
+
+export interface ZohoItemGroup {
+  group_id: string;
+  group_name: string;
+  items?: { item_id: string; sku: string; name: string }[];
+}
+
+/**
+ * Create an item group with its variants in one call.
+ *
+ * Zoho has no way to convert existing standalone items into group items, so
+ * this always creates new records — the flat items it replaces have to be
+ * retired separately.
+ */
+export async function createItemGroup(
+  input: CreateItemGroupInput
+): Promise<ZohoItemGroup> {
+  const body: Record<string, unknown> = {
+    group_name: input.group_name,
+    description: input.description ?? "",
+    unit: input.unit ?? "qty",
+    item_type: "inventory",
+    product_type: "goods",
+    attribute_name1: input.attributes[0]?.name,
+    attributes: input.attributes.map((a, i) => ({
+      name: a.name,
+      // Zoho numbers attributes from 1 and matches options back by this id.
+      attribute_id: undefined,
+      options: a.options.map((o) => ({ name: o })),
+      index: i + 1,
+    })),
+    items: input.variants.map((v) => ({
+      name: v.name,
+      sku: v.sku,
+      rate: v.rate,
+      purchase_rate: v.purchase_rate ?? 0,
+      initial_stock: v.initial_stock ?? 0,
+      initial_stock_rate: v.purchase_rate ?? 0,
+      attribute_option_name1: v.attribute_option_name1,
+      ...(v.attribute_option_name2
+        ? { attribute_option_name2: v.attribute_option_name2 }
+        : {}),
+    })),
+  };
+  if (input.attributes[1]) body.attribute_name2 = input.attributes[1].name;
+  if (input.attributes[2]) body.attribute_name3 = input.attributes[2].name;
+
+  const res = await zohoPost<{ item_group: ZohoItemGroup }>("/itemgroups", body);
+  return res.item_group;
+}
+
 /** Mark an item inactive — hides it from the active catalog without deleting
  *  its transaction history. Zoho keeps the item; it can be reactivated from
  *  the Zoho UI if a retirement turns out to be wrong. */
