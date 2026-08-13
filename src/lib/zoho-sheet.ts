@@ -201,6 +201,50 @@ const COLUMN_MAP: Record<string, keyof StickRecord> = {
 };
 
 /**
+ * Append rows to a worksheet. Keys must match the tab's header text exactly —
+ * Zoho silently drops any column it doesn't recognise, which is how a value
+ * can look written and simply not be (see the "Date Sold" that went to a
+ * "Notes" column that never existed).
+ */
+export async function appendSheetRows(
+  worksheetName: string,
+  records: Record<string, string>[]
+): Promise<{ added: number }> {
+  if (records.length === 0) return { added: 0 };
+  const resourceId = getEnvOrThrow("ZOHO_SHEET_RESOURCE_ID");
+  const token = await getAccessToken();
+
+  const res = await fetch(`${getSheetApiBase()}/${resourceId}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Zoho-oauthtoken ${token}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      method: "worksheet.records.add",
+      worksheet_name: worksheetName,
+      header_row: "1",
+      json_data: JSON.stringify(records),
+    }).toString(),
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Zoho Sheet add failed (${res.status}): ${text.slice(0, 300)}`);
+  }
+  let data: Record<string, unknown> = {};
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Zoho Sheet returned non-JSON: ${text.slice(0, 200)}`);
+  }
+  if (data.status === "failure" || data.error_code) {
+    throw new Error(`Zoho Sheet add failed: ${JSON.stringify(data).slice(0, 300)}`);
+  }
+  return { added: records.length };
+}
+
+/**
  * Prove whether the current refresh token can WRITE to the sheet, without
  * writing anything.
  *
