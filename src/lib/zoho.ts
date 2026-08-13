@@ -891,6 +891,17 @@ export async function createItemGroup(
 }
 
 /**
+ * Fetch one item in full. The /items LIST endpoint omits stock_on_hand for
+ * inactive items, which reads as undefined and poisons any arithmetic done on
+ * it — so anything that needs a real count for a possibly-inactive item has to
+ * ask for the item directly.
+ */
+export async function fetchItem(itemId: string): Promise<ZohoItem> {
+  const res = await zohoGet<{ item: ZohoItem }>(`/items/${itemId}`);
+  return res.item;
+}
+
+/**
  * Read an item group back, so we can see what Zoho actually built rather than
  * what we asked for. Worth having: the create payload had to drop the
  * attributes array to get past a validator, and this is how we confirm the

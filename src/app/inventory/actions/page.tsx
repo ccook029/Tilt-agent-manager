@@ -14,6 +14,7 @@ interface MatchedItem {
   sku: string;
   name: string;
   stockOnHand: number;
+  stockKnown: boolean;
 }
 
 interface Batch {
@@ -27,6 +28,7 @@ interface Batch {
   protectedFromMatch: string[];
   itemsScanned: number;
   totalUnits: number;
+  stockUnknownCount: number;
 }
 
 interface ApplyResult {
@@ -34,6 +36,7 @@ interface ApplyResult {
   failed: number;
   unitsZeroed: number;
   inactiveCleared?: number;
+  inactiveSkipped?: number;
   inactiveError?: string;
   note?: string;
   results?: { sku: string; deactivated: boolean; error?: string }[];
@@ -149,6 +152,13 @@ export default function ZohoActionsPage() {
                         <>
                           <span className="text-[#00d6ff]">{actionable} items</span> ·{" "}
                           {batch.totalUnits} units of stock to clear
+                          {batch.stockUnknownCount > 0 && (
+                            <span className="text-gray-500">
+                              {" "}
+                              (+{batch.stockUnknownCount} whose count Zoho only
+                              reports per-item — fetched before pushing)
+                            </span>
+                          )}
                         </>
                       )}
                     </p>
@@ -197,6 +207,12 @@ export default function ZohoActionsPage() {
                             Inactive items not cleared: {result.inactiveError}
                           </span>
                         )}
+                        {!!result.inactiveSkipped && (
+                          <span className="mt-1 block text-xs">
+                            {result.inactiveSkipped} skipped — Zoho never reported a
+                            count for them
+                          </span>
+                        )}
                       </span>
                     ) : (
                       <button
@@ -228,14 +244,16 @@ export default function ZohoActionsPage() {
                                 <td className="px-5 py-2 font-mono text-gray-600">{m.sku}</td>
                                 <td
                                   className={`px-5 py-2 text-right font-mono ${
-                                    m.stockOnHand < 0
-                                      ? "text-red-400"
-                                      : m.stockOnHand > 0
-                                        ? "text-amber-300"
-                                        : "text-gray-700"
+                                    !m.stockKnown
+                                      ? "text-gray-600"
+                                      : m.stockOnHand < 0
+                                        ? "text-red-400"
+                                        : m.stockOnHand > 0
+                                          ? "text-amber-300"
+                                          : "text-gray-700"
                                   }`}
                                 >
-                                  {m.stockOnHand}
+                                  {m.stockKnown ? m.stockOnHand : "?"}
                                 </td>
                               </tr>
                             ))}

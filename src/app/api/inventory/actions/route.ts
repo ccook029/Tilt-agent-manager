@@ -8,7 +8,7 @@
 // posted from the browser, so what runs is what the rules currently match.
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
-import { resolveBatch, resolveBatches } from "@/lib/zoho-actions";
+import { resolveBatch, resolveBatches, hydrateStock } from "@/lib/zoho-actions";
 import { retireLegacyItems, zeroInactiveStock } from "@/lib/legacy-cleanup";
 import { postSignal } from "@/lib/signals";
 
@@ -57,8 +57,11 @@ export async function POST(request: NextRequest) {
     const failed = results.length - retired;
 
     // Already-inactive items: nothing to deactivate, but a retired item
-    // sitting at -8 keeps skewing valuations, so clear the count.
-    const inactive = await zeroInactiveStock(batch.inactiveWithStock);
+    // sitting at -8 keeps skewing valuations, so clear the count. Their stock
+    // has to be fetched per-item first — the list endpoint doesn't report it
+    // for inactive items, and the resulting NaN is what Zoho rejected.
+    const hydrated = await hydrateStock(batch.inactiveWithStock);
+    const inactive = await zeroInactiveStock(hydrated);
 
     const unitsZeroed =
       results.reduce((s, r) => s + Math.abs(r.stockZeroed), 0) + inactive.unitsCleared;
@@ -75,6 +78,7 @@ export async function POST(request: NextRequest) {
       failed,
       unitsZeroed,
       inactiveCleared: inactive.zeroed,
+      inactiveSkipped: inactive.skipped,
       inactiveError: inactive.error,
       results,
     });
