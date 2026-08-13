@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // /api/inventory/intake — received stock, from spreadsheet to the sheet.
 //
-//   POST multipart (file)      → Stockton reads it; returns a preview, no write
+//   POST multipart (file, instructions?) → Stockton reads it; preview, no write
 //   POST json { rows }         → writes the included rows as Available stock
 //
 // Two steps on purpose. The sheet is what the website sells from, so nothing
@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    const instructions = String(form.get("instructions") ?? "");
     const grid = workbookToGrid(await file.arrayBuffer());
     if (grid.length === 0) {
       return NextResponse.json(
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const result = await interpretIntake(grid);
+    const result = await interpretIntake(grid, instructions);
     return NextResponse.json({
       ok: true,
       fileName: file.name,

@@ -30,6 +30,7 @@ interface Preview {
   rowsInFile: number;
   interpretation: string;
   warnings: string[];
+  serialsCleaned: string[];
   rows: IntakeRow[];
 }
 
@@ -40,8 +41,13 @@ export default function IntakePage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ added: number; skipped: { serial: string; reason: string }[] } | null>(null);
   const [showExcluded, setShowExcluded] = useState(false);
+  // The file is kept so Stockton can re-read it with instructions without
+  // making the owner find and attach it again.
+  const [file, setFile] = useState<File | null>(null);
+  const [instructions, setInstructions] = useState("");
+  const [showCleaned, setShowCleaned] = useState(false);
 
-  async function upload(file: File) {
+  async function upload(file: File, notes = "") {
     setBusy(true);
     setError(null);
     setResult(null);
@@ -50,6 +56,7 @@ export default function IntakePage() {
     try {
       const fd = new FormData();
       fd.append("file", file);
+      if (notes.trim()) fd.append("instructions", notes.trim());
       const res = await fetch("/api/inventory/intake", { method: "POST", body: fd });
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "Could not read that file");
@@ -141,7 +148,10 @@ export default function IntakePage() {
             disabled={busy}
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) void upload(f);
+              if (f) {
+                setFile(f);
+                void upload(f);
+              }
             }}
           />
           <p className="text-sm text-gray-300">
@@ -167,10 +177,52 @@ export default function IntakePage() {
                 ))}
               </ul>
             )}
+            {preview.serialsCleaned.length > 0 && (
+              <div className="mt-3">
+                <button
+                  onClick={() => setShowCleaned(!showCleaned)}
+                  className="text-xs text-gray-500 hover:text-gray-300"
+                >
+                  {preview.serialsCleaned.length} serials tidied automatically —{" "}
+                  {showCleaned ? "hide" : "show"}
+                </button>
+                {showCleaned && (
+                  <ul className="mt-2 space-y-0.5 font-mono text-xs text-gray-500">
+                    {preview.serialsCleaned.map((c, i) => (
+                      <li key={i}>{c}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             <p className="mt-3 text-sm">
               <span className="text-[#00d6ff]">{included.length} going in</span>
               <span className="text-gray-600"> · {excluded.length} excluded</span>
             </p>
+          </div>
+
+          <div className="rounded-2xl border border-gray-800/80 bg-[#101010]/80 p-5">
+            <p className="text-sm font-semibold text-gray-200">
+              Tell Stockton what to change
+            </p>
+            <p className="mt-1 text-xs text-gray-600">
+              Plain English. He re-reads the same file with your notes — nothing
+              is written either way.
+            </p>
+            <textarea
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              rows={3}
+              placeholder={'e.g. "Exclude the 61 inch stick" · "Treat 61 inch as Intermediate" · "Skip anything in Box 4"'}
+              className="mt-3 w-full resize-y rounded-lg border border-gray-800 bg-black/40 px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:border-[#00d6ff]/50 focus:outline-none"
+            />
+            <button
+              onClick={() => file && void upload(file, instructions)}
+              disabled={busy || !instructions.trim() || !file}
+              className="mt-2 rounded-lg border border-[#0094b8]/40 bg-[#0094b8]/10 px-4 py-2 text-sm font-medium text-[#00d6ff] hover:bg-[#0094b8]/20 disabled:opacity-40"
+            >
+              {busy ? "Re-reading…" : "Re-read with these notes"}
+            </button>
           </div>
 
           <div className="rounded-2xl border border-gray-800/80 bg-[#101010]/80 overflow-hidden">
@@ -248,7 +300,11 @@ export default function IntakePage() {
 
           <div className="flex items-center justify-between">
             <button
-              onClick={() => setPreview(null)}
+              onClick={() => {
+                setPreview(null);
+                setFile(null);
+                setInstructions("");
+              }}
               className="rounded-lg border border-white/10 px-4 py-2 text-sm text-gray-300 hover:bg-white/[0.05]"
             >
               Start over
