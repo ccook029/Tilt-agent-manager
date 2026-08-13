@@ -13,10 +13,16 @@
 // changes, both move together or orders stop matching stock.
 // ---------------------------------------------------------------------------
 
-/** Storefront product id → the SKU's product segment. */
+/**
+ * Storefront product id → the SKU's product segment.
+ *
+ * The ids are internal and outlive display names — "tilt-custom-hoodie" is
+ * the Performance Tech Hoodie. Renaming the product does not change its id,
+ * because the id is what past orders and cart entries are keyed on.
+ */
 export const APPAREL_PRODUCT_CODES: Record<string, string> = {
   "tilt-cotton-hoodie": "HOOD-CTN",
-  "tilt-custom-hoodie": "HOOD-CUST",
+  "tilt-custom-hoodie": "HOOD-PERF",
 };
 
 /** Colour names as they appear in the storefront → SKU segment. */
