@@ -78,6 +78,45 @@ export async function listLegacyStickItems(): Promise<LegacyStickItem[]> {
     .sort((a, b) => Math.abs(b.stockOnHand) - Math.abs(a.stockOnHand));
 }
 
+/**
+ * Zero the stock of items that are already inactive.
+ *
+ * Deactivating doesn't clear a count, so a retired item can sit at -8 forever
+ * and keep skewing every valuation and reorder. Separate from
+ * retireLegacyItems because that function only handles active items by design.
+ *
+ * Whether Zoho accepts an adjustment against an inactive item isn't something
+ * this can assume, so the error comes back verbatim rather than being reported
+ * as success.
+ */
+export async function zeroInactiveStock(
+  items: { itemId: string; sku: string; stockOnHand: number }[]
+): Promise<{ zeroed: number; unitsCleared: number; error?: string }> {
+  const withStock = items.filter((i) => i.stockOnHand !== 0);
+  if (withStock.length === 0) return { zeroed: 0, unitsCleared: 0 };
+
+  try {
+    await createInventoryAdjustment({
+      date: new Date().toISOString().slice(0, 10),
+      reason: "Clear stock on retired items",
+      line_items: withStock.map((i) => ({
+        item_id: i.itemId,
+        quantity_adjusted: -i.stockOnHand,
+      })),
+    });
+    return {
+      zeroed: withStock.length,
+      unitsCleared: withStock.reduce((s, i) => s + Math.abs(i.stockOnHand), 0),
+    };
+  } catch (err) {
+    return {
+      zeroed: 0,
+      unitsCleared: 0,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export interface RetireResult {
   itemId: string;
   sku: string;
