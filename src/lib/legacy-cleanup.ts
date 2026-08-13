@@ -23,6 +23,35 @@ import {
 } from "./zoho";
 import { SKU_FILTERS } from "./zoho-sync";
 import { postSignal } from "./signals";
+import { kv } from "@vercel/kv";
+
+/**
+ * Item ids confirmed to be at zero while temporarily active.
+ *
+ * Zoho won't report stock for an inactive item, so an item that is genuinely
+ * empty can never prove it from the outside — it would be offered for cleanup
+ * forever, reactivated and re-retired on every run. The one moment its count
+ * IS readable is while we have it active, so that answer gets written down.
+ */
+const VERIFIED_ZERO_KEY = "zoho-verified-zero-items";
+
+export async function getVerifiedZeroItems(): Promise<Set<string>> {
+  try {
+    return new Set((await kv.get<string[]>(VERIFIED_ZERO_KEY)) ?? []);
+  } catch {
+    return new Set();
+  }
+}
+
+async function rememberVerifiedZero(itemIds: string[]): Promise<void> {
+  if (itemIds.length === 0) return;
+  try {
+    const existing = (await kv.get<string[]>(VERIFIED_ZERO_KEY)) ?? [];
+    await kv.set(VERIFIED_ZERO_KEY, [...new Set([...existing, ...itemIds])]);
+  } catch {
+    /* best-effort — worst case the item is offered again next run */
+  }
+}
 
 const ACTIVE_SKUS = new Set(Object.keys(SKU_FILTERS).map((s) => s.toUpperCase()));
 
@@ -124,18 +153,29 @@ export async function zeroInactiveStock(
 
     // Stock only became readable once the items were active again.
     const lines: { item_id: string; quantity_adjusted: number }[] = [];
+    const confirmedZero: string[] = [];
     let unitsCleared = 0;
     for (const item of reactivated) {
       try {
         const full = await fetchItem(item.itemId);
         const stock = Number(full.stock_on_hand);
-        if (!Number.isFinite(stock) || stock === 0) continue;
+        if (!Number.isFinite(stock)) {
+          skipped++;
+          continue;
+        }
+        if (stock === 0) {
+          // This is the only moment this is knowable. Record it, or the item
+          // gets offered for cleanup on every future run.
+          confirmedZero.push(item.itemId);
+          continue;
+        }
         lines.push({ item_id: item.itemId, quantity_adjusted: -stock });
         unitsCleared += Math.abs(stock);
       } catch {
         skipped++;
       }
     }
+    await rememberVerifiedZero(confirmedZero);
 
     if (lines.length === 0) {
       return { zeroed: 0, unitsCleared: 0, skipped, leftActive };
@@ -146,6 +186,8 @@ export async function zeroInactiveStock(
       reason: "Clear stock on retired items",
       line_items: lines,
     });
+    // They're at zero now, and about to go back to being unreadable.
+    await rememberVerifiedZero(lines.map((l) => l.item_id));
 
     return { zeroed: lines.length, unitsCleared, skipped, leftActive };
   } catch (err) {

@@ -13,6 +13,7 @@
 // ---------------------------------------------------------------------------
 import { fetchAllItems, type ZohoItem } from "./zoho";
 import { SKU_FILTERS } from "./zoho-sync";
+import { getVerifiedZeroItems } from "./legacy-cleanup";
 
 const LIVE_STICK_SKUS = new Set(Object.keys(SKU_FILTERS).map((s) => s.toUpperCase()));
 
@@ -117,7 +118,13 @@ function matchesPrefixes(item: ZohoItem, prefixes: string[]): boolean {
 export async function resolveBatches(
   batches: ZohoActionBatch[] = ZOHO_ACTION_BATCHES
 ): Promise<ResolvedBatch[]> {
-  const items = await fetchAllItems();
+  const [items, verifiedZero] = await Promise.all([
+    fetchAllItems(),
+    // Inactive items whose count we read as zero while they were briefly
+    // active. Without this they'd be offered for cleanup forever, since Zoho
+    // won't report an inactive item's stock.
+    getVerifiedZeroItems(),
+  ]);
   return batches.map((batch) => {
     // Match on name across every status first. Filtering by status up front is
     // what made a batch report "nothing matched" when the items were sitting
@@ -143,6 +150,7 @@ export async function resolveBatches(
         stockKnown: stock.known,
       };
       if (i.status === "active") matched.push(entry);
+      else if (verifiedZero.has(i.item_id)) alreadyDone++;
       // Unknown counts go in the actionable pile too — they get resolved
       // properly before anything is written, and quietly filing them as
       // "done" would leave real phantom stock behind.
