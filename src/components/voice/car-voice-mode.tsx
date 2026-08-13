@@ -100,6 +100,8 @@ const RING: Record<Phase, string> = {
 
 // A barge-in has to be at least this many words before we cut the agent off —
 // filters out one-syllable echo blips the mic catches from the phone speaker.
+// This applies to FINALS as well as partials: a final carrying one stray
+// syllable used to start a whole phantom turn, which cut the audio mid-word.
 const BARGE_IN_MIN_WORDS = 2;
 
 const wordsOf = (s: string): string[] =>
@@ -108,13 +110,17 @@ const wordsOf = (s: string): string[] =>
 // True when what the mic just heard is really the agent's own voice bleeding
 // back through the speaker (not the user talking). We compare the heard text
 // against what the agent is currently saying: heavy word overlap ⇒ it's echo.
-function looksLikeEcho(heardText: string, agentIsSaying: string): boolean {
+function looksLikeEcho(heardText: string, ...agentSaid: string[]): boolean {
   const heardWords = wordsOf(heardText);
   if (heardWords.length === 0) return true;
-  const spoken = new Set(wordsOf(agentIsSaying));
+  const spoken = new Set(agentSaid.flatMap((t) => wordsOf(t)));
   if (spoken.size === 0) return false;
   const overlap = heardWords.filter((w) => spoken.has(w)).length / heardWords.length;
-  return overlap >= 0.6;
+  // 0.45, not 0.6: a phone speaker feeding back into its own mic transcribes
+  // badly, so real echo routinely lands well under a strict threshold and
+  // then reads as the user talking. Being too eager here costs a repeated
+  // sentence; being too strict chops every reply to pieces.
+  return overlap >= 0.45;
 }
 
 export default function CarVoiceMode({
@@ -163,6 +169,10 @@ export default function CarVoiceMode({
   // The reply text the agent has streamed so far this turn — used to tell real
   // interruptions apart from the agent's own voice echoing back into the mic.
   const spokenTextRef = useRef("");
+  // The previous reply, kept as a second echo reference. Audio for a reply
+  // outlives the turn that produced it, so the tail of what he just said is
+  // still coming out of the speaker while the next turn begins.
+  const prevSpokenRef = useRef("");
 
   // The active agent + its send fn, kept in refs so the loop always uses the
   // current one (even after a mid-session switch) without rebinding STT.
@@ -217,6 +227,12 @@ export default function CarVoiceMode({
       // Claim this turn; any earlier in-flight turn is now stale.
       const myTurn = ++turnRef.current;
       stopSpeechRef.current();
+      // Keep the OUTGOING reply as an echo reference. Clearing it here meant
+      // that once one echo slipped through and started a phantom turn, the
+      // guard had nothing to compare against and waved through everything
+      // after it — one glitch disarmed the defence for the rest of the
+      // conversation.
+      prevSpokenRef.current = spokenTextRef.current;
       spokenTextRef.current = "";
       setLastReply("");
       setPhase("thinking");
@@ -277,6 +293,12 @@ export default function CarVoiceMode({
     async (text: string) => {
       const myTurn = ++turnRef.current;
       stopSpeechRef.current();
+      // Keep the OUTGOING reply as an echo reference. Clearing it here meant
+      // that once one echo slipped through and started a phantom turn, the
+      // guard had nothing to compare against and waved through everything
+      // after it — one glitch disarmed the defence for the rest of the
+      // conversation.
+      prevSpokenRef.current = spokenTextRef.current;
       spokenTextRef.current = "";
       setPhase("thinking");
       startMic();
@@ -317,7 +339,12 @@ export default function CarVoiceMode({
       // If the agent is still talking and this "final" is really his own voice
       // echoing back through the speaker, drop it — don't start a phantom turn.
       const p = phaseRef.current;
-      if ((p === "speaking" || p === "thinking") && looksLikeEcho(t, spokenTextRef.current)) return;
+      if (p === "speaking" || p === "thinking") {
+        // Same bar as a partial barge-in. Without it, one stray syllable
+        // started a turn and cut the audio mid-sentence.
+        if (wordsOf(t).length < BARGE_IN_MIN_WORDS) return;
+        if (looksLikeEcho(t, spokenTextRef.current, prevSpokenRef.current)) return;
+      }
       setLastTranscript(t);
       setHeard("");
       if (streamRef.current) await runStreamingTurn(t);
@@ -346,7 +373,7 @@ export default function CarVoiceMode({
         // Barge-in: you started talking while the agent was thinking/speaking.
         if (p === "speaking" || p === "thinking") {
           if (wordsOf(t).length < BARGE_IN_MIN_WORDS) return; // too short — likely echo
-          if (looksLikeEcho(t, spokenTextRef.current)) return; // it's his own voice
+          if (looksLikeEcho(t, spokenTextRef.current, prevSpokenRef.current)) return; // his own voice
           cancelTurn(); // cut him off now; the mic's final drives the next turn
           setHeard(t);
           setPhase("listening");
