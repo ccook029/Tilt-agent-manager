@@ -31,32 +31,46 @@ export interface LegacyStickItem {
   stockOnHand: number;
   /** stock × purchase rate — what the phantom stock claims to be worth. */
   phantomValue: number;
-}
-
-/** True for items this module is allowed to touch: an active, TILT-prefixed
- *  stick SKU that is NOT one of the 12 live ones. */
-function isLegacyStick(item: ZohoItem): boolean {
-  if (!item.sku) return false;
-  const sku = item.sku.toUpperCase();
-  if (!sku.startsWith("TILT-")) return false; // non-stick catalog (grips, apparel…)
-  if (ACTIVE_SKUS.has(sku)) return false; // the live sticks
-  return item.status === "active";
+  /** Zoho's own grouping, to help tell an old stick from a grip. */
+  category: string;
+  /** Whether the SKU uses the current TILT- convention. Legacy models
+   *  generally predate it, so this is a hint, never a filter. */
+  tiltSku: boolean;
 }
 
 /**
- * Every legacy stick SKU still active in Zoho, phantom stock and all.
- * Sorted with the worst offenders (most phantom stock) first.
+ * True for anything this module may touch: any ACTIVE item that isn't one of
+ * the 12 live stick SKUs.
+ *
+ * Deliberately not narrower. The first cut required a "TILT-" prefix on the
+ * theory that legacy sticks shared it; they don't — the retired models
+ * predate that convention, so the page came back empty on a catalog full of
+ * them. Anything cleverer is a guess about naming, and a guess that silently
+ * hides items is worse than a list the owner reads. So: show the whole
+ * catalog minus the untouchables, label what we can, and let the human pick.
+ */
+function isRetirable(item: ZohoItem): boolean {
+  if (item.status !== "active") return false;
+  if (item.sku && ACTIVE_SKUS.has(item.sku.toUpperCase())) return false;
+  return true;
+}
+
+/**
+ * Every active item that could be retired, worst phantom stock first.
+ * Read-only — this is the list the button would act on.
  */
 export async function listLegacyStickItems(): Promise<LegacyStickItem[]> {
   const items = await fetchAllItems();
   return items
-    .filter(isLegacyStick)
+    .filter(isRetirable)
     .map((i) => ({
       itemId: i.item_id,
-      sku: i.sku,
+      sku: i.sku || "(no SKU)",
       name: i.name,
       stockOnHand: i.stock_on_hand,
       phantomValue: Math.round(i.stock_on_hand * (i.purchase_rate ?? 0) * 100) / 100,
+      category: i.category_name || i.group_name || "—",
+      tiltSku: !!i.sku && i.sku.toUpperCase().startsWith("TILT-"),
     }))
     .sort((a, b) => b.stockOnHand - a.stockOnHand);
 }
@@ -97,7 +111,7 @@ export async function retireLegacyItems(
         zeroed: false,
         deactivated: false,
         error:
-          "Not a retirable item — either an active stick SKU, a non-stick item, already inactive, or an unknown id.",
+          "Not a retirable item — either one of the 12 live stick SKUs, already inactive, or an unknown id.",
       });
       continue;
     }
