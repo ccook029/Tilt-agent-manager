@@ -15,6 +15,7 @@ import {
   type IntakeRow,
 } from "@/lib/inventory-intake";
 import { postSignal } from "@/lib/signals";
+import { receiveAgainstProduction } from "@/lib/production-batches";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -34,6 +35,30 @@ export async function POST(request: NextRequest) {
     }
     try {
       const result = await commitIntake(rows);
+
+      // Draw down anything these sticks were waiting on. Matching is on spec,
+      // not serial — a production line has no serial to match against — and a
+      // stick that matches nothing is reported rather than assumed fine.
+      let production: Awaited<ReturnType<typeof receiveAgainstProduction>> | null = null;
+      if (result.added > 0) {
+        production = await receiveAgainstProduction(
+          rows
+            .filter((r) => !r.excludeReason && r.serial)
+            .map((r) => ({
+              serial: r.serial,
+              level: r.level,
+              size: r.size,
+              carbon: r.carbon,
+              kickPoint: r.kickPoint,
+              hand: r.hand,
+              flex: r.flex,
+              curve: r.curve,
+              baseColor: r.baseColor,
+              decalColor: r.decalColor,
+            }))
+        ).catch(() => null);
+      }
+
       if (result.added > 0) {
         await postSignal({
           source: "inventory",
@@ -41,7 +66,12 @@ export async function POST(request: NextRequest) {
           detail: "Added to the Player tab as Available — live on the website.",
         }).catch(() => {});
       }
-      return NextResponse.json({ ok: true, ...result });
+      return NextResponse.json({
+        ok: true,
+        ...result,
+        productionMatched: production?.matched.length ?? 0,
+        productionUnmatched: production?.unmatched.length ?? 0,
+      });
     } catch (err) {
       return NextResponse.json(
         { ok: false, error: err instanceof Error ? err.message : String(err) },
