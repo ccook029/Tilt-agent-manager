@@ -11,6 +11,7 @@ import CompanyTree, {
 import TiltCard from "@/components/tilt-card";
 import Hero from "@/components/hero";
 import DailyBriefPanel from "@/components/daily-brief";
+import NoteCapture from "@/components/note-capture";
 import HqVoiceLauncher from "@/components/voice/hq-voice-launcher";
 import ScrollReveal from "@/components/scroll-reveal";
 import { Stagger, StaggerItem } from "@/components/motion-primitives";
@@ -93,6 +94,15 @@ export default function Home() {
       {/* Daily Brief — pressing items + a standup line per employee */}
       <ScrollReveal>
         <DailyBriefPanel />
+      </ScrollReveal>
+
+      {/* Capture, right under the brief. The brief tells you what's late; this
+          is where the next thing you don't want to forget goes, without
+          navigating anywhere. Same component as /notes. */}
+      <ScrollReveal>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <NoteCapture />
+        </div>
       </ScrollReveal>
 
       {/* Key Metrics */}
