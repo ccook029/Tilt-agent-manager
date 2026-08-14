@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/lib/social/db/migrate.ts"
   },
@@ -43,6 +45,7 @@
     "@types/web-push": "^3.6.4",
     "dotenv": "^16.4.7",
     "drizzle-kit": "^0.31.6",
-    "tsx": "^4.20.6"
+    "tsx": "^4.20.6",
+    "vitest": "^4.0.18"
   }
 }
