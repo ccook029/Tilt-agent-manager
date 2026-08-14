@@ -28,6 +28,12 @@ const ALLOW: RegExp[] = [
   // Stick colourways and imagery maps.
   /^src\/data\/stickColors\.ts$/,
   /^src\/data\/stickImages\.ts$/,
+  // Announcement bar copy. The bar used to be JSX inside a component, which
+  // made "put the drop up" a code change Nova couldn't ship — so a one-sentence
+  // promo was a developer task and, in practice, didn't happen. It's a headline,
+  // a line of copy and an on-site link: the same blast radius as product copy,
+  // which is already here.
+  /^src\/data\/announcements\.ts$/,
   // Static assets and crawler-facing text files.
   /^public\/images\/.+/,
   /^public\/llms\.txt$/,
