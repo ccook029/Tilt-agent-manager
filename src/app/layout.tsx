@@ -12,6 +12,7 @@ import DepartmentsMenu from "@/components/departments-menu";
 import SignOut from "@/components/sign-out";
 import OwnerNav from "@/components/owner-nav";
 import PushSetup from "@/components/push-setup";
+import NotesNav from "@/components/notes-nav";
 
 const SITE_URL = "https://tilt-agent-manager-i3tk.vercel.app";
 const OG_DESCRIPTION =
@@ -100,6 +101,7 @@ export default function RootLayout({
                 with its tools inside), then the owner's desk, then utilities. */}
             <nav className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <CommandButton />
+              <NotesNav />
               <Link
                 href="/org"
                 className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
