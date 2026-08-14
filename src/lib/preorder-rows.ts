@@ -123,3 +123,27 @@ export async function preorderExpectedDates(): Promise<Record<string, string>> {
   }
   return out;
 }
+
+/**
+ * Re-point rows after their spec changed (e.g. a base colour was filled in).
+ *
+ * The stored specKey is what an arriving stick matches against, so it has to
+ * follow the batch line or the shipment won't find these rows. Rows that
+ * already have a serial are left alone — they're finished, and rewriting their
+ * key would only muddy the record of what fulfilled what.
+ */
+export async function respecPreorderRows(
+  batchId: string,
+  oldSpecKey: string,
+  newSpecKey: string
+): Promise<PreorderRow[]> {
+  const index = await listPreorderRows();
+  const moved: PreorderRow[] = [];
+  for (const row of Object.values(index)) {
+    if (row.batchId !== batchId || row.specKey !== oldSpecKey || row.serial) continue;
+    row.specKey = newSpecKey;
+    moved.push(row);
+  }
+  if (moved.length > 0) await save(index);
+  return moved;
+}

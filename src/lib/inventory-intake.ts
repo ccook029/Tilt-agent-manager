@@ -99,6 +99,28 @@ export function normalizeSize(raw: string): string {
   return m ? m[0] : "";
 }
 
+/**
+ * A blank stick colour means BLACK.
+ *
+ * The factory order sheet only fills its "Stick color" column when the shaft
+ * is a non-default colour — "White" on a handful of rows, empty on the rest.
+ * Empty is not missing data, it's the default: black carbon. Copying the blank
+ * through is faithful to the cell and wrong about the stick.
+ *
+ * This matters beyond the listing photo. Base colour is part of specKey, which
+ * is what an arriving stick is matched against — so a batch saved with blank
+ * base colours has keys no real stick can match, and the shipment appends
+ * duplicates instead of filling the pre-order rows in.
+ *
+ * A rule this consequential shouldn't depend on the model inferring it, which
+ * is why it lives here with the serial and size normalisation rather than in
+ * the prompt.
+ */
+export function normalizeBaseColor(raw: string): string {
+  const v = String(raw ?? "").trim();
+  return v === "" ? "Black" : v;
+}
+
 export function normalizeHand(raw: string): string {
   const v = String(raw ?? "").trim().toLowerCase();
   if (v.startsWith("l")) return "Left";
@@ -139,6 +161,8 @@ Rules that decide it:
 Level is often left blank. Infer it from the size using the level/size pairs already on the live sheet, which are given to you. If a size falls outside every observed range, leave level empty and say so in the row's note rather than guessing.
 
 Serial numbers, sizes and hands are normalised automatically AFTER you hand them back — stray spaces, missing dashes, casing and inch marks are all handled in code. Do not warn about them; they are already fixed by the time the owner sees your preview. Pass the values through as they appear and say nothing about their formatting.
+
+The stick/shaft colour column is only filled in when the shaft is NOT the default — usually "White" on a few rows and empty on the rest. An empty cell there means black carbon, and code fills that in for you. Copy the cell through exactly as it appears, blank included, and do not guess a colour or warn that it is missing.
 
 If the owner has given you instructions, they override your own judgement. Apply them exactly and say in your interpretation how you applied them.
 
@@ -248,7 +272,7 @@ export async function interpretIntake(
       hand: normalizeHand(String(r.hand ?? "")),
       flex: String(r.flex ?? "").trim(),
       curve: String(r.curve ?? "").trim(),
-      baseColor: String(r.baseColor ?? "").trim(),
+      baseColor: normalizeBaseColor(String(r.baseColor ?? "")),
       decalColor: String(r.decalColor ?? "").trim(),
       serial,
       excludeReason: excludeReason || undefined,

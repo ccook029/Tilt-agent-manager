@@ -63,6 +63,9 @@ export default function ProductionPage() {
   /** Zoho sheet-write pre-flight: idle | checking | ok | error. */
   const [scope, setScope] = useState<"idle" | "checking" | "ok" | "error">("idle");
   const [scopeNote, setScopeNote] = useState("");
+  /** Specs per batch with no base colour, and which batch is mid-fix. */
+  const [missingBase, setMissingBase] = useState<Record<string, number>>({});
+  const [fixing, setFixing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -72,9 +75,20 @@ export default function ProductionPage() {
       const res = await fetch("/api/inventory/production");
       const j = await res.json();
       if (j.ok) {
-        setBatches(j.batches ?? []);
+        const list: Batch[] = j.batches ?? [];
+        setBatches(list);
         setOutstanding(j.outstanding ?? []);
         setTotalOutstanding(j.totalOutstanding ?? 0);
+        // A blank base colour is a spec no arriving stick can match, so it's
+        // worth surfacing without being asked for.
+        const blanks: Record<string, number> = {};
+        for (const b of list.filter((x) => !x.closedAt)) {
+          const n = b.lines
+            .filter((l) => !String(l.baseColor ?? "").trim())
+            .reduce((s, l) => s + Math.max(0, l.quantity - l.received), 0);
+          if (n > 0) blanks[b.id] = n;
+        }
+        setMissingBase(blanks);
       }
     } catch {
       /* the list is a convenience; the upload path reports its own errors */
@@ -228,6 +242,51 @@ export default function ProductionPage() {
     }
   }
 
+  /**
+   * Fill blank base colours in with Black.
+   *
+   * The factory sheet leaves its stick-colour column empty for the default
+   * black carbon and only writes "White" for the exceptions, so a blank is a
+   * colour rather than a gap. Left alone it breaks more than the listing: base
+   * colour is part of the spec key an arriving stick is matched on, so these
+   * rows would never be filled in and the shipment would append duplicates.
+   */
+  async function fixBaseColors(id: string, count: number) {
+    if (
+      !confirm(
+        `Set the base colour to Black on ${count} sticks with no colour recorded?\n\n` +
+          `The factory sheet leaves that column blank for black carbon and only fills it in for White, ` +
+          `so these are black. Rows that already say White aren't touched.`
+      )
+    ) {
+      return;
+    }
+    setFixing(id);
+    try {
+      const j = await fetch("/api/inventory/preorder", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batchId: id }),
+      }).then((r) => r.json());
+      setListedNote((n) => ({
+        ...n,
+        [id]: j.ok
+          ? `Base colour set to Black on ${j.specsFixed} specs` +
+            (j.rowsUpdated > 0 ? `, ${j.rowsUpdated} sheet rows updated.` : ".") +
+            (j.failed?.length ? ` ${j.failed.length} rows couldn't be reached: ${j.failed.join(", ")}` : "")
+          : j.error,
+      }));
+      void load();
+    } catch (err) {
+      setListedNote((n) => ({
+        ...n,
+        [id]: err instanceof Error ? err.message : String(err),
+      }));
+    } finally {
+      setFixing(null);
+    }
+  }
+
   async function remove(id: string, name: string) {
     if (!confirm(`Delete "${name}"? Any sticks already received stay on the inventory sheet.`)) return;
     await fetch(`/api/inventory/production?id=${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -336,6 +395,24 @@ export default function ProductionPage() {
                     <p className="mt-1.5 text-xs text-gray-600">
                       {received} of {ordered} received
                     </p>
+                    {missingBase[b.id] > 0 && (
+                      <div className="mt-3 flex items-start justify-between gap-3 rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2">
+                        <p className="text-xs text-amber-300">
+                          {missingBase[b.id]} sticks have no base colour recorded.
+                          They&apos;ll list without a colour, and because base
+                          colour is part of what an arriving stick is matched on,
+                          the shipment would add duplicate rows instead of filling
+                          these in.
+                        </p>
+                        <button
+                          onClick={() => void fixBaseColors(b.id, missingBase[b.id])}
+                          disabled={fixing === b.id}
+                          className="shrink-0 rounded-lg border border-amber-700/60 bg-amber-900/30 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-900/50 disabled:opacity-50"
+                        >
+                          {fixing === b.id ? "Fixing…" : "Set to Black"}
+                        </button>
+                      </div>
+                    )}
                     {listedNote[b.id] && (
                       <p className="mt-2 text-xs text-[#00d6ff]">{listedNote[b.id]}</p>
                     )}
