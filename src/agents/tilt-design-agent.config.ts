@@ -12,7 +12,7 @@ import { CLAUDE_MODEL } from "@/lib/models";
 // Tilt designs everything in-house — no third-party design SaaS (e.g. Canva).
 // It hands work off to Tilt's OWN tooling: the in-house design studio, the
 // Catalog Builder (tilt-catalog-agent, Gemini team-colorway catalog images),
-// and the product-render stack (Vizcom/KeyShot). Every deliverable ends with a
+// and the Promo Video Builder. Every deliverable ends with a
 // "Tool Handoff" block describing exactly which tool/workflow to use and the
 // precise inputs to feed it.
 //
@@ -80,18 +80,6 @@ const DESIGN_TOOLS: DesignTool[] = [
     description:
       "In-house spec-driven video builder (promo-video/ in this repo). A JSON cut spec — scenes, copy, real shoot footage segments, stills, transitions, audio — renders deterministically to finished MP4s: 1080×1350 4:5 master, optional 9:16 reframe and poster frame, with a royalty-free synthesized sound-design bed or a supplied licensed track. Hand off with: the spec JSON (start from specs/tilt-x1-15s.json), copy per scene, and which shoot clips/stills to feature. Full guide: .claude/skills/promo-builder.",
   },
-  {
-    id: "vizcom",
-    label: "Vizcom",
-    description:
-      "AI-assisted product rendering from sketches. Use for early concept renders of hardgoods (sticks, accessories) before KeyShot.",
-  },
-  {
-    id: "keyshot",
-    label: "KeyShot",
-    description:
-      "Photoreal product rendering. Use for final hero product shots, catalog hardgoods, and sell-sheet imagery.",
-  },
 ];
 
 const config: TiltDesignAgentConfig = {
@@ -144,8 +132,6 @@ IN-HOUSE TOOLING (Tilt designs everything itself — NO third-party design SaaS 
 - Tilt Design Studio (in-house) — our own designers and templates execute layouts, social creative, sell-sheets, and catalog spreads. You produce production-ready specs they build from directly.
 - Catalog Builder (tilt-catalog-agent) — our own app: give it a team name, colors, and a jersey/logo; it renders Tilt catalog product images via Gemini. Best for fast team-colorway catalog shots.
 - Promo Video Builder (promo-video/ in this repo) — our own spec-driven video builder: a JSON cut spec (scenes, copy, real shoot footage segments, stills, transitions, audio) renders deterministically to finished promo MP4s (4:5 master + 9:16 + poster). For any video deliverable, hand off the spec JSON itself — scene list with durations, big-type copy (use |text| for the cyan span), which shoot clips/stills to feature, and transition per cut. Start from specs/tilt-x1-15s.json; full guide in .claude/skills/promo-builder. Real product tech terms: "Response Rezin", "Tilt Core Energy Spine".
-- Vizcom — AI render from sketches; early concept renders of hardgoods.
-- KeyShot — photoreal final hero product renders.
 EVERY deliverable must END with a "Tool Handoff" section: which in-house tool/workflow builds it, and the EXACT inputs to feed it (prompts, asset list, dimensions, colors as hex/Pantone, copy). If multiple apply, sequence them. NEVER route work to Canva or any external design SaaS — Tilt builds its own.
 
 Be specific, production-ready, and unmistakably Tilt. No filler.`,
@@ -159,7 +145,7 @@ Make it concrete:
 - The concept and the hook (why it's unmistakably Tilt)
 - Color system (hex + Pantone), type treatment, key imagery
 - The exact deliverables and platform dimensions
-- A "Tool Handoff" — which in-house tool/workflow builds it (Tilt Design Studio / Catalog Builder / Vizcom / KeyShot) and the inputs to feed it
+- A "Tool Handoff" — which in-house tool/workflow builds it (Tilt Design Studio / Catalog Builder / Promo Video Builder) and the inputs to feed it
 - 3 concrete next steps to make it real
 
 Hockey-authentic, no buzzwords, never reference manufacturing origin.`,
@@ -245,7 +231,7 @@ Include:
 4. Color/finish to represent (hex + Pantone, texture/material cues)
 5. Branding placement (Tilt mark position, size, orientation)
 6. Resolution, aspect ratios, and output format per usage (web/catalog/social/sell-sheet)
-7. Tool Handoff (Vizcom for concept, KeyShot for final, or Catalog Builder for team colorways) with exact inputs`,
+7. Tool Handoff (Catalog Builder for team colorways; otherwise state that the render has no registered tool and the brief stands alone) with exact inputs`,
   },
 
   tools: DESIGN_TOOLS,
