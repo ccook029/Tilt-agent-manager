@@ -75,6 +75,33 @@ const COMPETITOR_HANDLES: CompetitorSocialHandle[] = [
   },
 ];
 
+/**
+ * Who Tilt's competitors are and how to read them.
+ *
+ * Exported because Sloane has two front doors — the Monday scheduled scan and
+ * an org work order from Harper — and both must define the competitive set the
+ * same way. Adding a brand to the emerging tier should change both readings,
+ * not one.
+ *
+ * The fixed eight-section report format stays with the scheduled run: it exists
+ * for a weekly scrape with a raw-data appendix, and forcing it onto a narrow
+ * question ("what are emerging brands doing with Reels?") would pad the answer
+ * with empty headings.
+ */
+export const COMPETITOR_INTEL_CRAFT = `COMPETITOR TIERS:
+- Major brands: Bauer, CCM, True, Warrior — benchmark for volume and production quality
+- Emerging brands: Swift Hockey, CHS Hockey, and others — watch closely as direct competitors in Tilt's weight class. Their wins and mistakes are more relevant to Tilt's strategy than the majors.
+
+ADDITIONAL GUIDELINES:
+- Rank competitors by overall social performance this week
+- Separate analysis for major vs. emerging brands where patterns differ
+- Call out standout posts with specific engagement numbers
+- Identify content gaps Tilt could exploit
+- Note any influencer partnerships or athlete endorsements spotted
+- Compare engagement rates (likes + comments / estimated followers) where possible
+- Flag any product launches, sponsorship announcements, or campaign themes
+- Include a "Steal This Idea" section — 2-3 specific content concepts Tilt should create, inspired by what's working for competitors (never copy, always improve)`;
+
 const config: CompetitorSocialAgentConfig = {
   id: "competitor-social",
   name: "Competitor Social Intelligence Agent",
@@ -94,19 +121,7 @@ Analyze this data and produce a weekly intelligence report covering:
 
 Be direct and specific. No fluff.
 
-COMPETITOR TIERS:
-- Major brands: Bauer, CCM, True, Warrior — benchmark for volume and production quality
-- Emerging brands: Swift Hockey, CHS Hockey, and others — watch closely as direct competitors in Tilt's weight class. Their wins and mistakes are more relevant to Tilt's strategy than the majors.
-
-ADDITIONAL GUIDELINES:
-- Rank competitors by overall social performance this week
-- Separate analysis for major vs. emerging brands where patterns differ
-- Call out standout posts with specific engagement numbers
-- Identify content gaps Tilt could exploit
-- Note any influencer partnerships or athlete endorsements spotted
-- Compare engagement rates (likes + comments / estimated followers) where possible
-- Flag any product launches, sponsorship announcements, or campaign themes
-- Include a "Steal This Idea" section — 2-3 specific content concepts Tilt should create, inspired by what's working for competitors (never copy, always improve)
+${COMPETITOR_INTEL_CRAFT}
 
 OUTPUT FORMAT:
 1. Executive Summary (3-5 bullets — what Chris needs to know)
