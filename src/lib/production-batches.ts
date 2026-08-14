@@ -250,3 +250,52 @@ export function aggregateLines(
   }
   return [...map.values()];
 }
+
+/**
+ * Correct a line's base colour after the fact.
+ *
+ * Base colour is part of specKey, which is what an arriving stick is matched
+ * on. A line saved with the colour missing therefore has a key no real stick
+ * can ever match — so this isn't cosmetic: leaving it blank means the shipment
+ * appends duplicates instead of filling the pre-order rows in.
+ *
+ * If filling the colour in makes this line identical to another (the usual
+ * case — one spec parsed with the colour, one without), the two are the SAME
+ * spec and are merged rather than left as a near-duplicate pair.
+ *
+ * Returns the old and new keys so callers can re-point anything keyed on them.
+ */
+export async function setLineBaseColor(
+  batchId: string,
+  oldSpecKey: string,
+  baseColor: string
+): Promise<{ oldSpecKey: string; newSpecKey: string; merged: boolean }> {
+  const batches = await listBatches();
+  const batch = batches.find((b) => b.id === batchId);
+  if (!batch) throw new Error(`No production batch ${batchId}.`);
+
+  const line = batch.lines.find((l) => specKey(l) === oldSpecKey);
+  if (!line) throw new Error("That spec is no longer in the batch.");
+
+  const colour = baseColor.trim();
+  if (!colour) throw new Error("Base colour can't be blank.");
+
+  const newSpecKey = specKey({ ...line, baseColor: colour });
+  if (newSpecKey === oldSpecKey) {
+    return { oldSpecKey, newSpecKey, merged: false };
+  }
+
+  const twin = batch.lines.find(
+    (l) => l !== line && specKey(l) === newSpecKey
+  );
+  if (twin) {
+    twin.quantity += line.quantity;
+    twin.received += line.received;
+    batch.lines = batch.lines.filter((l) => l !== line);
+  } else {
+    line.baseColor = colour;
+  }
+
+  await saveBatches(batches);
+  return { oldSpecKey, newSpecKey, merged: Boolean(twin) };
+}

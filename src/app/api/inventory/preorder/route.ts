@@ -9,7 +9,12 @@
 // after the fact.
 // ---------------------------------------------------------------------------
 import { NextRequest, NextResponse } from "next/server";
-import { previewPreorderRows, writePreorderRows } from "@/lib/preorder-writer";
+import {
+  previewPreorderRows,
+  writePreorderRows,
+  specsMissingBaseColor,
+  backfillBlankBaseColors,
+} from "@/lib/preorder-writer";
 import { postSignal } from "@/lib/signals";
 
 export const dynamic = "force-dynamic";
@@ -21,18 +26,48 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "batchId is required." }, { status: 400 });
   }
   try {
-    const preview = await previewPreorderRows(batchId);
+    const [preview, missingBase] = await Promise.all([
+      previewPreorderRows(batchId),
+      specsMissingBaseColor(batchId),
+    ]);
     return NextResponse.json({
       ok: true,
       batchLabel: preview.batch.label,
       expectedDate: preview.batch.expectedDate,
       toWrite: preview.toWrite,
       alreadyWritten: preview.alreadyWritten,
+      // Specs no arriving stick can match, so the shipment would append
+      // duplicates rather than fill these rows in.
+      missingBaseColor: missingBase.reduce((s, m) => s + m.outstanding, 0),
+      missingBaseColorSpecs: missingBase.length,
     });
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err) },
       { status: 400 }
+    );
+  }
+}
+
+/** Fill in blank base colours — see backfillBlankBaseColors. */
+export async function PATCH(request: NextRequest) {
+  const body = (await request.json().catch(() => ({}))) as {
+    batchId?: string;
+    baseColor?: string;
+  };
+  if (!body.batchId) {
+    return NextResponse.json({ ok: false, error: "batchId is required." }, { status: 400 });
+  }
+  try {
+    const result = await backfillBlankBaseColors(
+      body.batchId,
+      (body.baseColor || "Black").trim()
+    );
+    return NextResponse.json({ ok: true, ...result });
+  } catch (err) {
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { status: 502 }
     );
   }
 }

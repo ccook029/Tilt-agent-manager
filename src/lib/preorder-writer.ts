@@ -14,9 +14,16 @@
 // change. When the stick lands, the real serial is written over the
 // placeholder and the row becomes ordinary stock.
 // ---------------------------------------------------------------------------
-import { appendSheetRows, fetchAllStickRecords } from "./zoho-sheet";
-import { listBatches, type ProductionBatch, type ProductionLine } from "./production-batches";
+import { appendSheetRows, fetchAllStickRecords, updateSheetRow } from "./zoho-sheet";
 import {
+  listBatches,
+  setLineBaseColor,
+  describeSpec,
+  type ProductionBatch,
+  type ProductionLine,
+} from "./production-batches";
+import {
+  respecPreorderRows,
   formatPreorderId,
   listPreorderRows,
   nextPreorderNumber,
@@ -154,4 +161,91 @@ export async function previewPreorderRows(
     toWrite += Math.max(0, outstanding - have);
   }
   return { batch, toWrite, alreadyWritten };
+}
+
+/**
+ * Fill in a missing base colour everywhere it needs to land.
+ *
+ * Three places have to move together or the batch is left inconsistent:
+ *   1. the batch line, which is the record of what was ordered;
+ *   2. every pre-order row's specKey, which is what an arriving stick matches
+ *      on — miss this and the shipment appends duplicates in September;
+ *   3. the Base Color cell on the sheet rows themselves, which is what the
+ *      storefront actually renders.
+ *
+ * The sheet is updated last: it's the slow, failure-prone part, and doing it
+ * after the local state means a partial failure is reported with the rows it
+ * couldn't reach named, rather than silently diverging from the batch.
+ */
+export async function setPreorderBaseColor(
+  batchId: string,
+  oldSpecKey: string,
+  baseColor: string
+): Promise<{ rowsUpdated: number; merged: boolean; failed: string[] }> {
+  const colour = baseColor.trim();
+  const { newSpecKey, merged } = await setLineBaseColor(batchId, oldSpecKey, colour);
+  const moved = await respecPreorderRows(batchId, oldSpecKey, newSpecKey);
+
+  const failed: string[] = [];
+  let rowsUpdated = 0;
+  for (const row of moved) {
+    try {
+      await updateSheetRow(row.tab, `"Serial Number" = "${row.preorderId}"`, {
+        "Base Color": colour,
+      });
+      rowsUpdated++;
+    } catch {
+      failed.push(row.preorderId);
+    }
+  }
+  return { rowsUpdated, merged, failed };
+}
+
+/** Specs in a batch with no base colour — the ones no arriving stick can match. */
+export async function specsMissingBaseColor(
+  batchId: string
+): Promise<{ specKey: string; label: string; outstanding: number }[]> {
+  const batches = await listBatches();
+  const batch = batches.find((b) => b.id === batchId);
+  if (!batch) return [];
+  return batch.lines
+    .filter((l) => !String(l.baseColor ?? "").trim())
+    .map((l) => ({
+      specKey: specKey(l),
+      label: describeSpec(l),
+      outstanding: Math.max(0, l.quantity - l.received),
+    }))
+    .filter((s) => s.outstanding > 0);
+}
+
+/**
+ * Fix a batch that was saved before blank-means-black was understood.
+ *
+ * Sets every blank base colour to Black across the batch line, the pre-order
+ * rows' specKeys and the sheet cells. Rows whose colour was stated ("White")
+ * are untouched — only the blanks were ever wrong.
+ *
+ * Fixing one spec can merge it into an existing Black spec, which changes the
+ * remaining set, so the list is re-read each pass rather than iterated over a
+ * stale snapshot. The pass count is bounded because every pass removes at least
+ * one spec from it.
+ */
+export async function backfillBlankBaseColors(
+  batchId: string,
+  colour = "Black"
+): Promise<{ specsFixed: number; rowsUpdated: number; failed: string[] }> {
+  let specsFixed = 0;
+  let rowsUpdated = 0;
+  const failed: string[] = [];
+
+  for (let pass = 0; pass < 500; pass++) {
+    const missing = await specsMissingBaseColor(batchId);
+    if (missing.length === 0) break;
+    const result = await setPreorderBaseColor(batchId, missing[0].specKey, colour);
+    specsFixed++;
+    rowsUpdated += result.rowsUpdated;
+    failed.push(...result.failed);
+  }
+
+  return { specsFixed, rowsUpdated, failed };
 }
