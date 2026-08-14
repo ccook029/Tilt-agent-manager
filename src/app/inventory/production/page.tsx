@@ -60,6 +60,9 @@ export default function ProductionPage() {
   /** Which batch is mid-listing, and the last result line per batch. */
   const [listing, setListing] = useState<string | null>(null);
   const [listedNote, setListedNote] = useState<Record<string, string>>({});
+  /** Zoho sheet-write pre-flight: idle | checking | ok | error. */
+  const [scope, setScope] = useState<"idle" | "checking" | "ok" | "error">("idle");
+  const [scopeNote, setScopeNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -200,6 +203,31 @@ export default function ProductionPage() {
     }
   }
 
+  /**
+   * Can the Zoho token actually write to the sheet?
+   *
+   * Worth knowing BEFORE listing a batch, because the two writes need different
+   * scopes and only one of them is exercised by listing. Adding rows is an
+   * append; filling a pre-order row in when the stick lands is an UPDATE, and a
+   * token missing ZohoSheet.dataAPI.UPDATE will list 212 sticks happily and
+   * then fail months later at the shipment. Cheaper to find out now.
+   *
+   * The probe targets a serial no stick carries, so it matches zero rows and
+   * changes nothing.
+   */
+  async function checkWriteScope() {
+    setScope("checking");
+    setScopeNote("");
+    try {
+      const j = await fetch("/api/inventory/write-scope").then((r) => r.json());
+      setScope(j.canWrite ? "ok" : "error");
+      setScopeNote(j.detail || (j.canWrite ? "Write scope confirmed." : "No write access."));
+    } catch (err) {
+      setScope("error");
+      setScopeNote(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function remove(id: string, name: string) {
     if (!confirm(`Delete "${name}"? Any sticks already received stay on the inventory sheet.`)) return;
     await fetch(`/api/inventory/production?id=${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -209,12 +237,35 @@ export default function ProductionPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-200">In Production</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          Sticks being built at the factory. Tracked as quantities per spec —
-          they have no serial numbers yet — and drawn down automatically when
-          the shipment is received.
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-200">In Production</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Sticks being built at the factory. Tracked as quantities per spec —
+              they have no serial numbers yet — and drawn down automatically when
+              the shipment is received.
+            </p>
+          </div>
+          <button
+            onClick={() => void checkWriteScope()}
+            disabled={scope === "checking"}
+            className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-400 hover:bg-white/[0.05] disabled:opacity-50"
+            title="Probe whether the Zoho token can write to the sheet. Changes nothing."
+          >
+            {scope === "checking" ? "Checking…" : "Check Zoho write access"}
+          </button>
+        </div>
+        {scopeNote && (
+          <p
+            className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+              scope === "ok"
+                ? "border-emerald-800/60 bg-emerald-950/30 text-emerald-300"
+                : "border-red-800/60 bg-red-950/30 text-red-300"
+            }`}
+          >
+            {scopeNote}
+          </p>
+        )}
       </div>
 
       {error && (
