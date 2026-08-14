@@ -91,18 +91,28 @@ export default function Home() {
       {/* Cinematic hero */}
       <Hero />
 
+      {/* Capture comes FIRST, above the brief.
+          It was below it, which on a phone meant scrolling past a standup line
+          for all 29 employees before you could write anything down — the exact
+          friction this feature exists to remove. The brief is for reading; this
+          is the one thing on the page you come here to DO. */}
+      <ScrollReveal>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 mb-10">
+          <SectionLabel>Notes</SectionLabel>
+          <NoteCapture />
+          <p className="mt-2 text-xs text-gray-600">
+            Anything with a date shows up in the brief below when it&apos;s due
+            or late.{" "}
+            <Link href="/notes" className="text-[#00d6ff]/70 hover:text-[#00d6ff]">
+              See all notes →
+            </Link>
+          </p>
+        </div>
+      </ScrollReveal>
+
       {/* Daily Brief — pressing items + a standup line per employee */}
       <ScrollReveal>
         <DailyBriefPanel />
-      </ScrollReveal>
-
-      {/* Capture, right under the brief. The brief tells you what's late; this
-          is where the next thing you don't want to forget goes, without
-          navigating anywhere. Same component as /notes. */}
-      <ScrollReveal>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <NoteCapture />
-        </div>
       </ScrollReveal>
 
       {/* Key Metrics */}
