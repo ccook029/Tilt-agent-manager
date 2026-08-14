@@ -169,25 +169,39 @@ export interface WebChangeSpec {
   request: string;
 }
 
-/** Pull the ```webchange blocks out of a deliverable. */
-export function parseWebChanges(text: string): WebChangeSpec[] {
-  const out: WebChangeSpec[] = [];
+/**
+ * Pull the ```webchange blocks out of a deliverable.
+ *
+ * Also counts the blocks it had to REJECT. A malformed block used to be
+ * dropped silently, which is the worst possible reading of it: Nova tried to
+ * ship a change, the intent was right there in the deliverable, and the order
+ * still closed as though nothing had been asked for. Refusing to guess at a
+ * website edit is correct; staying quiet about the refusal is not.
+ */
+export function parseWebChanges(text: string): {
+  changes: WebChangeSpec[];
+  rejected: number;
+} {
+  const changes: WebChangeSpec[] = [];
+  let rejected = 0;
   const re = /```webchange\s*([\s\S]*?)```/g;
   for (let m = re.exec(text); m; m = re.exec(text)) {
     try {
       const raw = JSON.parse(m[1].trim()) as Record<string, string>;
       if (raw.path?.trim() && raw.title?.trim() && raw.request?.trim()) {
-        out.push({
+        changes.push({
           path: raw.path.trim(),
           title: raw.title.trim(),
           request: raw.request.trim(),
         });
+      } else {
+        rejected++;
       }
     } catch {
-      // Malformed block — skip it rather than guess at a website edit.
+      rejected++;
     }
   }
-  return out;
+  return { changes, rejected };
 }
 
 /**
@@ -200,13 +214,33 @@ export function parseWebChanges(text: string): WebChangeSpec[] {
  */
 async function shipWebOrder(order: WorkOrder): Promise<string | null> {
   const draft = order.rounds[order.rounds.length - 1]?.draft ?? "";
-  const changes = parseWebChanges(draft);
+  const { changes, rejected } = parseWebChanges(draft);
+
   if (changes.length === 0) {
-    // A research or advice work order — the document is the product.
-    return null;
+    // Plenty of web work orders are genuinely research or advice, where the
+    // document IS the product and there is nothing to open. But an intended
+    // change that arrived without a usable block looks identical from here,
+    // and returning null for both is how a change "ships" and never reaches
+    // the site. So say which one this was.
+    if (rejected > 0) {
+      return `No pull request opened — ${rejected} webchange block${
+        rejected === 1 ? "" : "s"
+      } couldn't be read (each needs valid JSON with path, title and request). The deliverable is saved; the site is unchanged.`;
+    }
+    return "No webchange block in the deliverable, so nothing was opened as a pull request. If this was meant to change the site, it needs one — the site is unchanged.";
   }
 
   const notes: string[] = [];
+  // A partial failure hides just as easily as a total one: two blocks, one
+  // malformed, and a single PR opens while the other change disappears with a
+  // note saying something shipped.
+  if (rejected > 0) {
+    notes.push(
+      `${rejected} further webchange block${
+        rejected === 1 ? "" : "s"
+      } couldn't be read and ${rejected === 1 ? "was" : "were"} skipped.`
+    );
+  }
   for (const change of changes) {
     const result = await executeWebChange(change);
     if (!result.ok || !result.prNumber) {
