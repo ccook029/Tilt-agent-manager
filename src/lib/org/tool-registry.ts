@@ -54,6 +54,12 @@ export const TOOLS: Tool[] = [
     group: "decide",
   },
   {
+    href: "/notes",
+    label: "Notes",
+    description: "Things to remember — yours and Jeremy's, with follow-up dates",
+    group: "daily",
+  },
+  {
     href: "/work",
     label: "Work Board",
     description: "Where every job currently sits, and who has it",

@@ -20,6 +20,7 @@ import { getRecentSignals, type Signal } from "./signals";
 import { getEscalations, type Escalation } from "./policy-ledger";
 import { getRecentActions, type AccountingAction } from "./action-log";
 import { getEmployees } from "./org/directory";
+import { listNotes, noteReminders, ownerName, type Note } from "./notes";
 import { getPersonaByAgentId } from "./personas";
 import type { AgentRunLog } from "./types";
 
@@ -56,6 +57,7 @@ export interface DailyBrief {
 
 const LINK_CHOICES = [
   "/review",
+  "/notes",
   "/questions",
   "/inventory/order-builder",
   "/staff",
@@ -140,12 +142,14 @@ function fallbackBrief(
 
 async function generate(today: string): Promise<DailyBrief> {
   const since = Date.now() - 26 * 3600_000;
-  const [allLogs, signals, escalations, actions] = await Promise.all([
+  const [allLogs, signals, escalations, actions, notes] = await Promise.all([
     getRunLogs().catch((): AgentRunLog[] => []),
     getRecentSignals().catch((): Signal[] => []),
     getEscalations().catch((): Escalation[] => []),
     getRecentActions(40).catch((): AccountingAction[] => []),
+    listNotes().catch((): Note[] => []),
   ]);
+  const reminders = noteReminders(notes);
   const logs = allLogs.filter((l) => new Date(l.startedAt).getTime() >= since);
   const open = escalations.filter((e) => e.status === "open");
   const roster = getEmployees()
@@ -186,6 +190,19 @@ async function generate(today: string): Promise<DailyBrief> {
           .slice(0, 15)
           .map((a) => `- [${a.mode}] ${a.summary}`)
           .join("\n");
+  const noteLine = (n: Note) =>
+    `- ${ownerName(n.owner)}: ${n.text}${n.dueOn ? ` (due ${n.dueOn})` : ""}${
+      n.urgency === "high" ? " [high]" : ""
+    }`;
+  const notesBlock =
+    reminders.overdue.length + reminders.today.length + reminders.soon.length === 0
+      ? "(nothing due)"
+      : [
+          reminders.overdue.length ? `OVERDUE:\n${reminders.overdue.map(noteLine).join("\n")}` : "",
+          reminders.today.length ? `DUE TODAY:\n${reminders.today.map(noteLine).join("\n")}` : "",
+          reminders.soon.length ? `NEXT 7 DAYS:\n${reminders.soon.map(noteLine).join("\n")}` : "",
+        ].filter(Boolean).join("\n\n");
+
   const rosterBlock = roster
     .map((r) => `- id "${r.id}": ${r.name} — ${r.title}${r.personaId ? ` (agentId: ${r.personaId})` : ""}`)
     .join("\n");
@@ -213,6 +230,9 @@ ${logsBlock}
 
 ## Tool signals (last 24h)
 ${signalsBlock}
+
+## Founders' notes that are due (from /notes)
+${notesBlock}
 
 ## Open questions waiting on the owner
 ${questionsBlock}
@@ -259,19 +279,68 @@ Today's date: ${today}`;
       date: today,
       generatedAt: new Date().toISOString(),
       topline: parsed.topline?.trim() || "All quiet across the company.",
-      pressing: (parsed.pressing ?? [])
-        .filter((p) => p.text?.trim())
-        .slice(0, 5)
-        .map((p) => ({
-          text: p.text!.trim(),
-          link: p.link && LINK_CHOICES.includes(p.link) ? p.link : undefined,
-        })),
+      pressing: withNoteReminders(
+        (parsed.pressing ?? [])
+          .filter((p) => p.text?.trim())
+          .map((p) => ({
+            text: p.text!.trim(),
+            link: p.link && LINK_CHOICES.includes(p.link) ? p.link : undefined,
+          })),
+        reminders
+      ),
       employees,
     };
   } catch (err) {
     console.error("[daily-brief] generation failed, using fallback:", err);
     return fallbackBrief(today, roster, logs, signals, open);
   }
+}
+
+/**
+ * Put overdue and due-today notes at the front of the pressing list.
+ *
+ * The model is given these as context and may well mention them, but WHETHER a
+ * late reminder appears can't be its judgement call — the whole point of
+ * writing something down with a date is that it surfaces on that date. So they
+ * are prepended deterministically and the model's own items follow.
+ *
+ * Deduped loosely against what the model already wrote, so a note it did pick
+ * up doesn't appear twice, and still capped at five so the panel stays a glance.
+ */
+function withNoteReminders(
+  modelItems: PressingItem[],
+  reminders: { overdue: Note[]; today: Note[] }
+): PressingItem[] {
+  const forced: PressingItem[] = [
+    ...reminders.overdue.map((n) => ({
+      text: `Overdue — ${ownerName(n.owner)}: ${n.text}${n.dueOn ? ` (was ${n.dueOn})` : ""}`,
+      link: "/notes",
+    })),
+    ...reminders.today.map((n) => ({
+      text: `Due today — ${ownerName(n.owner)}: ${n.text}`,
+      link: "/notes",
+    })),
+  ].slice(0, 3);
+
+  const seen = forced.map((f) => normalizeForDedupe(f.text));
+  const rest = modelItems.filter(
+    (m) => !seen.some((f) => overlaps(f, normalizeForDedupe(m.text)))
+  );
+  return [...forced, ...rest].slice(0, 5);
+}
+
+function normalizeForDedupe(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Same note, said two ways — a shared run of words is enough to call it. */
+function overlaps(a: string, b: string): boolean {
+  const words = (v: string) => v.split(" ").filter((w) => w.length > 4);
+  const aw = new Set(words(a));
+  const bw = words(b);
+  if (bw.length === 0) return false;
+  const shared = bw.filter((w) => aw.has(w)).length;
+  return shared >= Math.max(2, Math.ceil(bw.length * 0.4));
 }
 
 /** Today's brief — cached per calendar day; `force` regenerates now. */
