@@ -358,6 +358,58 @@ export async function fetchInvoices(
   );
 }
 
+/**
+ * One invoice, WITH its line items.
+ *
+ * The list endpoint above doesn't return line_items — Zoho only sends them on
+ * the per-invoice detail call. The type says otherwise, which is how the
+ * sticks-sold metric read 0 for months while revenue (which IS on the list)
+ * looked fine: the loop over `inv.line_items` was iterating an empty array
+ * every time and reporting the result as a real count.
+ */
+export async function fetchInvoiceDetail(invoiceId: string): Promise<ZohoInvoice | null> {
+  try {
+    const res = await zohoGet<{ invoice: ZohoInvoice }>(`/invoices/${invoiceId}`);
+    return res.invoice ?? null;
+  } catch {
+    // One unreadable invoice shouldn't zero the whole month.
+    return null;
+  }
+}
+
+/**
+ * Invoices for a period with their line items filled in.
+ *
+ * Costs one request per invoice, so it's capped and run in small batches: a
+ * dashboard tile is not worth hammering Zoho or blowing the function timeout.
+ * If the cap is hit the count is a floor rather than a lie — callers are told
+ * how many were read so they can say so.
+ */
+export async function fetchInvoicesWithLineItems(
+  startDate: string,
+  endDate: string,
+  maxInvoices = 300
+): Promise<{ invoices: ZohoInvoice[]; truncated: boolean }> {
+  const summaries = await fetchInvoices(startDate, endDate);
+  const capped = summaries.slice(0, maxInvoices);
+
+  const detailed: ZohoInvoice[] = [];
+  const BATCH = 6;
+  for (let i = 0; i < capped.length; i += BATCH) {
+    const batch = capped.slice(i, i + BATCH);
+    const results = await Promise.all(
+      batch.map(async (inv) => {
+        const full = await fetchInvoiceDetail(inv.invoice_id);
+        // Fall back to the summary so revenue survives a failed detail call.
+        return full ?? inv;
+      })
+    );
+    detailed.push(...results);
+  }
+
+  return { invoices: detailed, truncated: summaries.length > capped.length };
+}
+
 // ---- Zoho Inventory types (partial, relevant fields) ----------------------
 
 export interface ZohoItem {

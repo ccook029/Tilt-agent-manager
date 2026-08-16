@@ -9,7 +9,7 @@
 // Publicly accessible, no auth required.
 
 import { NextResponse } from "next/server";
-import { fetchInvoices } from "@/lib/zoho";
+import { fetchInvoicesWithLineItems } from "@/lib/zoho";
 import { fetchGA4Metrics, type GA4DateRange } from "@/lib/ga4";
 
 export const maxDuration = 60;
@@ -39,6 +39,28 @@ function monthRange(year: number, month: number, capToday?: Date): GA4DateRange 
   return { startDate: fmt(start), endDate: fmt(end) };
 }
 
+/**
+ * The same slice of the previous month as has elapsed this month.
+ *
+ * The comparison used to be month-to-date against the WHOLE previous month, so
+ * on the 14th a flat business read as roughly a 55% collapse — and the number
+ * got worse the earlier in the month you looked. Fourteen days against fourteen
+ * days is the only version that means anything.
+ *
+ * Clamped to the previous month's length so the 31st compares against the 30th
+ * rather than spilling forward.
+ */
+export function priorMonthToDate(
+  year: number,
+  month: number,
+  dayOfMonth: number
+): GA4DateRange {
+  const start = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const end = new Date(year, month, Math.min(dayOfMonth, lastDay));
+  return { startDate: fmt(start), endDate: fmt(end) };
+}
+
 /** Check if a SKU is a stick (all stick SKUs start with TILT-). */
 function isStickSku(sku: string): boolean {
   return sku.toUpperCase().startsWith("TILT-");
@@ -53,7 +75,8 @@ export async function GET() {
   const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
 
   const currentRange = monthRange(currentYear, currentMonth, now); // cap to today
-  const previousRange = monthRange(prevYear, prevMonth);
+  // Like-for-like: the same number of days into the previous month.
+  const previousRange = priorMonthToDate(prevYear, prevMonth, now.getDate());
 
   // Fetch all data sources in parallel — each is optional
   const [
@@ -62,8 +85,8 @@ export async function GET() {
     ga4CurrentResult,
     ga4PreviousResult,
   ] = await Promise.allSettled([
-    fetchInvoices(currentRange.startDate, currentRange.endDate),
-    fetchInvoices(previousRange.startDate, previousRange.endDate),
+    fetchInvoicesWithLineItems(currentRange.startDate, currentRange.endDate),
+    fetchInvoicesWithLineItems(previousRange.startDate, previousRange.endDate),
     fetchGA4Metrics(currentRange),
     fetchGA4Metrics(previousRange),
   ]);
@@ -76,7 +99,7 @@ export async function GET() {
   let revenueError: string | undefined;
 
   if (currentInvoicesResult.status === "fulfilled") {
-    for (const inv of currentInvoicesResult.value) {
+    for (const inv of currentInvoicesResult.value.invoices) {
       currentRevenue += inv.total;
       for (const li of inv.line_items ?? []) {
         if (isStickSku(li.sku)) currentMonthSticks += li.quantity;
@@ -87,7 +110,7 @@ export async function GET() {
   }
 
   if (previousInvoicesResult.status === "fulfilled") {
-    for (const inv of previousInvoicesResult.value) {
+    for (const inv of previousInvoicesResult.value.invoices) {
       previousRevenue += inv.total;
       for (const li of inv.line_items ?? []) {
         if (isStickSku(li.sku)) previousMonthSticks += li.quantity;
@@ -124,27 +147,40 @@ export async function GET() {
     "July", "August", "September", "October", "November", "December",
   ];
 
+  // The comparison window, spelled out. "vs July" would be a lie now that it
+  // means July 1–14; a reader who can't see the window can't judge the number.
+  const day = now.getDate();
+  const prevLastDay = new Date(prevYear, prevMonth + 1, 0).getDate();
+  const prevDay = Math.min(day, prevLastDay);
+  const isPartial = day < new Date(currentYear, currentMonth + 1, 0).getDate();
+  const previousLabel = isPartial
+    ? `${monthNames[prevMonth]} 1\u2013${prevDay}`
+    : `${monthNames[prevMonth]} ${prevYear}`;
+  const currentLabel = isPartial
+    ? `${monthNames[currentMonth]} 1\u2013${day}`
+    : `${monthNames[currentMonth]} ${currentYear}`;
+
   const response = {
     generatedAt: now.toISOString(),
     currentMonth: {
-      label: `${monthNames[currentMonth]} ${currentYear}`,
+      label: currentLabel,
       revenue: Math.round(currentRevenue * 100) / 100,
       siteVisits: currentVisits,
       inquiries: currentInquiries,
     },
     previousMonth: {
-      label: `${monthNames[prevMonth]} ${prevYear}`,
+      label: previousLabel,
       revenue: Math.round(previousRevenue * 100) / 100,
       siteVisits: previousVisits,
       inquiries: previousInquiries,
     },
     sticksSold: {
       currentMonth: {
-        label: `${monthNames[currentMonth]} ${currentYear}`,
+        label: currentLabel,
         total: currentMonthSticks,
       },
       previousMonth: {
-        label: `${monthNames[prevMonth]} ${prevYear}`,
+        label: previousLabel,
         total: previousMonthSticks,
       },
       change: previousMonthSticks > 0
