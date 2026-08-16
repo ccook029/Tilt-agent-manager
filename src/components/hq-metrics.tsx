@@ -79,7 +79,7 @@ export default function HqMetrics() {
             <CountUp value={data.sticksSold.currentMonth.total} />
           </span>
           <span className="text-sm text-gray-500">
-            vs {data.sticksSold.previousMonth.total} last month
+            vs {data.sticksSold.previousMonth.total} ({data.sticksSold.previousMonth.label})
           </span>
         </div>
         <p className="text-xs text-gray-600 mt-2">
