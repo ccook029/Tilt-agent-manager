@@ -9,7 +9,9 @@
 // Publicly accessible, no auth required.
 
 import { NextResponse } from "next/server";
-import { fetchInvoicesWithLineItems } from "@/lib/zoho";
+import { fetchInvoices } from "@/lib/zoho";
+import { fetchAllStickRecords } from "@/lib/zoho-sheet";
+import { countSticksSold } from "@/lib/sticks-sold";
 import { fetchGA4Metrics, type GA4DateRange } from "@/lib/ga4";
 
 export const maxDuration = 60;
@@ -61,11 +63,6 @@ export function priorMonthToDate(
   return { startDate: fmt(start), endDate: fmt(end) };
 }
 
-/** Check if a SKU is a stick (all stick SKUs start with TILT-). */
-function isStickSku(sku: string): boolean {
-  return sku.toUpperCase().startsWith("TILT-");
-}
-
 export async function GET() {
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -84,11 +81,13 @@ export async function GET() {
     previousInvoicesResult,
     ga4CurrentResult,
     ga4PreviousResult,
+    stickRecordsResult,
   ] = await Promise.allSettled([
-    fetchInvoicesWithLineItems(currentRange.startDate, currentRange.endDate),
-    fetchInvoicesWithLineItems(previousRange.startDate, previousRange.endDate),
+    fetchInvoices(currentRange.startDate, currentRange.endDate),
+    fetchInvoices(previousRange.startDate, previousRange.endDate),
     fetchGA4Metrics(currentRange),
     fetchGA4Metrics(previousRange),
+    fetchAllStickRecords(),
   ]);
 
   // --- Revenue & sticks sold from invoices ---
@@ -99,25 +98,36 @@ export async function GET() {
   let revenueError: string | undefined;
 
   if (currentInvoicesResult.status === "fulfilled") {
-    for (const inv of currentInvoicesResult.value.invoices) {
+    for (const inv of currentInvoicesResult.value) {
       currentRevenue += inv.total;
-      for (const li of inv.line_items ?? []) {
-        if (isStickSku(li.sku)) currentMonthSticks += li.quantity;
-      }
     }
   } else {
     revenueError = currentInvoicesResult.reason?.message ?? "Failed to fetch invoices";
   }
 
   if (previousInvoicesResult.status === "fulfilled") {
-    for (const inv of previousInvoicesResult.value.invoices) {
+    for (const inv of previousInvoicesResult.value) {
       previousRevenue += inv.total;
-      for (const li of inv.line_items ?? []) {
-        if (isStickSku(li.sku)) previousMonthSticks += li.quantity;
-      }
     }
   } else {
     revenueError = revenueError ?? previousInvoicesResult.reason?.message ?? "Failed to fetch invoices";
+  }
+
+  // --- Sticks sold, from the inventory sheet ---
+  // One row per stick, so this counts sticks rather than SKU quantities, and
+  // it's one read instead of a detail call per invoice.
+  let stickError: string | undefined;
+  let unreadableSoldDates = 0;
+  if (stickRecordsResult.status === "fulfilled") {
+    const records = stickRecordsResult.value;
+    const cur = countSticksSold(records, currentRange.startDate, currentRange.endDate);
+    const prev = countSticksSold(records, previousRange.startDate, previousRange.endDate);
+    currentMonthSticks = cur.count;
+    previousMonthSticks = prev.count;
+    unreadableSoldDates = cur.unreadableDates;
+  } else {
+    stickError =
+      stickRecordsResult.reason?.message ?? "Failed to read the inventory sheet";
   }
 
   // --- Site visits from GA4 ---
@@ -199,6 +209,17 @@ export async function GET() {
     errors: [
       ...(revenueError ? [{ source: "zoho", message: revenueError }] : []),
       ...(ga4Error ? [{ source: "ga4", message: ga4Error }] : []),
+      ...(stickError ? [{ source: "sheet", message: stickError }] : []),
+      // A sheet full of unreadable sold-dates makes the count a floor rather
+      // than a fact, so say so instead of quietly under-reporting.
+      ...(unreadableSoldDates > 0
+        ? [{
+            source: "sheet",
+            message: `${unreadableSoldDates} sold stick${
+              unreadableSoldDates === 1 ? " has a date" : "s have dates"
+            } that couldn't be read — the count is a floor.`,
+          }]
+        : []),
     ],
   };
 
