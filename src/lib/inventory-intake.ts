@@ -22,6 +22,7 @@ import { callClaudeToCompletion } from "./anthropic";
 import { CLAUDE_MANAGER_MODEL } from "./models";
 import { fetchAllStickRecords, appendSheetRows, updateSheetRow } from "./zoho-sheet";
 import { specKey } from "./production-batches";
+import { normalizeSerial } from "./serial-format";
 import {
   listPreorderRows,
   markPreorderReceived,
@@ -80,18 +81,12 @@ export interface IntakeResult {
 /**
  * Serials arrive as "H2607-09904", "H2607- 09904" and "H260710165" for what
  * is the same format. Normalising is what makes dedupe mean anything.
+ *
+ * Defined in `serial-format.ts` — the browser needs it too, and this module
+ * pulls in Anthropic and Zoho. Re-exported here because this is where the rest
+ * of the codebase already imports it from.
  */
-export function normalizeSerial(raw: string): string {
-  const compact = String(raw ?? "")
-    .toUpperCase()
-    .replace(/\s+/g, "")
-    .replace(/[^A-Z0-9-]/g, "");
-  if (!compact) return "";
-  // H2607-09904 shape: letter, 4 digits, dash, 5 digits. Re-insert a missing
-  // dash rather than treating the row as a different stick.
-  const m = compact.match(/^([A-Z])(\d{4})-?(\d{4,6})$/);
-  return m ? `${m[1]}${m[2]}-${m[3]}` : compact;
-}
+export { normalizeSerial } from "./serial-format";
 
 /** '58”' / '56"' / '58 in' → '58'. The sheet stores a bare number. */
 export function normalizeSize(raw: string): string {

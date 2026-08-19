@@ -23,10 +23,12 @@
 // ---------------------------------------------------------------------------
 import { kv } from "@vercel/kv";
 import { listBatches } from "./production-batches";
+import { PREORDER_PREFIX } from "./serial-format";
 
 const KEY = "preorder-rows";
 
-export const PREORDER_PREFIX = "PROD-";
+/** Defined in `serial-format.ts` so the browser can use it without KV. */
+export { PREORDER_PREFIX } from "./serial-format";
 
 export interface PreorderRow {
   /** The placeholder written into the sheet's Serial Number column. */

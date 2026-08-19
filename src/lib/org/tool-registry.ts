@@ -137,6 +137,15 @@ export const TOOLS: Tool[] = [
     tabLabel: "Receive Stock",
   },
   {
+    href: "/inventory/serial-audit",
+    label: "Serial Audit",
+    description: "Check a physical count against the sheet — specs, gaps, and ghosts",
+    group: "daily",
+    ownerId: "inventory",
+    section: "inventory",
+    tabLabel: "Serial Audit",
+  },
+  {
     href: "/inventory/production",
     label: "In Production",
     description: "Sticks being built at the factory, and when they're due",
