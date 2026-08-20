@@ -14,7 +14,6 @@ import { HockeyStick, SellResult } from "@/lib/sticks/types";
 const ZOHO_BASE_URL = "https://sheet.zoho.com/api/v2";
 const PLAYER_STICK_SHEET =
   process.env.ZOHO_PLAYER_STICK_SHEET || "Player Sticks";
-const SOLD_STICK_SHEET = process.env.ZOHO_SOLD_STICK_SHEET || "Sold Stick";
 
 /** True when the module has its workbook configured (graceful no-env mode otherwise). */
 export function sticksConfigured(): boolean {
@@ -78,6 +77,8 @@ function parseRow(row: Record<string, string>, rowIndex: number): HockeyStick {
     decal_color: row["Decal Color"] || "",
     serial_number: row["Serial Number"] || "",
     price: row["Price"] || "",
+    status: row["Status"] || "",
+    date_sold: row["Date Sold"] || "",
   };
 }
 
@@ -140,7 +141,6 @@ export async function searchBySerialNumber(
 export async function markAsSold(serialNumber: string): Promise<SellResult> {
   const accessToken = await getAccessToken();
 
-  // First, find the stick in inventory
   const stick = await searchBySerialNumber(serialNumber);
   if (!stick) {
     return {
@@ -149,75 +149,59 @@ export async function markAsSold(serialNumber: string): Promise<SellResult> {
     };
   }
 
-  // Step 1: Add the stick to the Sold Stick sheet
-  const soldRowData = JSON.stringify({
-    "Level": stick.level,
-    "Size (inch)": stick.size,
-    "Carbon": stick.carbon,
-    "Kick Point": stick.kick_point,
-    "Hand": stick.hand,
-    "Flex": stick.flex,
-    "Curve": stick.curve,
-    "Base Color": stick.base_color,
-    "Decal Color": stick.decal_color,
-    "Serial Number": stick.serial_number,
-    "Price": stick.price,
-    "Date Sold": new Date().toISOString().split("T")[0],
-  });
+  if (String(stick.status ?? "").trim().toLowerCase() === "sold") {
+    return {
+      success: true,
+      message: `Stick ${serialNumber} was already marked sold.`,
+      stick,
+    };
+  }
 
-  const addUrl =
-    `${ZOHO_BASE_URL}/${workbookId()}?method=worksheet.records.add` +
-    `&worksheet_name=${encodeURIComponent(SOLD_STICK_SHEET)}` +
-    `&header_row=1` +
-    `&json_data=${encodeURIComponent(`[${soldRowData}]`)}`;
-
-  const addResponse = await fetch(addUrl, {
+  // Flag the row in place. It used to copy the stick onto a "Sold Stick" tab
+  // and then delete the row from the player tab, which was wrong twice over.
+  //
+  // Wrong about the data model: everything else treats a sale as Status "Sold"
+  // plus a Date Sold on the row itself — that is what the storefront writes,
+  // what the 107 sold rows on the sheet look like, and what the sold-sticks
+  // metric counts. Deleting the row would have hidden the sale from all three
+  // and thrown away the stick's specs.
+  //
+  // Wrong about atomicity: the copy came first and the delete second, with no
+  // way to undo the copy. When the delete failed — as it did on H2512-05979 —
+  // the stick ended up recorded as sold AND still listed for sale.
+  //
+  // One update, on one row. Nothing to half-finish.
+  const soldOn = new Date().toISOString().split("T")[0];
+  const res = await fetch(`${ZOHO_BASE_URL}/${workbookId()}`, {
     method: "POST",
     headers: {
       Authorization: `Zoho-oauthtoken ${accessToken}`,
+      "Content-Type": "application/x-www-form-urlencoded",
     },
+    body: new URLSearchParams({
+      method: "worksheet.records.update",
+      worksheet_name: PLAYER_STICK_SHEET,
+      header_row: "1",
+      criteria: `"Serial Number" = "${stick.serial_number}"`,
+      data: JSON.stringify({ Status: "Sold", "Date Sold": soldOn }),
+    }).toString(),
   });
 
-  if (!addResponse.ok) {
+  // Zoho answers 200 with a failure body often enough that the status code
+  // alone means nothing. The old code reported response.statusText, which is
+  // empty over HTTP/2 — that is why the alert read "Failed to delete from
+  // Player Stick sheet:" with nothing after the colon.
+  const body = await res.text();
+  if (!res.ok || body.includes('"status":"failure"')) {
     throw new Error(
-      `Failed to add to Sold Stick sheet: ${addResponse.statusText}`
-    );
-  }
-
-  const addResult = await addResponse.json();
-  if (addResult.status !== "success") {
-    throw new Error(`Failed to add to Sold Stick: ${JSON.stringify(addResult)}`);
-  }
-
-  // Step 2: Delete the stick from the Player Stick sheet
-  const deleteUrl =
-    `${ZOHO_BASE_URL}/${workbookId()}?method=worksheet.records.delete` +
-    `&worksheet_name=${encodeURIComponent(PLAYER_STICK_SHEET)}` +
-    `&row_array=[${stick.row_index}]`;
-
-  const deleteResponse = await fetch(deleteUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Zoho-oauthtoken ${accessToken}`,
-    },
-  });
-
-  if (!deleteResponse.ok) {
-    throw new Error(
-      `Failed to delete from Player Stick sheet: ${deleteResponse.statusText}`
-    );
-  }
-
-  const deleteResult = await deleteResponse.json();
-  if (deleteResult.status !== "success") {
-    throw new Error(
-      `Failed to delete from inventory: ${JSON.stringify(deleteResult)}`
+      `Couldn't mark ${serialNumber} sold on "${PLAYER_STICK_SHEET}" ` +
+        `(HTTP ${res.status}): ${body.slice(0, 300)}`
     );
   }
 
   return {
     success: true,
-    message: `Stick ${serialNumber} has been marked as sold and moved to the Sold Stick sheet.`,
-    stick,
+    message: `Stick ${serialNumber} is marked sold (${soldOn}).`,
+    stick: { ...stick, status: "Sold", date_sold: soldOn },
   };
 }

@@ -16,6 +16,11 @@ export interface HockeyStick {
   decal_color: string;
   serial_number: string;
   price: string;
+  /** "Available", "Sold", "In Production" — the sheet's own word for where
+   *  this stick is. A sale sets it to "Sold" in place; nothing moves tabs. */
+  status: string;
+  /** ISO date the sale was recorded, blank until then. */
+  date_sold: string;
 }
 
 export interface SearchResult {
