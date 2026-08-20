@@ -207,6 +207,15 @@ export const TOOLS: Tool[] = [
     tabLabel: "AP",
   },
   {
+    href: "/accounting/stuck-orders",
+    label: "Stuck Orders",
+    description: "Paid orders Zoho never heard about — sync them with one press",
+    group: "daily",
+    ownerId: "accounting",
+    section: "accounting",
+    tabLabel: "Stuck Orders",
+  },
+  {
     href: "/accounting/stripe",
     label: "Stripe Reconciliation",
     description: "Payouts matched against the books",

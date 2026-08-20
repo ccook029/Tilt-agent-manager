@@ -35,16 +35,21 @@ export interface AdminCustomOrder {
 export async function fetchWithKey(
   url: string,
   key: string,
-  hops = 0
+  hops = 0,
+  init: RequestInit = {}
 ): Promise<Response> {
   const res = await fetch(url, {
-    headers: { authorization: `Bearer ${key}` },
+    ...init,
+    headers: { ...(init.headers ?? {}), authorization: `Bearer ${key}` },
     cache: "no-store",
     redirect: "manual",
   });
   if (res.status >= 300 && res.status < 400 && hops < 4) {
     const loc = res.headers.get("location");
-    if (loc) return fetchWithKey(new URL(loc, url).toString(), key, hops + 1);
+    // The method and body are carried across the hop too. A POST that quietly
+    // became a GET at the redirect would look like a call that did nothing —
+    // which is the same class of silent failure the header-stripping was.
+    if (loc) return fetchWithKey(new URL(loc, url).toString(), key, hops + 1, init);
   }
   return res;
 }
