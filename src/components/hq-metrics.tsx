@@ -34,12 +34,16 @@ function ChangeBadge({ value }: { value: number | null }) {
 export default function HqMetrics() {
   const [data, setData] = useState<HqMetricsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     fetch("/api/hq-metrics")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then(setData)
-      .catch(() => {})
+      .catch(() => setFailed(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -59,7 +63,25 @@ export default function HqMetrics() {
     );
   }
 
-  if (!data) return null;
+  // A failed fetch used to return null, which deleted the whole panel from the
+  // page. That is the worst possible failure for a dashboard: the numbers
+  // don't look wrong, they look like they were never there, and nobody can
+  // tell a broken metric from a removed feature. Say so instead.
+  if (!data) {
+    return (
+      <div className="rounded-xl border border-gray-800/60 bg-[#111]/60 p-8">
+        <p className="text-sm text-gray-400">
+          {failed
+            ? "Couldn't load this month's numbers."
+            : "No numbers available right now."}
+        </p>
+        <p className="mt-1 text-xs text-gray-600">
+          The metrics service didn't answer. Everything else on this page is
+          unaffected — reload to try again.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-[#00d6ff]/20 bg-[#111]/60 relative overflow-hidden">

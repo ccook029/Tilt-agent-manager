@@ -110,14 +110,17 @@ export default function Home() {
         </div>
       </ScrollReveal>
 
+      {/* Key Metrics — above the brief, because it's the shortest thing on the
+          page that can change your day. Four numbers you take in at a glance,
+          versus a standup line for every employee; reading order should follow
+          how long something takes to read, not how much of it there is. */}
+      <ScrollReveal>
+        <HqMetrics />
+      </ScrollReveal>
+
       {/* Daily Brief — pressing items + a standup line per employee */}
       <ScrollReveal>
         <DailyBriefPanel />
-      </ScrollReveal>
-
-      {/* Key Metrics */}
-      <ScrollReveal>
-        <HqMetrics />
       </ScrollReveal>
 
       {/* Leadership — Co-Founders */}
