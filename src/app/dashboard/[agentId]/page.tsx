@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { getPersonaByAgentId } from "@/lib/personas";
+import { toolsForOwner, mergeToolsByHref } from "@/lib/org/tool-registry";
 import { useRunPipeline } from "@/components/run-pipeline";
 import { EASE_OUT } from "@/lib/motion";
 import { ChevronDownIcon } from "@/components/icons";
@@ -38,6 +39,18 @@ export default function AgentDetailPage() {
   const isMaya = agentId === "product-design";
   const isCfo = agentId === "accounting-manager";
   const isPenny = agentId === "accounting";
+  // The registry is the list; the persona's own array is legacy extras.
+  //
+  // Registering a tool in tool-registry.ts used to put it on /org/[id] and
+  // nowhere else, while THIS page — the one people actually work from — read a
+  // separate hand-kept array on the persona. Penny has no such array, so a tool
+  // registered to her appeared nowhere she'd ever look. That's how Stuck Orders
+  // shipped invisible.
+  //
+  // Merging by href means the registry alone is enough to make a tool reachable,
+  // which is what its header comment already claims. Persona entries that aren't
+  // in the registry still show, so nothing anyone relies on disappears today.
+  const workspaceTools = mergeToolsByHref(toolsForOwner(agentId), persona?.tools);
   const isExternal = persona?.external === true;
   // Staffed employees who take work orders through their boss (no run/chat).
   const isStaff = Boolean(persona?.assignHref);
@@ -313,13 +326,13 @@ export default function AgentDetailPage() {
       )}
 
       {/* Tools & workspaces this person works in. */}
-      {persona?.tools && persona.tools.length > 0 && (
+      {workspaceTools.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
             Tools &amp; Workspaces
           </h3>
           <div className="flex flex-wrap gap-2">
-            {persona.tools.map((tool) => (
+            {workspaceTools.map((tool) => (
               <a
                 key={tool.label}
                 href={tool.href}

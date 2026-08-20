@@ -312,6 +312,41 @@ export function toolsForOwner(ownerId: string): Tool[] {
   return TOOLS.filter((t) => t.ownerId === ownerId);
 }
 
+/** The shape both the registry and a persona's own tool array satisfy. */
+export interface LinkedTool {
+  label: string;
+  href: string;
+  description?: string;
+  external?: boolean;
+}
+
+/**
+ * One list of links from the registry plus whatever a persona still carries
+ * by hand, with duplicates collapsed on href.
+ *
+ * The registry wins a tie: it's the entry that gets maintained, and the
+ * persona copy is the one that goes stale. Persona-only entries survive so
+ * migrating a page to the registry can't silently drop a link someone uses.
+ */
+export function mergeToolsByHref(
+  fromRegistry: LinkedTool[],
+  fromPersona: LinkedTool[] | undefined
+): LinkedTool[] {
+  const seen = new Set<string>();
+  const out: LinkedTool[] = [];
+  for (const tool of [...fromRegistry, ...(fromPersona ?? [])]) {
+    const href = String(tool?.href ?? "").trim();
+    if (!href) continue;
+    // "/review" and "/review/" are the same page; "/org#marketing" is not
+    // "/org", so the fragment stays part of the identity.
+    const key = href.toLowerCase().replace(/\/+$/, "") || "/";
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(tool);
+  }
+  return out;
+}
+
 /** A section's tab strip, in registry order. */
 export function tabsForSection(section: string): Tool[] {
   return TOOLS.filter((t) => t.section === section && t.tabLabel);
