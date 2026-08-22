@@ -42,6 +42,10 @@ export interface StickRecord {
   serial_number: string;
   status: string;
   date_sold: string;
+  /** Where the stick physically is. Blank means Tilt HQ — consignment stock
+   *  sits at a retailer while still belonging to Tilt, so ownership (status)
+   *  and whereabouts stopped being the same question. See inventory-location.ts. */
+  location: string;
 }
 
 /**
@@ -196,6 +200,7 @@ const COLUMN_MAP: Record<string, keyof StickRecord> = {
   status: "status",
   "date sold": "date_sold",
   "sold date": "date_sold",
+  location: "location",
   "paddle": "size",                 // Goalie tab: paddle size (inches)
   "graphic color": "decal_color",   // Goalie tab: graphic color → decal_color
 };
@@ -328,6 +333,7 @@ function parseStickRecords(rows: SheetRow[], tab: string): StickRecord[] {
       serial_number: "",
       status: "",
       date_sold: "",
+      location: "",
     };
 
     for (const [col, val] of Object.entries(row)) {
