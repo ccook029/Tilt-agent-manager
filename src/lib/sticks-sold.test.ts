@@ -10,7 +10,7 @@ const stick = (over: Partial<StickRecord> = {}): StickRecord => ({
   row_index: 1, tab: "Player", level: "Senior", size: 66, carbon: "24K",
   kick_point: "Mid", hand: "Left", flex: 80, curve: "T28M",
   base_color: "Black", decal_color: "Halo",
-  serial_number: "H2607-00001", status: "Available", date_sold: "",
+  serial_number: "H2607-00001", status: "Available", date_sold: "", location: "",
   ...over,
 });
 

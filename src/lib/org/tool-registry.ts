@@ -137,6 +137,15 @@ export const TOOLS: Tool[] = [
     tabLabel: "Receive Stock",
   },
   {
+    href: "/inventory/location",
+    label: "Stock Location",
+    description: "Send sticks out on consignment, or bring them back",
+    group: "daily",
+    ownerId: "inventory",
+    section: "inventory",
+    tabLabel: "Location",
+  },
+  {
     href: "/inventory/production",
     label: "In Production",
     description: "Sticks being built at the factory, and when they're due",
